@@ -199,7 +199,7 @@ jobs:
 
   # All backends run inside a container (use_container: true)
   test-container:
-    name: test (${{ matrix.name }})
+    name: ${{ needs.prepare.outputs.library_name }} (${{ matrix.name }})
     needs: prepare
     if: ${{ fromJSON(needs.prepare.outputs.matrix_container).include[0] != null }}
     strategy:

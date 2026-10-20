@@ -175,6 +175,12 @@ ENV_INFO = {}
 # op list. Workers fork after probe_env(), so they inherit this reference.
 GEMS_MODULE = None
 
+# Canonical vendor/device context (highest-priority detected lib, with
+# vendor/device backfilled from the others). Kept OUT of ENV_INFO so it is not
+# duplicated into the result JSON next to the real per-library entry; the whole
+# ENV_INFO dict is serialized, but this internal alias must not be.
+GEMS_ENV = {}
+
 TIMEOUT = -100
 WORKER_PROCESSES = []
 INTERRUPTED = False
@@ -468,18 +474,20 @@ def _probe_gems():
         sys.exit(-1)
 
     # Canonical internal alias: highest-priority detected library, with
-    # vendor/device backfilled from the others when missing.
+    # vendor/device backfilled from the others when missing. Stored in the
+    # non-serialized GEMS_ENV (NOT ENV_INFO) so it is not duplicated into the
+    # result JSON next to the real per-library entry.
     canon = dict(found[0][1])
     for _, info, _mod in found[1:]:
         if not canon.get("vendor") and info.get("vendor"):
             canon["vendor"] = info["vendor"]
         if not canon.get("device") and info.get("device"):
             canon["device"] = info["device"]
-    ENV_INFO["gems"] = canon
+    global GEMS_ENV, GEMS_MODULE
+    GEMS_ENV = canon
 
     # Keep the canonical library module for later backend queries (e.g. the
     # customized op list). Replaces the removed top-level `import flag_gems`.
-    global GEMS_MODULE
     GEMS_MODULE = found[0][2]
 
     if not canon.get("vendor"):
@@ -631,7 +639,7 @@ def _probe_sdk():
             break
 
     if version is None:
-        vendor = ENV_INFO.get("gems", {}).get("vendor", "")
+        vendor = GEMS_ENV.get("vendor", "")
         if vendor == "ascend":
             name = "CANN"
             version = os.environ.get("ASCEND_TOOLKIT_VERSION") or _read_cann_version()
@@ -670,7 +678,7 @@ def probe_env():
 
 def get_env(gpu_ids):
     env = os.environ.copy()
-    vendor = ENV_INFO.get("gems", {}).get("vendor", "")
+    vendor = GEMS_ENV.get("vendor", "")
 
     vendor_env_map = {
         "ascend": ["ASCEND_RT_VISIBLE_DEVICES", "NPU_VISIBLE_DEVICES"],

@@ -18,7 +18,7 @@
 # repo defined in .github/configs/repos.yaml; the workflow checks out that repo
 # into ./target, installs it, and runs the shared tools/ (this repo) against it.
 #
-# Per-repo config: .github/configs/repos.yaml  (org, default_branch, images,
+# Per-repo config: .github/configs/repos.yaml  (org, default_branch, container_images,
 #                  backends, deps, base_data, timeout)
 # Shared backend hardware config: .github/configs/backends/<NAME>.yaml
 # vendors: Nvidia,MThreads,KunLunXin,Iluvatar,Ascend,Hygon,Metax,THead,Cambricon,AMD,TsingMicro,Enflame
@@ -126,7 +126,7 @@ jobs:
           default_timeout = main.get('defaults', {}).get('ops_test_timeout_minutes', 240)
           repo_timeout = rc.get('ops_test_timeout_minutes', default_timeout)
 
-          images = rc.get('images', {})
+          images = rc.get('container_images', {})
           deps_cfg = rc.get('deps', {}) or {}
           base_data = (rc.get('base_data') or '').strip()
 
@@ -148,8 +148,8 @@ jobs:
               if vendors_filter and backend.get('vendor', '').lower() not in vendors_filter:
                   continue
 
-              # container_image: repos.yaml images[<backend>] OVERRIDES the
-              # default from backends/<NAME>.yaml.
+              # container_image: repos.yaml container_images[<backend>]
+              # OVERRIDES the default from backends/<NAME>.yaml.
               if name in images:
                   backend['container_image'] = images[name]
 

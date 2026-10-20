@@ -27,7 +27,7 @@ use_container: true
 # Container image for this backend (DEFAULT).
 # Priority: repos.yaml `images.<BACKEND>` for the selected repo OVERRIDES
 # this value; when that repo has no override here, this default is used.
-container_image: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-metax-maca3.8.1.3:2.2.0
+container_image: harbor.baai.ac.cn/flagos-app/vllm0.24.0-metax-maca3.8.1.3:2.2.0-0.3.0
 
 # Container volumes to mount for this backends
 container_volumes:

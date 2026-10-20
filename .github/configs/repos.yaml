@@ -25,8 +25,12 @@
 # library is auto-detected at runtime by tools/run_tests.py (try-import), so no
 # import name needs to be configured here either.
 #
+# Container images are defined per hardware in .github/configs/backends/<NAME>.yaml
+# and shared by all repos. A repo only needs a `container_images:` block when its
+# images differ from those defaults (e.g. FlagGems-sglang ships sglang images).
+#
 # To onboard a new repo: add one block under `repos:` with its default_branch,
-# container images, enabled backends, and (optionally) deps / base_data /
+# enabled backends, and (optionally) container_images / deps / base_data /
 # timeout. No workflow or script change is required.
 # ---------------------------------------------------------------------------
 
@@ -53,22 +57,8 @@ repos:
     default_branch: master
     # Full operator suite; 910B alone runs ~15h, so allow a long step timeout.
     ops_test_timeout_minutes: 1440
-    # Per-backend container image OVERRIDES. When a backend is listed here the
-    # image wins; otherwise the default `container_image` from
-    # .github/configs/backends/<NAME>.yaml is used. Keep only the entries that
-    # actually differ from that default to minimize drift.
-    images:
-      910B: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.0.0:2.2.0
-      BI-V150: harbor.baai.ac.cn/flaggems/flaggems-test-iluvatar-bi-v150:20261014
-      BW1000: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-hygon-dtk26.04:2.2.0
-      C550: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-metax-maca3.8.1.3:2.2.0
-      H800: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-nvidia-cuda13.3:2.2.0
-      MLU590-M9DE: harbor.baai.ac.cn/flaggems/flaggems-test-cambricon-mlu590-m9de:20260929
-      MTT-S5000: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-mthreads-musa5.2.0:2.2.0
-      P800: harbor.baai.ac.cn/flaggems/flaggems-test-kunlunxin-p800:20261014
-      PPU-ZW810E: harbor.baai.ac.cn/flaggems/flaggems-test-thead-ppu-zw810e:20261015
-      S60: harbor.baai.ac.cn/flagos-app/vllm0.24.0-enflame-tops1.10.6:2.2.0-0.3.0
-      W7900D: harbor.baai.ac.cn/flaggems/flaggems-test-amd-w7900d:20260928
+    # Uses the shared backend images (.github/configs/backends/<NAME>.yaml);
+    # no per-repo container_images override needed.
     # Backends this repo runs. enabled:false skips the backend entirely.
     backends:
       H800: {enabled: true}
@@ -91,16 +81,7 @@ repos:
     # FlagGems-vllm wires an external baseline today; other repos leave this
     # unset so --base-data is not passed.
     base_data: tools/op_vllm_perf_baseline.json
-    images:
-      910B: harbor.baai.ac.cn/flagos-app/vllm0.24.0-ascend-cann9.0.0:2.2.0-0.3.0
-      BI-V150: harbor.baai.ac.cn/flaggems/flaggems-test-iluvatar-bi-v150:20261014
-      BW1000: harbor.baai.ac.cn/flagos-app/vllm0.24.0-hygon-dtk26.04:2.2.0-0.3.0
-      C550: harbor.baai.ac.cn/flagos-app/vllm0.24.0-metax-maca3.8.1.3:2.2.0-0.3.0
-      H800: harbor.baai.ac.cn/flagos-app/vllm0.24.0-generic-13.3:2.2.0-0.3.0
-      MTT-S5000: harbor.baai.ac.cn/flagos-app/vllm0.24.0-mthreads-musa5.2.0:2.2.0-0.3.0
-      P800: harbor.baai.ac.cn/flaggems/flaggems-test-kunlunxin-p800:20261014
-      PPU-ZW810E: harbor.baai.ac.cn/flaggems/flaggems-test-thead-ppu-zw810e:20261015
-      S60: harbor.baai.ac.cn/flagos-app/vllm0.24.0-enflame-tops1.10.6:2.2.0-0.3.0
+    # Uses the shared backend images (vllm), no override needed.
     backends:
       H800: {enabled: true}
       910B: {enabled: true}
@@ -118,7 +99,9 @@ repos:
   # =========================================================================
   FlagGems-sglang:
     default_branch: master
-    images:
+    # sglang ships its own images per backend, so this repo OVERRIDES the shared
+    # backend defaults. Keep only backends enabled below.
+    container_images:
       910B: harbor.baai.ac.cn/flagos-app/sglang0.5.18-ascend-cann9.0.0:2.1.2-0.1.dev1_g2e568482e
       BI-V150: harbor.baai.ac.cn/flagos-app/sglang0.5.18-iluvatar-corex4.5.0:2.2.0-0.1.dev1_g201484665
       BW1000: harbor.baai.ac.cn/flagos-app/sglang0.5.18-hygon-dtk26.04:2.1.2-0.1.dev1_g440208beb
@@ -126,10 +109,6 @@ repos:
       H800: harbor.baai.ac.cn/flagos-app/sglang0.5.11-generic-c13.0:2.2.0-0.2.0
       MTT-S5000: harbor.baai.ac.cn/flagos-app/sglang0.5.18-mthreads-musa5.2.0:2.2.0-0.1.dev1_g607b9672c
       P800: harbor.baai.ac.cn/flagos-app/sglang0.5.18-kunlunxin-xre5.37.1:2.1.2-0.1.dev1_g7fb22a0c2
-      # PPU-ZW810E: previously ran natively; unified to container like the
-      # other repos. Uses the shared FlagGems PPU image default unless a
-      # sglang-specific PPU image is published and added here.
-      PPU-ZW810E: harbor.baai.ac.cn/flaggems/flaggems-test-thead-ppu-zw810e:20261015
       S60: harbor.baai.ac.cn/flagos-app/sglang0.5.18-enflame-tops1.10.6:2.2.0-0.1.dev1_g65dff2733
     backends:
       H800: {enabled: true}
@@ -138,7 +117,7 @@ repos:
       BW1000: {enabled: true}
       MTT-S5000: {enabled: true}
       BI-V150: {enabled: true}
-      PPU-ZW810E: {enabled: true}
+      PPU-ZW810E: {enabled: false}  # sglang: disabled for now.
       MLU590-M9DE: {enabled: false}
       P800: {enabled: true}
       W7900D: {enabled: false}
@@ -148,16 +127,7 @@ repos:
   # =========================================================================
   FlagAttention:
     default_branch: main
-    images:
-      910B: harbor.baai.ac.cn/flagos-app/vllm0.24.0-ascend-cann9.0.0:2.2.0-0.3.0
-      BI-V150: harbor.baai.ac.cn/flaggems/flaggems-test-iluvatar-bi-v150:20261014
-      BW1000: harbor.baai.ac.cn/flagos-app/vllm0.24.0-hygon-dtk26.04:2.2.0-0.3.0
-      C550: harbor.baai.ac.cn/flagos-app/vllm0.24.0-metax-maca3.8.1.3:2.2.0-0.3.0
-      H800: harbor.baai.ac.cn/flagos-app/vllm0.24.0-generic-13.3:2.2.0-0.3.0
-      MTT-S5000: harbor.baai.ac.cn/flagos-app/vllm0.24.0-mthreads-musa5.2.0:2.2.0-0.3.0
-      P800: harbor.baai.ac.cn/flaggems/flaggems-test-kunlunxin-p800:20261014
-      PPU-ZW810E: harbor.baai.ac.cn/flaggems/flaggems-test-thead-ppu-zw810e:20261015
-      S60: harbor.baai.ac.cn/flagos-app/vllm0.24.0-enflame-tops1.10.6:2.2.0-0.3.0
+    # Uses the shared backend images (vllm), no override needed.
     backends:
       H800: {enabled: true}
       910B: {enabled: true}
@@ -184,5 +154,6 @@ repos:
 # Resolution order appended together: backends/<NAME>.yaml `deps` (hardware
 # default) + repo deps.default + repo deps.<backend>. Empty -> install skipped.
 # Backend-level `deps` and `container_image` in backends/<NAME>.yaml act as
-# defaults; the per-repo values here OVERRIDE (image) or EXTEND (deps) them.
+# defaults; the per-repo `deps` here EXTEND them and `container_images` here
+# OVERRIDE the image.
 # ---------------------------------------------------------------------------

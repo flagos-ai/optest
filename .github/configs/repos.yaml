@@ -1,0 +1,188 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ---------------------------------------------------------------------------
+# Central per-repo configuration for the shared ops-test workflow.
+#
+# This single file lets flagos-ai/optest drive operator tests for every FlagOS
+# library repo. The `repo` workflow input selects one entry under `repos:`.
+# The MAP KEY (e.g. FlagGems) is used for three things at once:
+#   1. checkout target     -> <org>/<key>
+#   2. upload library_name  -> passed to op-monitor as `library_name=<key>`
+#   3. Feishu notification label
+# so there is no separate github/library_name/import_name field. The tested
+# library is auto-detected at runtime by tools/run_tests.py (try-import), so no
+# import name needs to be configured here either.
+#
+# To onboard a new repo: add one block under `repos:` with its default_branch,
+# container images, enabled backends, and (optionally) deps / base_data /
+# timeout. No workflow or script change is required.
+# ---------------------------------------------------------------------------
+
+# GitHub organization that owns every target repo. Combined with the repo key
+# to form the checkout target "<org>/<repo>".
+org: flagos-ai
+
+# op-monitor upload endpoint (shared by all repos).
+server:
+  api: http://10.1.4.213:31080/api/upload/archive
+
+# Defaults applied to every repo unless overridden in its block below.
+defaults:
+  # Per-vendor "Run ops tests" STEP timeout (minutes). The container/native
+  # job keeps a large hard cap at the job level (GitHub Actions cannot read a
+  # matrix value for a job-level timeout); the real per-repo limit lives on the
+  # test step. Override per repo via `ops_test_timeout_minutes`.
+  ops_test_timeout_minutes: 240
+
+repos:
+  # =========================================================================
+  FlagGems:
+    # Branch used when the `branch` workflow input is empty.
+    default_branch: master
+    # Full operator suite; 910B alone runs ~15h, so allow a long step timeout.
+    ops_test_timeout_minutes: 1440
+    # Per-backend container image OVERRIDES. When a backend is listed here the
+    # image wins; otherwise the default `container_image` from
+    # .github/configs/backends/<NAME>.yaml is used. Keep only the entries that
+    # actually differ from that default to minimize drift.
+    images:
+      910B: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.0.0:2.2.0
+      BI-V150: harbor.baai.ac.cn/flaggems/flaggems-test-iluvatar-bi-v150:20261014
+      BW1000: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-hygon-dtk26.04:2.2.0
+      C550: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-metax-maca3.8.1.3:2.2.0
+      H800: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-nvidia-cuda13.3:2.2.0
+      MLU590-M9DE: harbor.baai.ac.cn/flaggems/flaggems-test-cambricon-mlu590-m9de:20260929
+      MTT-S5000: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-mthreads-musa5.2.0:2.2.0
+      P800: harbor.baai.ac.cn/flaggems/flaggems-test-kunlunxin-p800:20261014
+      PPU-ZW810E: harbor.baai.ac.cn/flaggems/flaggems-test-thead-ppu-zw810e:20261015
+      S60: harbor.baai.ac.cn/flagos-app/vllm0.24.0-enflame-tops1.10.6:2.2.0-0.3.0
+      W7900D: harbor.baai.ac.cn/flaggems/flaggems-test-amd-w7900d:20260928
+    # Backends this repo runs. enabled:false skips the backend entirely.
+    backends:
+      H800: {enabled: true}
+      910B: {enabled: true}
+      C550: {enabled: true}
+      BW1000: {enabled: true}
+      MTT-S5000: {enabled: true}
+      BI-V150: {enabled: true}
+      PPU-ZW810E: {enabled: true}
+      MLU590-M9DE: {enabled: true}
+      P800: {enabled: true}
+      W7900D: {enabled: true}
+      TX8110: {enabled: false}
+      S60: {enabled: true}   # Enflame op-list path lives on this runner only.
+
+  # =========================================================================
+  FlagGems-vllm:
+    default_branch: main
+    # Optional ops-baseline JSON (relative to the target repo checkout). Only
+    # FlagGems-vllm wires an external baseline today; other repos leave this
+    # unset so --base-data is not passed.
+    base_data: tools/op_vllm_perf_baseline.json
+    images:
+      910B: harbor.baai.ac.cn/flagos-app/vllm0.24.0-ascend-cann9.0.0:2.2.0-0.3.0
+      BI-V150: harbor.baai.ac.cn/flaggems/flaggems-test-iluvatar-bi-v150:20261014
+      BW1000: harbor.baai.ac.cn/flagos-app/vllm0.24.0-hygon-dtk26.04:2.2.0-0.3.0
+      C550: harbor.baai.ac.cn/flagos-app/vllm0.24.0-metax-maca3.8.1.3:2.2.0-0.3.0
+      H800: harbor.baai.ac.cn/flagos-app/vllm0.24.0-generic-13.3:2.2.0-0.3.0
+      MTT-S5000: harbor.baai.ac.cn/flagos-app/vllm0.24.0-mthreads-musa5.2.0:2.2.0-0.3.0
+      P800: harbor.baai.ac.cn/flaggems/flaggems-test-kunlunxin-p800:20261014
+      PPU-ZW810E: harbor.baai.ac.cn/flaggems/flaggems-test-thead-ppu-zw810e:20261015
+      S60: harbor.baai.ac.cn/flagos-app/vllm0.24.0-enflame-tops1.10.6:2.2.0-0.3.0
+    backends:
+      H800: {enabled: true}
+      910B: {enabled: true}
+      C550: {enabled: true}
+      BW1000: {enabled: true}
+      MTT-S5000: {enabled: true}
+      BI-V150: {enabled: true}
+      PPU-ZW810E: {enabled: true}
+      MLU590-M9DE: {enabled: false}
+      P800: {enabled: true}
+      W7900D: {enabled: false}
+      TX8110: {enabled: false}
+      S60: {enabled: false}   # Enflame disabled outside FlagGems for now.
+
+  # =========================================================================
+  FlagGems-sglang:
+    default_branch: master
+    images:
+      910B: harbor.baai.ac.cn/flagos-app/sglang0.5.18-ascend-cann9.0.0:2.1.2-0.1.dev1_g2e568482e
+      BI-V150: harbor.baai.ac.cn/flagos-app/sglang0.5.18-iluvatar-corex4.5.0:2.2.0-0.1.dev1_g201484665
+      BW1000: harbor.baai.ac.cn/flagos-app/sglang0.5.18-hygon-dtk26.04:2.1.2-0.1.dev1_g440208beb
+      C550: harbor.baai.ac.cn/flagos-app/sglang0.5.18-metax-maca3.8.1.3:2.1.2-0.1.dev1_g0900c244b
+      H800: harbor.baai.ac.cn/flagos-app/sglang0.5.11-generic-c13.0:2.2.0-0.2.0
+      MTT-S5000: harbor.baai.ac.cn/flagos-app/sglang0.5.18-mthreads-musa5.2.0:2.2.0-0.1.dev1_g607b9672c
+      P800: harbor.baai.ac.cn/flagos-app/sglang0.5.18-kunlunxin-xre5.37.1:2.1.2-0.1.dev1_g7fb22a0c2
+      # PPU-ZW810E: previously ran natively; unified to container like the
+      # other repos. Uses the shared FlagGems PPU image default unless a
+      # sglang-specific PPU image is published and added here.
+      PPU-ZW810E: harbor.baai.ac.cn/flaggems/flaggems-test-thead-ppu-zw810e:20261015
+      S60: harbor.baai.ac.cn/flagos-app/sglang0.5.18-enflame-tops1.10.6:2.2.0-0.1.dev1_g65dff2733
+    backends:
+      H800: {enabled: true}
+      910B: {enabled: true}
+      C550: {enabled: true}
+      BW1000: {enabled: true}
+      MTT-S5000: {enabled: true}
+      BI-V150: {enabled: true}
+      PPU-ZW810E: {enabled: true}
+      MLU590-M9DE: {enabled: false}
+      P800: {enabled: true}
+      W7900D: {enabled: false}
+      TX8110: {enabled: false}
+      S60: {enabled: false}   # Enflame disabled outside FlagGems for now.
+
+  # =========================================================================
+  FlagAttention:
+    default_branch: main
+    images:
+      910B: harbor.baai.ac.cn/flagos-app/vllm0.24.0-ascend-cann9.0.0:2.2.0-0.3.0
+      BI-V150: harbor.baai.ac.cn/flaggems/flaggems-test-iluvatar-bi-v150:20261014
+      BW1000: harbor.baai.ac.cn/flagos-app/vllm0.24.0-hygon-dtk26.04:2.2.0-0.3.0
+      C550: harbor.baai.ac.cn/flagos-app/vllm0.24.0-metax-maca3.8.1.3:2.2.0-0.3.0
+      H800: harbor.baai.ac.cn/flagos-app/vllm0.24.0-generic-13.3:2.2.0-0.3.0
+      MTT-S5000: harbor.baai.ac.cn/flagos-app/vllm0.24.0-mthreads-musa5.2.0:2.2.0-0.3.0
+      P800: harbor.baai.ac.cn/flaggems/flaggems-test-kunlunxin-p800:20261014
+      PPU-ZW810E: harbor.baai.ac.cn/flaggems/flaggems-test-thead-ppu-zw810e:20261015
+      S60: harbor.baai.ac.cn/flagos-app/vllm0.24.0-enflame-tops1.10.6:2.2.0-0.3.0
+    backends:
+      H800: {enabled: true}
+      910B: {enabled: true}
+      C550: {enabled: true}
+      BW1000: {enabled: true}
+      MTT-S5000: {enabled: true}
+      BI-V150: {enabled: true}
+      PPU-ZW810E: {enabled: true}
+      MLU590-M9DE: {enabled: false}
+      P800: {enabled: true}
+      W7900D: {enabled: false}
+      TX8110: {enabled: false}
+      S60: {enabled: false}   # Enflame disabled outside FlagGems for now.
+
+# ---------------------------------------------------------------------------
+# Optional dependency install (example; omit the whole key to skip):
+#
+#   repos:
+#     SomeRepo:
+#       deps:
+#         default: ["extra-pkg==1.2.3"]   # installed on every enabled backend
+#         910B: ["ascend-only==0.4"]      # ADDED only on the 910B backend
+#
+# Resolution order appended together: backends/<NAME>.yaml `deps` (hardware
+# default) + repo deps.default + repo deps.<backend>. Empty -> install skipped.
+# Backend-level `deps` and `container_image` in backends/<NAME>.yaml act as
+# defaults; the per-repo values here OVERRIDE (image) or EXTEND (deps) them.
+# ---------------------------------------------------------------------------

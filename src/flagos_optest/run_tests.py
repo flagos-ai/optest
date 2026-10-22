@@ -158,11 +158,10 @@ CYAN = "\033[36m"
 DIM = "\033[2m"
 NC = "\033[0m"
 
-# Project root holding conf/operators.yaml, tests/ and benchmark/. Defaults to
-# the repo this script lives in (parent of tools/), so standalone use in any
-# repo needs no flag. When run_tests.py is hosted centrally (flagos-ai/optest)
-# against a target repo checked out elsewhere, pass --project-root <dir>.
-ROOT = Path(__file__).parent.parent
+# Project root holding conf/operators.yaml, tests/ and benchmark/. In a source
+# checkout this defaults to the repository above src/flagos_optest/. When the
+# installed command targets another checkout, pass --project-root <dir>.
+ROOT = Path(__file__).resolve().parents[2]
 
 OPTS = argparse.Namespace()
 CFG = types.SimpleNamespace()
@@ -857,7 +856,7 @@ def op_marker(op):
 
     Non-underscore operator ids are returned unchanged. This mirrors the markers
     declared in the test files and enforced by
-    ``tools/ci_checks/check_operator_markers.py``.
+    ``src/flagos_optest/ci_checks/check_operator_markers.py``.
     """
     if not op.startswith("_"):
         return op

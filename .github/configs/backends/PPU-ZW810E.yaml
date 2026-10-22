@@ -65,7 +65,7 @@ container_options: >-
 test_gpus: "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15"
 
 # GPU availability check script for this backend
-gpu_check_script: tools/gpu_check_thead.sh
+gpu_check_script: flagos-gpu-check-thead
 
 # Output base directory; ops-test appends the GitHub repository name
 output_base_dir: /home/github-outputs

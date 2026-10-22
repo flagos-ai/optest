@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Console-script entry points for the ``tools`` package.
+"""Console-script entry points for the ``flagos_optest`` package.
 
-Some of the scripts under ``tools/`` are flat, extensionless files that predate
+Some scripts in the package are flat, extensionless files that predate
 packaging (``psum_html``, ``psum_text``): they ``import consts`` and resolve
 ``html_assets/`` relative to ``__file__``. Python cannot import an extensionless
 file as a module, so setuptools console scripts must not target them directly.
@@ -37,23 +37,23 @@ import runpy
 
 
 def _run_flat(script):
-    """Execute an extensionless tools/ script with its legacy import context.
+    """Execute an extensionless package script with its legacy import context.
 
-    ``tools/`` is a package, but ``psum_html``/``psum_text``/``psum_web`` are
-    flat scripts that do ``import consts`` (not ``import tools.consts``). In the
-    source checkout that works because ``python tools/psum_html`` puts the
-    script's own directory on ``sys.path``. runpy.run_path does not, so restore
+    ``psum_html``/``psum_text``/``psum_web`` are flat scripts that do
+    ``import consts`` instead of a package-relative import. Running one by path
+    puts the script's own directory on ``sys.path``. runpy.run_path does not,
+    so restore
     that behaviour explicitly, then run with ``run_name="__main__"`` so the
     scripts see the same ``__file__``/``__name__``/``__package__`` globals they
     already rely on (``__package__`` stays empty, keeping their top-level
     ``import consts`` and ``Path(__file__)``-relative asset lookups valid).
     """
-    tools_dir = Path(__file__).resolve().parent
-    sys.path.insert(0, str(tools_dir))
+    package_dir = Path(__file__).resolve().parent
+    sys.path.insert(0, str(package_dir))
     try:
-        runpy.run_path(str(tools_dir / script), run_name="__main__")
+        runpy.run_path(str(package_dir / script), run_name="__main__")
     finally:
-        sys.path.remove(str(tools_dir))
+        sys.path.remove(str(package_dir))
 
 
 def psum_html():

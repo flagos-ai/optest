@@ -22,7 +22,7 @@
 #   2. upload library_name  -> passed to op-monitor as `library_name=<key>`
 #   3. Feishu notification label
 # so there is no separate github/library_name/import_name field. The tested
-# library is auto-detected at runtime by tools/run_tests.py (try-import), so no
+# library is auto-detected at runtime by flagos-optest (try-import), so no
 # import name needs to be configured here either.
 #
 # Container images are defined per hardware in .github/configs/backends/<NAME>.yaml

@@ -56,7 +56,7 @@ test_env:
   FLAGTREE_BACKEND: mthreads
 
 # GPU availability check script for this backend
-gpu_check_script: tools/gpu_check_mthreads.sh
+gpu_check_script: flagos-gpu-check-mthreads
 
 # Output base directory; ops-test appends the GitHub repository name
 output_base_dir: /data/github-outputs

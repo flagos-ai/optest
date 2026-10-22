@@ -16,7 +16,7 @@
 #
 # A single workflow tests ANY FlagOS library repo. The `repo` input selects a
 # repo defined in .github/configs/repos.yaml; the workflow checks out that repo
-# into ./target, installs it, and runs the shared tools/ (this repo) against it.
+# into ./target, installs it, and runs this repo's shared optest package against it.
 #
 # Per-repo config: .github/configs/repos.yaml  (org, default_branch, container_images,
 #                  backends, deps, base_data, timeout)
@@ -44,7 +44,7 @@ on:
           - FlagGems-sglang
           - FlagAttention
       branch:
-        description: 'optest branch supplying the workflow + shared tools/configs. Leave empty to use the branch this run was dispatched from (--ref).'
+        description: 'optest branch supplying the workflow, package, and configs. Leave empty to use the branch this run was dispatched from (--ref).'
         required: false
         default: ''
       ref:
@@ -226,7 +226,7 @@ jobs:
       REPOSITORY_NAME: ${{ needs.prepare.outputs.library_name }}
       OUTPUT_DIR: ${{ matrix.output_base_dir }}/${{ needs.prepare.outputs.library_name }}/${{ needs.prepare.outputs.date }}/logs_results_${{ needs.prepare.outputs.date }}
     steps:
-      # Checkout optest itself (this repo) at workspace root: provides tools/
+      # Checkout optest itself (this repo) at workspace root: provides src/
       # and configs. `branch` input picks the optest branch; empty -> the
       # dispatched ref. The target library is checked out separately into ./target.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -471,7 +471,7 @@ jobs:
           # run_tests.py (from this repo, optest) tests the target repo checked
           # out in ./target; --project-root points it at the target's
           # conf/operators.yaml, tests/ and benchmark/.
-          python3 tools/run_tests.py \
+          python3 src/flagos_optest/run_tests.py \
             --project-root target \
             --gpus "${AVAILABLE_GPUS}" \
             ${OP_ARGS} \
@@ -479,9 +479,9 @@ jobs:
             --dump-output \
             --output-dir "${OUTPUT_DIR}"
           # process the test results to generate summary files
-          python3 tools/add_labels.py --project-root target ${OUTPUT_DIR}
-          python3 tools/psum_text  -o  ${OUTPUT_DIR}/result.csv  ${OUTPUT_DIR}
-          python3 tools/psum_html  -o  ${OUTPUT_DIR}/result.html  ${OUTPUT_DIR}
+          python3 src/flagos_optest/add_labels.py --project-root target ${OUTPUT_DIR}
+          python3 src/flagos_optest/psum_text  -o  ${OUTPUT_DIR}/result.csv  ${OUTPUT_DIR}
+          python3 src/flagos_optest/psum_html  -o  ${OUTPUT_DIR}/result.html  ${OUTPUT_DIR}
 
       - name: Package results
         run: |

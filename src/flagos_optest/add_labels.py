@@ -34,10 +34,10 @@ from pathlib import Path
 
 import yaml
 
-# Project root holding conf/operators.yaml. Defaults to the repo this script
-# lives in; override with --project-root when add_labels.py is hosted centrally
-# (flagos-ai/optest) and the target repo is checked out elsewhere.
-ROOT = Path(__file__).parent.parent
+# Project root holding conf/operators.yaml. In a source checkout this defaults
+# to the repository above src/flagos_optest/. Override it when the installed
+# module processes results from another checkout.
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def pinfo(msg):

@@ -55,7 +55,7 @@ test_env:
   PIP_CACHE_DIR: /root/.cache/pip
 
 # GPU availability check script for this backend
-gpu_check_script: tools/gpu_check_nvidia.sh
+gpu_check_script: src/flagos_optest/gpu_check_nvidia.sh
 
 # Output base directory; ops-test appends the GitHub repository name
 output_base_dir: /data/github-outputs

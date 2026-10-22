@@ -39,14 +39,15 @@ dependencies = [
 ]
 
 [project.scripts]
-flagos-optest = "tools.run_tests:main"
-flagos-psum-text = "tools._entrypoints:psum_text"
-flagos-psum-html = "tools._entrypoints:psum_html"
-flagos-psum-web = "tools._entrypoints:psum_web"
+flagos-optest = "flagos_optest.tools.run_tests:main"
+flagos-psum-text = "flagos_optest.tools._entrypoints:psum_text"
+flagos-psum-html = "flagos_optest.tools._entrypoints:psum_html"
+flagos-psum-web = "flagos_optest.tools._entrypoints:psum_web"
 
 [tool.setuptools]
 # `tools` is a Python package (has __init__.py); ship it as `flagos_optest.tools`.
-packages = ["tools"]
+packages = ["flagos_optest.tools"]
+package-dir = { "flagos_optest.tools" = "tools" }
 
 [tool.setuptools.package-data]
-tools = ["html_assets/*.css", "html_assets/*.js", "gpu_check_*.sh", "psum_html", "psum_text", "psum_web"]
+"flagos_optest.tools" = ["html_assets/*.css", "html_assets/*.js", "gpu_check_*.sh", "psum_html", "psum_text", "psum_web"]

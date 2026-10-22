@@ -158,10 +158,8 @@ CYAN = "\033[36m"
 DIM = "\033[2m"
 NC = "\033[0m"
 
-# Project root holding conf/operators.yaml, tests/ and benchmark/. In a source
-# checkout this defaults to the repository above src/flagos_optest/. When the
-# installed command targets another checkout, pass --project-root <dir>.
-ROOT = Path(__file__).resolve().parents[2]
+# Project root holding conf/operators.yaml, tests/ and benchmark/.
+ROOT = Path.cwd()
 
 OPTS = argparse.Namespace()
 CFG = types.SimpleNamespace()
@@ -1491,21 +1489,8 @@ def main():
         default=None,
         help="Optional ops-baseline JSON; matched external speedup wins in summaries.",
     )
-    parser.add_argument(
-        "--project-root",
-        metavar="DIR",
-        default=None,
-        help=(
-            "Project repo holding conf/operators.yaml, tests/ and benchmark/. "
-            "Default: the repo this script lives in. Set this when run_tests.py "
-            "is hosted centrally and the target repo is checked out elsewhere."
-        ),
-    )
     OPTS = parser.parse_args()
-    global ROOT
-    if OPTS.project_root:
-        ROOT = Path(OPTS.project_root).resolve()
-        pinfo(f"Project root ... {ROOT}")
+    pinfo(f"Project root ... {ROOT}")
     CFG.base_data = str(Path(OPTS.base_data).resolve()) if OPTS.base_data else None
     CFG.dump_output = OPTS.dump_output
     CFG.quick = OPTS.quick

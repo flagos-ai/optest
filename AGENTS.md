@@ -40,8 +40,8 @@ Keep the packaging migration in small, independently reviewable PRs:
 1. Migrate `tools/` to `src/flagos_optest/` and update package/config paths.
 2. Install the optest checkout in the workflow and use installed console
    scripts for scheduling, labels, reports, and GPU checks.
-3. Change the scheduler to use the current working directory as the target,
-   then remove `--project-root` and update workflow working-directory handling.
+3. Make the scheduler use the current working directory as the target and
+   update workflow working-directory handling.
 
 Use PR #2 as the history for project-agnostic command behavior and PR #4 as
 the history for wheel packaging. Do not mix a broad source-layout migration,

@@ -378,6 +378,9 @@ jobs:
           fi
           # Install the target library (checked out into ./target).
           pip install ./target[test]
+          # Install this optest checkout so the workflow exercises the same
+          # packaged console scripts that downstream users install.
+          pip install .
 
       - name: Check GPU availability
         shell: bash --login -e -o pipefail {0}
@@ -386,9 +389,9 @@ jobs:
           if [ "${{ matrix.force_test_gpus }}" = "true" ]; then
             # Best-effort run: this backend only uses the script output for
             # logging/inspection, so a non-zero exit here must not fail the job.
-            GPU_OUTPUT=$(bash ${{ matrix.gpu_check_script }} || true)
+            GPU_OUTPUT=$(${{ matrix.gpu_check_script }} || true)
           else
-            GPU_OUTPUT=$(bash ${{ matrix.gpu_check_script }})
+            GPU_OUTPUT=$(${{ matrix.gpu_check_script }})
           fi
           echo "[GPU check] GPU availability check output:"
           echo "$GPU_OUTPUT"
@@ -468,10 +471,10 @@ jobs:
           if [ -n "${BASE_DATA}" ]; then
             BASE_DATA_ARG="--base-data target/${BASE_DATA}"
           fi
-          # run_tests.py (from this repo, optest) tests the target repo checked
-          # out in ./target; --project-root points it at the target's
-          # conf/operators.yaml, tests/ and benchmark/.
-          python3 src/flagos_optest/run_tests.py \
+          # The installed scheduler tests the target repo checked out in
+          # ./target; --project-root points it at the target's conf/operators.yaml,
+          # tests/ and benchmark/ until the cwd-based CLI migration lands.
+          flagos-optest \
             --project-root target \
             --gpus "${AVAILABLE_GPUS}" \
             ${OP_ARGS} \
@@ -479,9 +482,9 @@ jobs:
             --dump-output \
             --output-dir "${OUTPUT_DIR}"
           # process the test results to generate summary files
-          python3 src/flagos_optest/add_labels.py --project-root target ${OUTPUT_DIR}
-          python3 src/flagos_optest/psum_text  -o  ${OUTPUT_DIR}/result.csv  ${OUTPUT_DIR}
-          python3 src/flagos_optest/psum_html  -o  ${OUTPUT_DIR}/result.html  ${OUTPUT_DIR}
+          flagos-add-labels --project-root target ${OUTPUT_DIR}
+          flagos-psum-text -o ${OUTPUT_DIR}/result.csv ${OUTPUT_DIR}
+          flagos-psum-html -o ${OUTPUT_DIR}/result.html ${OUTPUT_DIR}
 
       - name: Package results
         run: |

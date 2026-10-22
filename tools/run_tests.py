@@ -170,6 +170,17 @@ CFG = types.SimpleNamespace()
 GLOBAL_RESULTS = {}
 ENV_INFO = {}
 
+# The canonical FlagOS library MODULE object (highest-priority detected lib),
+# set by _probe_gems(). Used to query backend metadata such as the customized
+# op list. Workers fork after probe_env(), so they inherit this reference.
+GEMS_MODULE = None
+
+# Canonical vendor/device context (highest-priority detected lib, with
+# vendor/device backfilled from the others). Kept OUT of ENV_INFO so it is not
+# duplicated into the result JSON next to the real per-library entry; the whole
+# ENV_INFO dict is serialized, but this internal alias must not be.
+GEMS_ENV = {}
+
 TIMEOUT = -100
 WORKER_PROCESSES = []
 INTERRUPTED = False
@@ -423,7 +434,7 @@ def _probe_gems():
     the top one does not expose them. flag_gems is last, so a repo's own
     library takes precedence over a preinstalled flag_gems.
     """
-    found = []  # list of (import_name, info) in priority order
+    found = []  # list of (import_name, info, module) in priority order
     for mod_name, lib_name in _KNOWN_LIBS:
         try:
             mod = importlib.import_module(mod_name)
@@ -448,7 +459,7 @@ def _probe_gems():
             info["device"] = None
 
         ENV_INFO[mod_name] = info
-        found.append((mod_name, info))
+        found.append((mod_name, info, mod))
         pinfo(
             f"{lib_name} ({mod_name}) detected ... "
             f"{info['version']} (vendor={info['vendor']}, device={info['device']})"
@@ -463,14 +474,21 @@ def _probe_gems():
         sys.exit(-1)
 
     # Canonical internal alias: highest-priority detected library, with
-    # vendor/device backfilled from the others when missing.
+    # vendor/device backfilled from the others when missing. Stored in the
+    # non-serialized GEMS_ENV (NOT ENV_INFO) so it is not duplicated into the
+    # result JSON next to the real per-library entry.
     canon = dict(found[0][1])
-    for _, info in found[1:]:
+    for _, info, _mod in found[1:]:
         if not canon.get("vendor") and info.get("vendor"):
             canon["vendor"] = info["vendor"]
         if not canon.get("device") and info.get("device"):
             canon["device"] = info["device"]
-    ENV_INFO["gems"] = canon
+    global GEMS_ENV, GEMS_MODULE
+    GEMS_ENV = canon
+
+    # Keep the canonical library module for later backend queries (e.g. the
+    # customized op list). Replaces the removed top-level `import flag_gems`.
+    GEMS_MODULE = found[0][2]
 
     if not canon.get("vendor"):
         perror("Failed to detect vendor info from any FlagOS library.")
@@ -621,7 +639,7 @@ def _probe_sdk():
             break
 
     if version is None:
-        vendor = ENV_INFO.get("gems", {}).get("vendor", "")
+        vendor = GEMS_ENV.get("vendor", "")
         if vendor == "ascend":
             name = "CANN"
             version = os.environ.get("ASCEND_TOOLKIT_VERSION") or _read_cann_version()
@@ -660,7 +678,7 @@ def probe_env():
 
 def get_env(gpu_ids):
     env = os.environ.copy()
-    vendor = ENV_INFO.get("gems", {}).get("vendor", "")
+    vendor = GEMS_ENV.get("vendor", "")
 
     vendor_env_map = {
         "ascend": ["ASCEND_RT_VISIBLE_DEVICES", "NPU_VISIBLE_DEVICES"],
@@ -1038,9 +1056,16 @@ def worker_proc(gpu_id, work_queue, display_queue):
                     }
                     display_queue.put(("done", gpu_id, "benchmark", op, "NotFound", 0))
 
-                customized_ops = [
-                    o[0] for o in flag_gems.runtime.backend.get_customized_ops()
-                ]
+                # Customized op list from the canonical FlagOS library. Not all
+                # libraries expose runtime.backend.get_customized_ops(); fall
+                # back to an empty list so a missing API never fails the op.
+                try:
+                    customized_ops = [
+                        o[0]
+                        for o in GEMS_MODULE.runtime.backend.get_customized_ops()
+                    ]
+                except Exception:
+                    customized_ops = []
                 result = {
                     "customized": op in customized_ops,
                     "accuracy": acc,

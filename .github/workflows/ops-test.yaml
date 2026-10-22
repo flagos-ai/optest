@@ -199,7 +199,7 @@ jobs:
 
   # All backends run inside a container (use_container: true)
   test-container:
-    name: test (${{ matrix.name }})
+    name: ${{ needs.prepare.outputs.library_name }} (${{ matrix.name }})
     needs: prepare
     if: ${{ fromJSON(needs.prepare.outputs.matrix_container).include[0] != null }}
     strategy:
@@ -270,6 +270,21 @@ jobs:
         run: |
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
           git config --global --add safe.directory "${GITHUB_WORKSPACE}/target"
+
+      # Resolve the TARGET repo's actual commit from the ./target checkout.
+      # The GitHub context (GITHUB_SHA/GITHUB_REF_NAME) describes the optest run,
+      # not the library under test, so the Feishu notification must read the
+      # commit straight from the checked-out target instead.
+      - name: Capture target repo commit
+        id: target-info
+        if: always()
+        continue-on-error: true
+        run: |
+          SHA=""
+          if [ -d "${GITHUB_WORKSPACE}/target/.git" ]; then
+            SHA="$(git -C "${GITHUB_WORKSPACE}/target" rev-parse HEAD 2>/dev/null || echo '')"
+          fi
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Copy root profile to GitHub Actions home
         run: |
@@ -512,7 +527,14 @@ jobs:
         env:
           CI_STATUS: ${{ job.status }}
           PLATFORM: ${{ matrix.name }}
-          LIBRARY_NAME: ${{ needs.prepare.outputs.library_name }}
+          # Title label: the full "<org>/<repo>" of the TARGET library under test
+          # (e.g. flagos-ai/FlagGems-vllm), not optest's GITHUB_REPOSITORY.
+          LIBRARY_NAME: ${{ needs.prepare.outputs.target_repo }}
+          # Branch/ref and commit must reflect the TARGET repo, not the optest
+          # run. OVERRIDE_REF/OVERRIDE_SHA take precedence over GITHUB_REF_NAME
+          # and GITHUB_SHA inside notify_feishu.py.
+          OVERRIDE_REF: ${{ needs.prepare.outputs.checkout_ref }}
+          OVERRIDE_SHA: ${{ steps.target-info.outputs.sha }}
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
           FEISHU_CHAT_ID: ${{ secrets.FEISHU_CHAT_ID }}

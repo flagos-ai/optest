@@ -12,7 +12,8 @@ user-facing package and migration overview.
 - `.github/configs/repos.yaml` selects target repositories and their backends.
 - `.github/configs/backends/` contains shared hardware settings.
 - `.github/workflows/ops-test.yaml` runs the centralized matrix workflow.
-- `pyproject.toml` defines the package and four console scripts.
+- `pyproject.toml` defines the package, report/label commands, and vendor GPU
+  check console scripts.
 
 ## Commands
 
@@ -22,6 +23,7 @@ Build and inspect artifacts with an isolated environment:
 python -m build
 python -m pip install dist/flagos_optest-*.whl
 flagos-optest --help
+flagos-add-labels --help
 flagos-psum-text --help
 flagos-psum-html --help
 flagos-psum-web --help
@@ -36,9 +38,8 @@ plugins; do not add those heavyweight target dependencies to this wheel.
 Keep the packaging migration in small, independently reviewable PRs:
 
 1. Migrate `tools/` to `src/flagos_optest/` and update package/config paths.
-2. Install the optest checkout in the workflow and use the four console
-   scripts (`flagos-optest`, `flagos-psum-text`, `flagos-psum-html`, and
-   `flagos-psum-web`). Decide separately how `add_labels` is exposed.
+2. Install the optest checkout in the workflow and use installed console
+   scripts for scheduling, labels, reports, and GPU checks.
 3. Change the scheduler to use the current working directory as the target,
    then remove `--project-root` and update workflow working-directory handling.
 

@@ -16,9 +16,11 @@ The package provides these console commands:
 
 ```text
 flagos-optest       # schedule accuracy and performance tests
+flagos-add-labels   # add operator labels to summary.json
 flagos-psum-text    # render summary.json as CSV or Markdown
 flagos-psum-html    # render summary.json as HTML
 flagos-psum-web     # convert summaries to web data JSON
+flagos-gpu-check-*  # check vendor GPU availability (one command per backend)
 ```
 
 The target repository supplies its own test stack, including PyTorch, the
@@ -34,9 +36,15 @@ cwd-based CLI migration:
 ```bash
 flagos-optest --project-root /path/to/target \
   --gpus 0 --stages all --output-dir /tmp/optest-results
+flagos-add-labels --project-root /path/to/target /tmp/optest-results
 flagos-psum-text -o /tmp/optest-results/result.csv /tmp/optest-results
 flagos-psum-html -o /tmp/optest-results/result.html /tmp/optest-results
 ```
+
+GPU checks are installed as commands such as `flagos-gpu-check-nvidia` and
+`flagos-gpu-check-amd`. Backend configuration refers to these command names,
+so checks continue to work when the package is installed from a wheel without
+an optest source checkout.
 
 The source checkout remains runnable without installation:
 
@@ -65,8 +73,8 @@ The packaging migration is intentionally split into small pull requests:
    directory, then remove `--project-root` from `run_tests.py` and update the
    workflow to run from the target checkout like pytest.
 
-Each step should build a wheel/sdist and smoke-test all four console commands
-before it is submitted as a separate PR.
+Each step should build a wheel/sdist and smoke-test the scheduler, report,
+label, and GPU-check console commands before it is submitted as a separate PR.
 
 ## Development
 

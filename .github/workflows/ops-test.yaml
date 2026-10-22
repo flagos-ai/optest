@@ -389,9 +389,9 @@ jobs:
           if [ "${{ matrix.force_test_gpus }}" = "true" ]; then
             # Best-effort run: this backend only uses the script output for
             # logging/inspection, so a non-zero exit here must not fail the job.
-            GPU_OUTPUT=$(bash ${{ matrix.gpu_check_script }} || true)
+            GPU_OUTPUT=$(${{ matrix.gpu_check_script }} || true)
           else
-            GPU_OUTPUT=$(bash ${{ matrix.gpu_check_script }})
+            GPU_OUTPUT=$(${{ matrix.gpu_check_script }})
           fi
           echo "[GPU check] GPU availability check output:"
           echo "$GPU_OUTPUT"
@@ -482,7 +482,7 @@ jobs:
             --dump-output \
             --output-dir "${OUTPUT_DIR}"
           # process the test results to generate summary files
-          python3 -m flagos_optest.add_labels --project-root target ${OUTPUT_DIR}
+          flagos-add-labels --project-root target ${OUTPUT_DIR}
           flagos-psum-text -o ${OUTPUT_DIR}/result.csv ${OUTPUT_DIR}
           flagos-psum-html -o ${OUTPUT_DIR}/result.html ${OUTPUT_DIR}
 

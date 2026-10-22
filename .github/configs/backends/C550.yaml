@@ -60,7 +60,7 @@ test_env:
   FLAGTREE_BACKEND: metax
 
 # GPU availability check script for this backend
-gpu_check_script: src/flagos_optest/gpu_check_metax.sh
+gpu_check_script: flagos-gpu-check-metax
 
 # Output base directory; ops-test appends the GitHub repository name
 output_base_dir: /data/github-outputs

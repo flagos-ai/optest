@@ -387,22 +387,36 @@ jobs:
         run: |
           echo "[GPU check] Running GPU availability check script: ${{ matrix.gpu_check_script }}"
           if [ "${{ matrix.force_test_gpus }}" = "true" ]; then
-            # Best-effort run: this backend only uses the script output for
-            # logging/inspection, so a non-zero exit here must not fail the job.
-            GPU_OUTPUT=$(${{ matrix.gpu_check_script }} || true)
-          else
-            GPU_OUTPUT=$(${{ matrix.gpu_check_script }})
-          fi
-          echo "[GPU check] GPU availability check output:"
-          echo "$GPU_OUTPUT"
-          if [ "${{ matrix.force_test_gpus }}" = "true" ]; then
             # This backend deliberately pins the GPUs under test to the
-            # configured test_gpus list (e.g. only the first N cards on a host
-            # that exposes more). Ignore the gpu_check result and use test_gpus.
+            # configured test_gpus list (e.g. TsingMicro exposes more cards than
+            # we want to use). The check is run for logging/inspection only, so
+            # a non-zero exit here must NOT fail the job; test_gpus is
+            # authoritative below.
+            GPU_OUTPUT=$(${{ matrix.gpu_check_script }} || true)
+            echo "[GPU check] GPU availability check output:"
+            echo "$GPU_OUTPUT"
             AVAILABLE_GPUS="${{ matrix.test_gpus }}"
             echo "[GPU check] force_test_gpus=true -> using configured test_gpus"
           else
-            AVAILABLE_GPUS=$(echo "$GPU_OUTPUT" | grep "^Available GPUs:" | cut -d: -f2 | tr -d ' ')
+            # Capture the exit code explicitly (instead of relying on set -e)
+            # so the output is always printed for debugging before we decide to
+            # fail. A failed GPU check means we have no reliable GPU list, so
+            # the job must stop with exit 1.
+            set +e
+            GPU_OUTPUT=$(${{ matrix.gpu_check_script }})
+            GPU_RC=$?
+            set -e
+            echo "[GPU check] GPU availability check output:"
+            echo "$GPU_OUTPUT"
+            if [ "${GPU_RC}" -ne 0 ]; then
+              echo "[GPU check] ERROR: '${{ matrix.gpu_check_script }}' failed with exit code ${GPU_RC}."
+              exit 1
+            fi
+            AVAILABLE_GPUS=$(echo "$GPU_OUTPUT" | grep "^Available GPUs:" | cut -d: -f2 | tr -d ' ' || true)
+            if [ -z "${AVAILABLE_GPUS}" ]; then
+              echo "[GPU check] ERROR: no 'Available GPUs:' line found in the check output."
+              exit 1
+            fi
           fi
           echo "[GPU check] Available GPUs: ${AVAILABLE_GPUS}"
           if [ "${{ matrix.vendor }}" = "KunLunXin" ]; then

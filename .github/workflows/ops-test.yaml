@@ -286,6 +286,77 @@ jobs:
           fi
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
 
+      - name: Copy root profile to GitHub Actions home
+        run: |
+          for f in /root/.bash_profile /root/.profile /root/.bashrc; do
+            [ -f "$f" ] && cp -f "$f" "$HOME/" || true
+          done
+          # .bashrc may have interactive guards ([ -z "$PS1" ] or case $-)
+          # that prevent conda init / backend env setup from running in
+          # non-interactive CI shells. Extract those lines (conda init,
+          # `source .../set_env.sh`, FLAGTREE_BACKEND export, and the
+          # `. /root/.local/bin/env` sourcing) and append to .bash_profile
+          # instead, which is sourced by login shells without any
+          # interactive check.
+          #
+          # huawei: set_env.sh
+          # mthreads: $HOME/.local/bin/env
+          # kunlunxin: conda.sh and conda activate
+          #
+          if [ -f /root/.bashrc ]; then
+            # Pin $HOME -> /root: extracted lines use "$HOME/..." (e.g.
+            # . "$HOME/.local/bin/env"), but the login shell that sources
+            # .bash_profile has $HOME set to the GHA home, not /root.
+            grep -E '(conda\.sh|conda activate|set_env\.sh|\.local/bin/env)' /root/.bashrc \
+              | sed 's#\$HOME\/\.local#/root\/\.local#g' >> "$HOME/.bash_profile" || true
+          fi
+          # GitHub Actions job containers force HOME=/github/home. In the 910B
+          # image, the Ascend/MKI libraries loaded by torch_npu derive their
+          # default work path from HOME; with /github/home they can print
+          # "path string is NULL" to stdout during `import torch`. Huawei's ATB
+          # set_env.sh compares that command's full stdout to "True" for ABI
+          # auto-detection, so the extra text makes it incorrectly select
+          # cxx_abi_0.
+          #
+          # Important: ASCEND_WORK_PATH must be exported before any profile
+          # line sources Ascend/ATB set_env.sh. Keep these lines at the top of
+          # $HOME/.bash_profile, ahead of the set_env.sh lines extracted above.
+          # Also write it to GITHUB_ENV so later GHA steps have it before their
+          # own login shell starts reading system/vendor profiles.
+          if [ "${{ matrix.vendor }}" = "Ascend" ] && [ -f /usr/local/Ascend/nnal/atb/set_env.sh ]; then
+            echo "[Ascend env] Configuring ASCEND_WORK_PATH before sourcing Ascend/ATB profiles"
+            echo "[Ascend env] before rewrite: ASCEND_WORK_PATH=${ASCEND_WORK_PATH:-<unset>}"
+            echo "[Ascend env] before rewrite: ATB_HOME_PATH=${ATB_HOME_PATH:-<unset>}"
+            echo "[Ascend env] before rewrite: PATH=${PATH:-}"
+            echo "[Ascend env] before rewrite: LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}"
+            echo "[Ascend env] .bash_profile before rewrite:"
+            nl -ba "$HOME/.bash_profile" || true
+            ASCEND_WORK_PATH="${ASCEND_WORK_PATH:-/tmp/ascend_work/${GITHUB_RUN_ID:-manual}}"
+            mkdir -p "$ASCEND_WORK_PATH"
+            [ -n "${GITHUB_ENV:-}" ] && echo "ASCEND_WORK_PATH=$ASCEND_WORK_PATH" >> "$GITHUB_ENV"
+            echo "[Ascend env] exported ASCEND_WORK_PATH=$ASCEND_WORK_PATH"
+            {
+              echo 'export ASCEND_WORK_PATH="${ASCEND_WORK_PATH:-/tmp/ascend_work/${GITHUB_RUN_ID:-manual}}"'
+              echo 'mkdir -p "$ASCEND_WORK_PATH"'
+              cat "$HOME/.bash_profile"
+            } > "$HOME/.bash_profile.tmp"
+            mv "$HOME/.bash_profile.tmp" "$HOME/.bash_profile"
+            echo "[Ascend env] .bash_profile after rewrite:"
+            nl -ba "$HOME/.bash_profile" || true
+            echo "[Ascend env] verifying a fresh login shell after profile source"
+            bash --login -c '
+              set +e
+              echo "[Ascend env] after login source: ASCEND_WORK_PATH=${ASCEND_WORK_PATH:-<unset>}"
+              echo "[Ascend env] after login source: ATB_HOME_PATH=${ATB_HOME_PATH:-<unset>}"
+              echo "[Ascend env] after login source: PATH=${PATH:-}"
+              echo "[Ascend env] after login source: LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}"
+              python3 -c "import torch; print(torch.compiled_with_cxx11_abi())" >/tmp/ascend_torch_abi_probe.out 2>/tmp/ascend_torch_abi_probe.err
+              probe_rc=$?
+              echo "[Ascend env] torch ABI probe rc=${probe_rc}"
+              python3 -c "from pathlib import Path; print(\"[Ascend env] torch ABI probe stdout repr=\", repr(Path(\"/tmp/ascend_torch_abi_probe.out\").read_text())); print(\"[Ascend env] torch ABI probe stderr repr=\", repr(Path(\"/tmp/ascend_torch_abi_probe.err\").read_text()))"
+            ' || true
+          fi
+
       - name: Install dependencies
         env: ${{ fromJSON(matrix.test_env) }}
         shell: bash --login -e -o pipefail {0}

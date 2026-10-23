@@ -207,6 +207,20 @@ def ensure_dir(p):
     p.chmod(0o755)
 
 
+def project_directory(value):
+    """Resolve and validate the target project directory for argparse."""
+    path = Path(value).expanduser()
+    try:
+        path = path.resolve(strict=True)
+    except OSError as error:
+        raise argparse.ArgumentTypeError(
+            f"project directory does not exist: {value}"
+        ) from error
+    if not path.is_dir():
+        raise argparse.ArgumentTypeError(f"project path is not a directory: {value}")
+    return path
+
+
 class LiveDisplay:
     """Manages terminal output with a pinned footer for GPU status lines."""
 
@@ -868,23 +882,26 @@ def run_accuracy_q(gpu_id, op):
     """Run accuracy test for one op. Returns result dict."""
     env = get_env(str(gpu_id))
 
+    accuracy_dir = ROOT / "tests"
+    result_file = accuracy_dir / f"accuracy_{op}.json"
     marker = op_marker(op)
-    base = f'pytest -m "{marker}" --record json --output accuracy_{op}.json'
+    base = (
+        f"pytest {shlex.quote(str(accuracy_dir))} -m {shlex.quote(marker)} "
+        f"--record json --output {shlex.quote(str(result_file))}"
+    )
     if op not in CFG.skip_cpu_tests:
         base += " --ref cpu"
     if CFG.quick:
         base += " --quick"
     cmd = base + " --continue-on-collection-errors -vs"
 
-    accuracy_dir = ROOT.joinpath("tests")
-    result_file = accuracy_dir / f"accuracy_{op}.json"
     if result_file.exists():
         result_file.unlink()
 
     op_dir = CFG.output_dir.joinpath(op)
     ensure_dir(op_dir)
     dur = time.time()
-    code = run_cmd(op, cmd, cwd=accuracy_dir, env=env, flavor="accuracy")
+    code = run_cmd(op, cmd, cwd=ROOT, env=env, flavor="accuracy")
     dur = time.time() - dur
 
     if code == TIMEOUT:
@@ -939,12 +956,13 @@ def run_benchmark_q(gpu_id, op):
     dur = time.time()
     marker = op_marker(op)
     cmd = (
-        f'pytest -m "{marker}" --level core --record json '
-        f"--output benchmark_{op}.json --continue-on-collection-errors"
+        f"pytest {shlex.quote(str(benchmark_dir))} -m {shlex.quote(marker)} "
+        f"--level core --record json --output {shlex.quote(str(result_file))} "
+        "--continue-on-collection-errors"
     )
     if getattr(CFG, "base_data", None):
         cmd += f" --base-data={shlex.quote(CFG.base_data)}"
-    code = run_cmd(op, cmd, cwd=benchmark_dir, env=env, flavor="performance")
+    code = run_cmd(op, cmd, cwd=ROOT, env=env, flavor="performance")
     dur = time.time() - dur
 
     if code == TIMEOUT:
@@ -1387,7 +1405,7 @@ def collect_marks(ops):
 
 
 def main():
-    global OPTS
+    global OPTS, ROOT
 
     signal.signal(signal.SIGINT, handle_interrupt)
     signal.signal(signal.SIGTERM, handle_interrupt)
@@ -1401,12 +1419,21 @@ def main():
         ),
         epilog=(
             "Examples:\n"
-            "  python run_tests.py --gpus 0,1,2,3 --dump-output\n"
-            '  python run_tests.py --ops "add,softmax,multinomial" --gpus 0\n'
-            "  python run_tests.py --op-list-file my_ops.txt --gpus all\n"
-            '  python run_tests.py --start mul --stages "stable,beta" --gpus 0,1\n'
+            "  flagos-optest --gpus 0,1,2,3 --dump-output\n"
+            "  flagos-optest /path/to/project --gpus 0,1\n"
+            '  flagos-optest --ops "add,softmax,multinomial" --gpus 0\n'
+            "  flagos-optest --op-list-file my_ops.txt --gpus all\n"
+            '  flagos-optest --start mul --stages "stable,beta" --gpus 0,1\n'
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "directory",
+        nargs="?",
+        default=project_directory("."),
+        type=project_directory,
+        metavar="DIRECTORY",
+        help="Target project directory. Default: current directory.",
     )
     parser.add_argument(
         "--ops",
@@ -1490,6 +1517,8 @@ def main():
         help="Optional ops-baseline JSON; matched external speedup wins in summaries.",
     )
     OPTS = parser.parse_args()
+    ROOT = OPTS.directory
+    os.chdir(ROOT)
     pinfo(f"Project root ... {ROOT}")
     CFG.base_data = str(Path(OPTS.base_data).resolve()) if OPTS.base_data else None
     CFG.dump_output = OPTS.dump_output

@@ -29,13 +29,21 @@ FlagOS library, pytest, and the plugins that provide options such as
 
 ## Current Usage
 
-The workflow installs this package and runs it from the target repository's
-checkout directory, just as it would run `pytest`:
+Like `pytest`, `flagos-optest` accepts an optional project directory. It uses
+the current directory when none is supplied. The selected directory becomes
+the scheduler's working directory and the base for its test processes, so
+relative configuration, input, and output paths are resolved from there:
 
 ```bash
 cd /path/to/target
 flagos-optest \
   --gpus 0 --stages all --output-dir /tmp/optest-results
+
+# Equivalent explicit-directory invocation from another directory:
+flagos-optest /path/to/target \
+  --gpus 0 --stages all --output-dir /tmp/optest-results
+
+cd /path/to/target
 flagos-add-labels --project-root . /tmp/optest-results
 flagos-psum-text -o /tmp/optest-results/result.csv /tmp/optest-results
 flagos-psum-html -o /tmp/optest-results/result.html /tmp/optest-results
@@ -70,8 +78,8 @@ The packaging migration is intentionally split into small pull requests:
    execution working.
 2. Install this repository with `pip install .` in the workflow and invoke the
    installed console scripts instead of source paths.
-3. Make `flagos-optest` use the current working directory as the target and
-   update the workflow to run it from the target checkout like pytest.
+3. Make `flagos-optest` accept an optional target directory, default to the
+   current directory, and update the workflow to run it like pytest.
 
 Each step should build a wheel/sdist and smoke-test the scheduler, report,
 label, and GPU-check console commands before it is submitted as a separate PR.

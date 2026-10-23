@@ -385,36 +385,43 @@ jobs:
       - name: Check GPU availability
         shell: bash --login -e -o pipefail {0}
         run: |
-          echo "[GPU check] Running GPU availability check script: ${{ matrix.gpu_check_script }}"
+          echo "[GPU check] Running GPU availability check script: ${{ matrix.gpu_check_script }} --format json"
+          # Use JSON output and parse it with python3 (stdlib) instead of
+          # grepping text: in --format json mode the command prints ONLY the
+          # JSON document to stdout (progress tables and the vendor line go to
+          # stderr, still visible in the step log), so parsing is exact and
+          # robust against formatting changes.
           if [ "${{ matrix.force_test_gpus }}" = "true" ]; then
             # This backend deliberately pins the GPUs under test to the
             # configured test_gpus list (e.g. TsingMicro exposes more cards than
             # we want to use). The check is run for logging/inspection only, so
             # a non-zero exit here must NOT fail the job; test_gpus is
             # authoritative below.
-            GPU_OUTPUT=$(${{ matrix.gpu_check_script }} || true)
-            echo "[GPU check] GPU availability check output:"
-            echo "$GPU_OUTPUT"
+            ${{ matrix.gpu_check_script }} --format json || true
             AVAILABLE_GPUS="${{ matrix.test_gpus }}"
             echo "[GPU check] force_test_gpus=true -> using configured test_gpus"
           else
             # Capture the exit code explicitly (instead of relying on set -e)
-            # so the output is always printed for debugging before we decide to
-            # fail. A failed GPU check means we have no reliable GPU list, so
-            # the job must stop with exit 1.
+            # so a failure is reported clearly before we stop. A failed GPU
+            # check means we have no reliable GPU list, so the job must exit 1.
             set +e
-            GPU_OUTPUT=$(${{ matrix.gpu_check_script }})
+            GPU_JSON=$(${{ matrix.gpu_check_script }} --format json)
             GPU_RC=$?
             set -e
-            echo "[GPU check] GPU availability check output:"
-            echo "$GPU_OUTPUT"
+            echo "[GPU check] GPU availability check JSON:"
+            echo "${GPU_JSON}"
             if [ "${GPU_RC}" -ne 0 ]; then
               echo "[GPU check] ERROR: '${{ matrix.gpu_check_script }}' failed with exit code ${GPU_RC}."
               exit 1
             fi
-            AVAILABLE_GPUS=$(echo "$GPU_OUTPUT" | grep "^Available GPUs:" | cut -d: -f2 | tr -d ' ' || true)
-            if [ -z "${AVAILABLE_GPUS}" ]; then
-              echo "[GPU check] ERROR: no 'Available GPUs:' line found in the check output."
+            # Extract available_gpus (a CSV string, e.g. "0,1,2") from the JSON.
+            # A parse failure or empty list exits 1 (handled via PARSE_RC).
+            set +e
+            AVAILABLE_GPUS=$(printf '%s' "${GPU_JSON}" | python3 -c 'import json, sys; v = str(json.load(sys.stdin).get("available_gpus", "")).strip(); print(v) if v else sys.exit("[GPU check] ERROR: JSON contains no available_gpus.")')
+            PARSE_RC=$?
+            set -e
+            if [ "${PARSE_RC}" -ne 0 ]; then
+              echo "[GPU check] ERROR: failed to parse available_gpus from GPU-check JSON (rc=${PARSE_RC})."
               exit 1
             fi
           fi

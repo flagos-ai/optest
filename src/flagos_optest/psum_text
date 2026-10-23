@@ -640,7 +640,13 @@ def main():
     global ARGS
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("dir", default="result", help="the data directory to process")
+    parser.add_argument(
+        "dir",
+        nargs="?",
+        default=".",
+        metavar="DIRECTORY",
+        help="the data directory to process. Default: current directory.",
+    )
     parser.add_argument(
         "-f",
         "--format",

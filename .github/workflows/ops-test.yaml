@@ -410,9 +410,9 @@ jobs:
             --dump-output \
             --output-dir "${OUTPUT_DIR}"
           # process the test results to generate summary files
-          flagos-add-labels --project-root . ${OUTPUT_DIR}
-          flagos-psum-text -o ${OUTPUT_DIR}/result.csv ${OUTPUT_DIR}
-          flagos-psum-html -o ${OUTPUT_DIR}/result.html ${OUTPUT_DIR}
+          flagos-add-labels "${OUTPUT_DIR}"
+          flagos-psum-text -o "${OUTPUT_DIR}/result.csv" "${OUTPUT_DIR}"
+          flagos-psum-html -o "${OUTPUT_DIR}/result.html" "${OUTPUT_DIR}"
 
       - name: Package results
         run: |

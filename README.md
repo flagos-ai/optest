@@ -90,5 +90,3 @@ Use Python 3.9 or newer. Keep files UTF-8 without a BOM and use Unix line
 endings. Code comments are written in English. Changes should include focused
 validation and should preserve the target repository's test-environment
 contract.
-
--- [AI] OpenAI Codex / GPT-5

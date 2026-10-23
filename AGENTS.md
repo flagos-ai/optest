@@ -1,9 +1,8 @@
 # Repository Agent Guide
 
-This guide was initialized through Claude Code `/init` and is the single
-canonical agent guide for this repository. This repository contains the shared
-FlagOS operator-test scheduler and report tools. Read `README.md` for the
-user-facing package and migration overview.
+This is the canonical agent guide for the repository. The repository contains
+the shared FlagOS operator-test scheduler and report tools. Read `README.md`
+for the user-facing package and migration overview.
 
 ## Layout
 
@@ -56,7 +55,3 @@ workflow behavior change, and CLI semantic change in one PR.
   package-index access.
 - Never use destructive Git commands to discard unrelated user changes.
 - Include focused build/smoke validation in every migration PR.
-- Append an AI-agent/model signature to generated review or documentation
-  summaries.
-
--- [AI] OpenAI Codex / GPT-5

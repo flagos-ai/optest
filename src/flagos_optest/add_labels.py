@@ -19,7 +19,7 @@
 Standalone script to add operator labels from operators.yaml into summary.json.
 
 Usage:
-    python add_labels.py <result_dir>
+    flagos-add-labels [project_directory] <result_dir>
 
 Where <result_dir> is the output directory produced by run_tests.py containing
 summary.json. The script reads conf/operators.yaml relative to the project root,
@@ -29,15 +29,15 @@ operator entry in summary.json.
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 import yaml
 
-# Project root holding conf/operators.yaml. In a source checkout this defaults
-# to the repository above src/flagos_optest/. Override it when the installed
-# module processes results from another checkout.
-ROOT = Path(__file__).resolve().parents[2]
+# Project root holding conf/operators.yaml. main() always sets this from the
+# optional project-directory argument before labels are loaded.
+ROOT = Path.cwd()
 
 
 def pinfo(msg):
@@ -46,6 +46,16 @@ def pinfo(msg):
 
 def perror(msg):
     print(f"\033[31m[ERROR]\033[0m {msg}")
+
+
+def project_directory(value):
+    """Return an absolute project directory or raise an argparse error."""
+    path = Path(value).expanduser().resolve()
+    if not path.exists():
+        raise argparse.ArgumentTypeError(f"project directory does not exist: {value}")
+    if not path.is_dir():
+        raise argparse.ArgumentTypeError(f"project directory is not a directory: {value}")
+    return path
 
 
 def load_op_labels():
@@ -73,24 +83,23 @@ def main():
         description="Add operator labels from operators.yaml into summary.json"
     )
     parser.add_argument(
-        "result_dir",
-        help="Path to the result directory containing summary.json",
+        "directory",
+        nargs="?",
+        default=project_directory("."),
+        type=project_directory,
+        metavar="DIRECTORY",
+        help="Target project directory. Default: current directory.",
     )
     parser.add_argument(
-        "--project-root",
-        metavar="DIR",
-        default=None,
-        help=(
-            "Project repo holding conf/operators.yaml. Default: the repo this "
-            "script lives in. Set this when add_labels.py is hosted centrally "
-            "and the target repo is checked out elsewhere."
-        ),
+        "result_dir",
+        metavar="RESULT_DIR",
+        help="Path to the result directory containing summary.json",
     )
     args = parser.parse_args()
 
     global ROOT
-    if args.project_root:
-        ROOT = Path(args.project_root).resolve()
+    ROOT = args.directory
+    os.chdir(ROOT)
 
     result_dir = Path(args.result_dir)
     summary_path = result_dir / "summary.json"

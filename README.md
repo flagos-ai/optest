@@ -27,27 +27,38 @@ The target repository supplies its own test stack, including PyTorch, the
 FlagOS library, pytest, and the plugins that provide options such as
 `--record` and `--collect-marks`.
 
-## Current Usage
+## Usage
 
-Like `pytest`, `flagos-optest` accepts an optional project directory. It uses
-the current directory when none is supplied. The selected directory becomes
-the scheduler's working directory and the base for its test processes, so
-relative configuration, input, and output paths are resolved from there:
+Like `pytest`, the commands accept an optional directory and use the current
+directory when it is omitted. `flagos-optest` and `flagos-add-labels` select a
+target project directory containing `conf/operators.yaml`; the two report
+commands select a result directory containing `summary.json`.
+
+Run from the target and result directories without directory arguments:
 
 ```bash
 cd /path/to/target
 flagos-optest \
   --gpus 0 --stages all --output-dir /tmp/optest-results
+flagos-add-labels /tmp/optest-results
 
-# Equivalent explicit-directory invocation from another directory:
+cd /tmp/optest-results
+flagos-psum-text -o result.csv
+flagos-psum-html -o result.html
+```
+
+Or pass the directories explicitly from another working directory:
+
+```bash
 flagos-optest /path/to/target \
   --gpus 0 --stages all --output-dir /tmp/optest-results
-
-cd /path/to/target
-flagos-add-labels --project-root . /tmp/optest-results
-flagos-psum-text -o /tmp/optest-results/result.csv /tmp/optest-results
-flagos-psum-html -o /tmp/optest-results/result.html /tmp/optest-results
+flagos-add-labels /path/to/target /tmp/optest-results
+flagos-psum-text /tmp/optest-results -o /tmp/optest-results/result.csv
+flagos-psum-html /tmp/optest-results -o /tmp/optest-results/result.html
 ```
+
+For `flagos-add-labels`, the optional first directory is the target project;
+the required `RESULT_DIR` remains the location of `summary.json`.
 
 GPU checks are installed as commands such as `flagos-gpu-check-nvidia` and
 `flagos-gpu-check-amd`. Backend configuration refers to these command names,
@@ -69,24 +80,3 @@ src/flagos_optest/       Python package, report scripts, and GPU checks
 .github/workflows/        Centralized GitHub Actions workflow
 pyproject.toml            Build metadata and console-script definitions
 ```
-
-## Migration Roadmap
-
-The packaging migration is intentionally split into small pull requests:
-
-1. Move the source package into `src/flagos_optest/` and keep direct workflow
-   execution working.
-2. Install this repository with `pip install .` in the workflow and invoke the
-   installed console scripts instead of source paths.
-3. Make `flagos-optest` accept an optional target directory, default to the
-   current directory, and update the workflow to run it like pytest.
-
-Each step should build a wheel/sdist and smoke-test the scheduler, report,
-label, and GPU-check console commands before it is submitted as a separate PR.
-
-## Development
-
-Use Python 3.9 or newer. Keep files UTF-8 without a BOM and use Unix line
-endings. Code comments are written in English. Changes should include focused
-validation and should preserve the target repository's test-environment
-contract.

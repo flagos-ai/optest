@@ -44,19 +44,9 @@ flagos-add-labels = "flagos_optest.add_labels:main"
 flagos-psum-text = "flagos_optest._entrypoints:psum_text"
 flagos-psum-html = "flagos_optest._entrypoints:psum_html"
 flagos-psum-web = "flagos_optest._entrypoints:psum_web"
-flagos-gpu-check-amd = "flagos_optest._gpu_check:gpu_check_amd"
-flagos-gpu-check-ascend = "flagos_optest._gpu_check:gpu_check_ascend"
-flagos-gpu-check-cambricon = "flagos_optest._gpu_check:gpu_check_cambricon"
-flagos-gpu-check-enflame = "flagos_optest._gpu_check:gpu_check_enflame"
-flagos-gpu-check-hygon = "flagos_optest._gpu_check:gpu_check_hygon"
-flagos-gpu-check-iluvatar = "flagos_optest._gpu_check:gpu_check_iluvatar"
-flagos-gpu-check-kunlunxin = "flagos_optest._gpu_check:gpu_check_kunlunxin"
-flagos-gpu-check-metax = "flagos_optest._gpu_check:gpu_check_metax"
-flagos-gpu-check-mthreads = "flagos_optest._gpu_check:gpu_check_mthreads"
-flagos-gpu-check-nvidia = "flagos_optest._gpu_check:gpu_check_nvidia"
-flagos-gpu-check-sunrise = "flagos_optest._gpu_check:gpu_check_sunrise"
-flagos-gpu-check-thead = "flagos_optest._gpu_check:gpu_check_thead"
-flagos-gpu-check-tsingmicro = "flagos_optest._gpu_check:gpu_check_tsingmicro"
+# Single unified GPU check: auto-probes the host vendor, then reports available
+# GPUs. Replaces the former per-vendor flagos-gpu-check-<vendor> commands.
+flagos-gpu-check = "flagos_optest.gpu_check:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -65,4 +55,4 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-flagos_optest = ["html_assets/*.css", "html_assets/*.js", "gpu_check_*.sh", "psum_html", "psum_text", "psum_web"]
+flagos_optest = ["html_assets/*.css", "html_assets/*.js", "psum_html", "psum_text", "psum_web"]

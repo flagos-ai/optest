@@ -48,7 +48,7 @@ test_env:
   PIP_CACHE_DIR: /root/.cache/pip
 
 # GPU availability check script for this backend
-gpu_check_script: flagos-gpu-check-enflame
+gpu_check_script: flagos-gpu-check
 
 # Output base directory; ops-test appends the GitHub repository name
 output_base_dir: /data/github-outputs

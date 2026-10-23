@@ -287,6 +287,10 @@ jobs:
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Copy root profile to GitHub Actions home
+        # EXPERIMENT (test/no-root-profile): temporarily disabled to verify
+        # whether the new container images still need manual root-profile
+        # extraction for Ascend / MThreads / KunLunXin env activation.
+        if: false
         run: |
           for f in /root/.bash_profile /root/.profile /root/.bashrc; do
             [ -f "$f" ] && cp -f "$f" "$HOME/" || true

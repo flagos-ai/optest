@@ -429,6 +429,7 @@ jobs:
       # "ops" input) runs every operator stage via --stages all; otherwise it
       # runs only the selected operators via --ops <list>.
       - name: Run ops tests
+        working-directory: target
         # Per-repo step timeout from repos.yaml (ops_test_timeout_minutes),
         # resolved in prepare. This is the real test-duration limit; the
         # job-level timeout is just a large hard cap (see note above).
@@ -469,20 +470,18 @@ jobs:
           BASE_DATA="${{ matrix.base_data }}"
           BASE_DATA_ARG=""
           if [ -n "${BASE_DATA}" ]; then
-            BASE_DATA_ARG="--base-data target/${BASE_DATA}"
+            BASE_DATA_ARG="--base-data ${BASE_DATA}"
           fi
-          # The installed scheduler tests the target repo checked out in
-          # ./target; --project-root points it at the target's conf/operators.yaml,
-          # tests/ and benchmark/ until the cwd-based CLI migration lands.
+          # Run from the target checkout so the installed scheduler discovers
+          # its conf/operators.yaml, tests/ and benchmark/ from the cwd.
           flagos-optest \
-            --project-root target \
             --gpus "${AVAILABLE_GPUS}" \
             ${OP_ARGS} \
             ${BASE_DATA_ARG} \
             --dump-output \
             --output-dir "${OUTPUT_DIR}"
           # process the test results to generate summary files
-          flagos-add-labels --project-root target ${OUTPUT_DIR}
+          flagos-add-labels --project-root . ${OUTPUT_DIR}
           flagos-psum-text -o ${OUTPUT_DIR}/result.csv ${OUTPUT_DIR}
           flagos-psum-html -o ${OUTPUT_DIR}/result.html ${OUTPUT_DIR}
 

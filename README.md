@@ -29,14 +29,22 @@ FlagOS library, pytest, and the plugins that provide options such as
 
 ## Current Usage
 
-The workflow installs this package and uses the same console commands shown
-below. The scheduler still targets another checkout explicitly until the next
-cwd-based CLI migration:
+Like `pytest`, `flagos-optest` accepts an optional project directory. It uses
+the current directory when none is supplied. The selected directory becomes
+the scheduler's working directory and the base for its test processes, so
+relative configuration, input, and output paths are resolved from there:
 
 ```bash
-flagos-optest --project-root /path/to/target \
+cd /path/to/target
+flagos-optest \
   --gpus 0 --stages all --output-dir /tmp/optest-results
-flagos-add-labels --project-root /path/to/target /tmp/optest-results
+
+# Equivalent explicit-directory invocation from another directory:
+flagos-optest /path/to/target \
+  --gpus 0 --stages all --output-dir /tmp/optest-results
+
+cd /path/to/target
+flagos-add-labels --project-root . /tmp/optest-results
 flagos-psum-text -o /tmp/optest-results/result.csv /tmp/optest-results
 flagos-psum-html -o /tmp/optest-results/result.html /tmp/optest-results
 ```
@@ -46,10 +54,11 @@ GPU checks are installed as commands such as `flagos-gpu-check-nvidia` and
 so checks continue to work when the package is installed from a wheel without
 an optest source checkout.
 
-The source checkout remains runnable without installation:
+The scheduler source remains runnable without installation from the target
+repository directory:
 
 ```bash
-python src/flagos_optest/run_tests.py --project-root /path/to/target --help
+python /path/to/optest/src/flagos_optest/run_tests.py --help
 ```
 
 ## Repository Layout
@@ -69,9 +78,8 @@ The packaging migration is intentionally split into small pull requests:
    execution working.
 2. Install this repository with `pip install .` in the workflow and invoke the
    installed console scripts instead of source paths.
-3. Make `flagos-optest` discover the target project from the current working
-   directory, then remove `--project-root` from `run_tests.py` and update the
-   workflow to run from the target checkout like pytest.
+3. Make `flagos-optest` accept an optional target directory, default to the
+   current directory, and update the workflow to run it like pytest.
 
 Each step should build a wheel/sdist and smoke-test the scheduler, report,
 label, and GPU-check console commands before it is submitted as a separate PR.
@@ -82,5 +90,3 @@ Use Python 3.9 or newer. Keep files UTF-8 without a BOM and use Unix line
 endings. Code comments are written in English. Changes should include focused
 validation and should preserve the target repository's test-environment
 contract.
-
--- [AI] OpenAI Codex / GPT-5

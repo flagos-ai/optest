@@ -20,7 +20,7 @@ flagos-add-labels   # add operator labels to summary.json
 flagos-psum-text    # render summary.json as CSV or Markdown
 flagos-psum-html    # render summary.json as HTML
 flagos-psum-web     # convert summaries to web data JSON
-flagos-gpu-check-*  # check vendor GPU availability (one command per backend)
+flagos-gpu-check    # auto-probe the host vendor and report available GPUs
 ```
 
 The target repository supplies its own test stack, including PyTorch, the
@@ -60,10 +60,15 @@ flagos-psum-html /tmp/optest-results -o /tmp/optest-results/result.html
 For `flagos-add-labels`, the optional first directory is the target project;
 the required `RESULT_DIR` remains the location of `summary.json`.
 
-GPU checks are installed as commands such as `flagos-gpu-check-nvidia` and
-`flagos-gpu-check-amd`. Backend configuration refers to these command names,
-so checks continue to work when the package is installed from a wheel without
-an optest source checkout.
+GPU availability is checked by the single `flagos-gpu-check` command. It probes
+the host for a supported accelerator vendor (preferring the vendor-unique
+`/dev` device node, then confirming the vendor's SMI command), prints
+`Available Vendor: <vendor>`, and then reports `Available GPUs: <csv>` once a
+device has enough free memory. Backend configuration refers to this single
+command name, so checks work when the package is installed from a wheel without
+an optest source checkout. Use `--format {text,json,yaml}` to change the output
+format and `--output PATH` to save it to a file; `--vendor <name>` skips the
+auto-probe.
 
 The scheduler source remains runnable without installation from the target
 repository directory:

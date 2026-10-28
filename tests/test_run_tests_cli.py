@@ -225,5 +225,34 @@ class ProbeGemsImportTest(unittest.TestCase):
         self.assertIn("No module named 'torch'", stderr.getvalue())
 
 
+class AcceleratorMetadataTest(unittest.TestCase):
+    def test_probe_accelerator_records_gpu_check_schema_in_env(self):
+        expected = {
+            "vendor": "nvidia",
+            "device": "H800",
+            "driver": "610.57.04",
+            "runtime": "cuda",
+            "runtime_version": "13.3.0",
+        }
+        output = io.StringIO()
+        with mock.patch.object(
+            run_tests, "probe_accelerator_metadata", return_value=expected
+        ), mock.patch.object(run_tests, "ENV_INFO", {}) as env, redirect_stdout(
+            output
+        ):
+            run_tests._probe_accelerator()
+
+        self.assertEqual(env, expected)
+        self.assertNotIn("sdk", env)
+        self.assertEqual(
+            output.getvalue().splitlines(),
+            [
+                "[INFO] Accelerator ... nvidia / H800",
+                "[INFO] Driver ... 610.57.04",
+                "[INFO] Runtime ... cuda 13.3.0",
+            ],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

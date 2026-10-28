@@ -4,6 +4,25 @@
 used by FlagOS operator libraries. The package also provides report-generation,
 result-labeling, web-data conversion, and cross-vendor GPU availability tools.
 
+## Menu
+
+- [Install](#install)
+- [Requirements](#requirements)
+- [`flagos-optest`](#usage-flagos-optest)
+  - [Purpose](#purpose)
+  - [Results and `summary.json`](#results-and-summaryjson)
+  - [Console output](#console-output-example)
+  - [Result helper commands](#result-helper-commands)
+- [`flagos-gpu-check`](#usage-flagos-gpu-check)
+  - [Purpose and behavior](#purpose-and-behavior)
+  - [Options](#options)
+  - [Device and runtime metadata](#device-and-runtime-metadata)
+  - [Examples](#examples)
+- [Target repository test dependencies](#target-repository-test-dependencies)
+- [Repository layout](#repository-layout)
+  - [Repository configuration](#repository-configuration)
+  - [Backend configuration](#backend-configuration)
+
 ## Install
 
 Install optest into the same Python environment as the operator library under
@@ -142,8 +161,8 @@ scheduler:
 - every recognized FlagOS library that can be imported, including its version,
   vendor, and device backend;
 - detected optional frameworks such as vLLM or SGLang; and
-- the accelerator SDK name and version, such as CUDA, CANN, XRE, TOPS, PPU,
-  COREX, MACA, MUSA, or DTK.
+- the normalized accelerator vendor, device, driver, runtime and runtime
+  version, using the same metadata fields as `flagos-gpu-check`.
 
 This includes all test-environment dependency and version fields probed by
 optest, but it is not a complete `pip freeze` of every installed package. A
@@ -177,10 +196,11 @@ selected image):
     "vllm": {
       "version": "0.24.0"
     },
-    "sdk": {
-      "name": "CUDA",
-      "version": "13.0"
-    }
+    "vendor": "nvidia",
+    "device": "H800",
+    "driver": "610.57.04",
+    "runtime": "cuda",
+    "runtime_version": "13.3.0"
   }
 }
 ```
@@ -205,7 +225,9 @@ time, and test completion.
 [INFO] FlagGems (flag_gems) detected ... 0.0+ge510c6bbe (vendor=nvidia, device=cuda)
 [INFO] Canonical device context ... vendor=nvidia, device=cuda (from flag_gems)
 [INFO] vllm detected ... 0.24.0
-[INFO] SDK detection ... CUDA 13.0
+[INFO] Accelerator ... nvidia / H800
+[INFO] Driver ... 610.57.04
+[INFO] Runtime ... cuda 13.3.0
 [INFO] Testing 3 operators ...
 [INFO] Only 3 operators requested, skipping mark collection
 [INFO] [18:48:59][GPU  0] accuracy  abs ...
@@ -441,7 +463,6 @@ Runtime: corex
 Runtime Version: 4.5.0
 Detected 2 Iluvatar BI-V150 GPU(s).
 Available GPUs: 0,1
-GPUs Usage:
  GPU  Total (MiB)  Used (MiB)  Free (MiB)
    0       32,768          68      32,700
    1       32,768          68      32,700

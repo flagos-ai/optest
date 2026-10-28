@@ -99,5 +99,5 @@
     ],
     "available_gpus": "0,1,2,3,4,5,6,7"
   },
-  "text": "Vendor: hygon\nDevice: BW1000\nDriver: 6.3.30-V1.4.1a\nRuntime: dtk\nRuntime Version: 26.04-rc4\nDetected 8 Hygon BW1000 DCU(s).\nAvailable GPUs: 0,1,2,3,4,5,6,7\nGPUs Usage:\n DCU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       65,520           2      65,518\n   1       65,520           2      65,518\n   2       65,520           2      65,518\n   3       65,520           2      65,518\n   4       65,520           2      65,518\n   5       65,520           2      65,518\n   6       65,520           2      65,518\n   7       65,520           2      65,518\n"
+  "text": "Vendor: hygon\nDevice: BW1000\nDriver: 6.3.30-V1.4.1a\nRuntime: dtk\nRuntime Version: 26.04-rc4\nDetected 8 Hygon BW1000 DCU(s).\nAvailable GPUs: 0,1,2,3,4,5,6,7\n DCU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       65,520           2      65,518\n   1       65,520           2      65,518\n   2       65,520           2      65,518\n   3       65,520           2      65,518\n   4       65,520           2      65,518\n   5       65,520           2      65,518\n   6       65,520           2      65,518\n   7       65,520           2      65,518\n"
 }

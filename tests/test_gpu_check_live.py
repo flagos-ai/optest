@@ -48,6 +48,7 @@ def capture(request, tmp_path, monkeypatch):
         return outputs.get(tuple(argv), (127, "", "not present in capture"))
 
     monkeypatch.setattr(gpu_metadata, "Path", isolated_path)
+    monkeypatch.setattr(gpu_metadata, "AMD_SYSFS_ROOT", isolated_path("/sys/bus/pci/devices"))
     monkeypatch.setattr(gpu_check, "_run", run)
     monkeypatch.setattr(gpu_check, "_vendor_env", lambda vendor: data["environment"])
     monkeypatch.setattr(gpu_check.shutil, "which", lambda *args, **kwargs: "/captured/tool")

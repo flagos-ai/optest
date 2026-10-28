@@ -182,6 +182,38 @@ GPUs Usage:
                 self.assertEqual(result["runtime"], runtime)
                 self.assertEqual(result["runtime_version"], version)
 
+    def test_amd_device_model_falls_back_to_exact_sysfs_pci_identity(self):
+        devices = self.root / "sys" / "bus" / "pci" / "devices"
+        gpu = devices / "0000:03:00.0"
+        gpu.mkdir(parents=True)
+        for field, value in {
+            "vendor": "0x1002", "device": "0x744b", "class": "0x030000",
+            "subsystem_vendor": "0x1002", "subsystem_device": "0x0e0c",
+        }.items():
+            (gpu / field).write_text(value + "\n", encoding="ascii")
+        runner = command_runner({
+            ("rocm-smi",): "Card Model: N/A\n",
+            ("rocm-smi", "--showproductname", "--showdriverversion"):
+                "GPU[0]: get_name, Error when calling libdrm\nDriver version: 6.16.13\n",
+        })
+        with mock.patch.object(gpu_metadata, "AMD_SYSFS_ROOT", devices):
+            result = gpu_metadata.collect_metadata("amd", {}, runner)
+        self.assertEqual(result["device"], "W7900D")
+        self.assertEqual(result["driver"], "6.16.13")
+
+    def test_amd_sysfs_fallback_does_not_guess_unknown_or_mixed_models(self):
+        devices = self.root / "sys" / "bus" / "pci" / "devices"
+        for number, device_id in enumerate(("0x744b", "0x744c")):
+            gpu = devices / f"0000:0{number}:00.0"
+            gpu.mkdir(parents=True)
+            for field, value in {
+                "vendor": "0x1002", "device": device_id, "class": "0x030000",
+                "subsystem_vendor": "0x1002", "subsystem_device": "0x0e0c",
+            }.items():
+                (gpu / field).write_text(value + "\n", encoding="ascii")
+        with mock.patch.object(gpu_metadata, "AMD_SYSFS_ROOT", devices):
+            self.assertIsNone(gpu_metadata._amd_model_from_sysfs())
+
     def test_explicit_installation_root_precedes_default(self):
         self.install_version("corex", "version.txt", "5.0.0")
         self.install_version("custom", "version.txt", "4.5.0")

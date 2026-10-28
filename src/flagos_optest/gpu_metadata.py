@@ -75,6 +75,10 @@ MODELS = {
 VERSION = r"\d+(?:\.\d+)+(?:[._-]?(?:RC|SP|beta)\d+)?(?:[-+][\w.-]+)?"
 # TSM releases use a timestamp-style integer rather than a dotted version.
 TSM_VERSION = rf"(?:{VERSION}|\d{{12}})"
+AMD_SYSFS_ROOT = Path("/sys/bus/pci/devices")
+AMD_PCI_MODELS = {
+    ("1002", "744b", "1002", "0e0c"): "W7900D",
+}
 
 
 def _unique(values):
@@ -90,6 +94,34 @@ def _model_names(key, text):
     if key == "mthreads":
         matches = [re.sub(r"[-\s]+", "-", name) for name in matches]
     return _unique(matches)
+
+
+def _amd_model_from_sysfs():
+    """Resolve known AMD PCI/subsystem IDs when ROCm cannot name the card."""
+    identities = set()
+    try:
+        devices = AMD_SYSFS_ROOT.glob("*/vendor")
+    except (OSError, ValueError):
+        return None
+    for vendor_path in devices:
+        device_path = vendor_path.parent
+        try:
+            vendor = vendor_path.read_text(encoding="ascii").strip().lower().removeprefix("0x")
+            device = (device_path / "device").read_text(encoding="ascii").strip().lower().removeprefix("0x")
+            device_class = (device_path / "class").read_text(encoding="ascii").strip().lower().removeprefix("0x")
+            if vendor != "1002" or not device_class.startswith(("03", "12")):
+                continue
+            subsystem_vendor = (device_path / "subsystem_vendor").read_text(
+                encoding="ascii").strip().lower().removeprefix("0x")
+            subsystem_device = (device_path / "subsystem_device").read_text(
+                encoding="ascii").strip().lower().removeprefix("0x")
+        except (OSError, UnicodeError):
+            continue
+        identities.add((vendor, device, subsystem_vendor, subsystem_device))
+    models = [AMD_PCI_MODELS[identity] for identity in identities if identity in AMD_PCI_MODELS]
+    if identities and len(models) == len(identities):
+        return _unique(models)
+    return None
 
 
 def _label_version(text, label, version_pattern=VERSION):
@@ -249,6 +281,8 @@ def collect_metadata(key, env, run):
         if rc == 0:
             name = _model_names(key, out) or name
             driver = _label_version(out, r"driver(?:\s+version)?") or driver
+        if key == "amd" and not name:
+            name = _amd_model_from_sysfs()
     elif key in ("mthreads", "thead", "enflame"):
         rc, out, _ = run([command, "-L"], env=env)
         if rc == 0:

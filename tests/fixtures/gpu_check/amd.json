@@ -36,11 +36,51 @@
     }
   ],
   "files": {
-    "/opt/rocm/.info/version": "7.2.3\n"
+    "/opt/rocm/.info/version": "7.2.3\n",
+    "/sys/bus/pci/devices/0000:03:00.0/vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:03:00.0/device": "0x744b\n",
+    "/sys/bus/pci/devices/0000:03:00.0/class": "0x030000\n",
+    "/sys/bus/pci/devices/0000:03:00.0/subsystem_vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:03:00.0/subsystem_device": "0x0e0c\n",
+    "/sys/bus/pci/devices/0000:04:00.0/vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:04:00.0/device": "0x744b\n",
+    "/sys/bus/pci/devices/0000:04:00.0/class": "0x030000\n",
+    "/sys/bus/pci/devices/0000:04:00.0/subsystem_vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:04:00.0/subsystem_device": "0x0e0c\n",
+    "/sys/bus/pci/devices/0000:05:00.0/vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:05:00.0/device": "0x744b\n",
+    "/sys/bus/pci/devices/0000:05:00.0/class": "0x030000\n",
+    "/sys/bus/pci/devices/0000:05:00.0/subsystem_vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:05:00.0/subsystem_device": "0x0e0c\n",
+    "/sys/bus/pci/devices/0000:06:00.0/vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:06:00.0/device": "0x744b\n",
+    "/sys/bus/pci/devices/0000:06:00.0/class": "0x030000\n",
+    "/sys/bus/pci/devices/0000:06:00.0/subsystem_vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:06:00.0/subsystem_device": "0x0e0c\n",
+    "/sys/bus/pci/devices/0000:07:00.0/vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:07:00.0/device": "0x744b\n",
+    "/sys/bus/pci/devices/0000:07:00.0/class": "0x030000\n",
+    "/sys/bus/pci/devices/0000:07:00.0/subsystem_vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:07:00.0/subsystem_device": "0x0e0c\n",
+    "/sys/bus/pci/devices/0000:08:00.0/vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:08:00.0/device": "0x744b\n",
+    "/sys/bus/pci/devices/0000:08:00.0/class": "0x030000\n",
+    "/sys/bus/pci/devices/0000:08:00.0/subsystem_vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:08:00.0/subsystem_device": "0x0e0c\n",
+    "/sys/bus/pci/devices/0000:09:00.0/vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:09:00.0/device": "0x744b\n",
+    "/sys/bus/pci/devices/0000:09:00.0/class": "0x030000\n",
+    "/sys/bus/pci/devices/0000:09:00.0/subsystem_vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:09:00.0/subsystem_device": "0x0e0c\n",
+    "/sys/bus/pci/devices/0000:0a:00.0/vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:0a:00.0/device": "0x744b\n",
+    "/sys/bus/pci/devices/0000:0a:00.0/class": "0x030000\n",
+    "/sys/bus/pci/devices/0000:0a:00.0/subsystem_vendor": "0x1002\n",
+    "/sys/bus/pci/devices/0000:0a:00.0/subsystem_device": "0x0e0c\n"
   },
   "expected": {
     "vendor": "amd",
-    "device": null,
+    "device": "W7900D",
     "driver": "6.16.13",
     "runtime": "rocm",
     "runtime_version": "7.2.3",
@@ -99,5 +139,5 @@
       }
     ]
   },
-  "text": "Vendor: amd\nDevice: unknown\nDriver: 6.16.13\nRuntime: rocm\nRuntime Version: 7.2.3\nDetected 8 AMD GPU(s).\nAvailable GPUs: 6,7\nGPUs Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       49,136      38,345      10,791\n   1       49,136      34,834      14,302\n   2       49,136      29,653      19,483\n   3       49,136      29,202      19,934\n   4       49,136      35,858      13,278\n   5       49,136      26,683      22,453\n   6       49,136      12,218      36,918\n   7       49,136      12,272      36,864\n"
+  "text": "Vendor: amd\nDevice: W7900D\nDriver: 6.16.13\nRuntime: rocm\nRuntime Version: 7.2.3\nDetected 8 AMD W7900D GPU(s).\nAvailable GPUs: 6,7\nGPUs Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       49,136      38,345      10,791\n   1       49,136      34,834      14,302\n   2       49,136      29,653      19,483\n   3       49,136      29,202      19,934\n   4       49,136      35,858      13,278\n   5       49,136      26,683      22,453\n   6       49,136      12,218      36,918\n   7       49,136      12,272      36,864\n"
 }

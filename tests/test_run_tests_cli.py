@@ -13,12 +13,14 @@
 # limitations under the License.
 
 import argparse
+import io
 import os
 import shlex
 import sys
 import tempfile
 import types
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -188,6 +190,39 @@ class ProjectDirectoryTest(unittest.TestCase):
                         str(root / "benchmark" / "benchmark_add.json"),
                         benchmark_command,
                     )
+
+
+class ProbeGemsImportTest(unittest.TestCase):
+    def test_missing_library_continues_to_next_candidate(self):
+        def import_module(name):
+            raise ModuleNotFoundError(f"No module named '{name}'", name=name)
+
+        with mock.patch.object(
+            run_tests.importlib, "import_module", side_effect=import_module
+        ) as importer, redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                run_tests._probe_gems()
+
+        self.assertEqual(
+            [call.args[0] for call in importer.call_args_list],
+            [name for name, _ in run_tests._KNOWN_LIBS],
+        )
+
+    def test_internal_import_error_prints_traceback_and_exits(self):
+        failure = ModuleNotFoundError("No module named 'torch'", name="torch")
+
+        with mock.patch.object(
+            run_tests.importlib, "import_module", side_effect=failure
+        ) as importer, redirect_stdout(io.StringIO()), redirect_stderr(
+            io.StringIO()
+        ) as stderr:
+            with self.assertRaises(SystemExit) as raised:
+                run_tests._probe_gems()
+
+        self.assertEqual(raised.exception.code, 1)
+        self.assertEqual(importer.call_count, 1)
+        self.assertIn("Traceback (most recent call last)", stderr.getvalue())
+        self.assertIn("No module named 'torch'", stderr.getvalue())
 
 
 if __name__ == "__main__":

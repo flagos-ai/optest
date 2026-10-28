@@ -20,8 +20,8 @@
   },
   "expected": {
     "vendor": "kunlunxin",
-    "device_name": "P800",
-    "driver_version": "5.41.0.0",
+    "device": "P800",
+    "driver": "5.41.0.0",
     "runtime": "xre",
     "runtime_version": "5.37.1",
     "unit": "GPU",
@@ -29,49 +29,49 @@
     "device_count": 8,
     "gpus": [
       {
-        "index": 0,
+        "id": 0,
         "total": 98304,
         "used": 0,
         "free": 98304
       },
       {
-        "index": 1,
+        "id": 1,
         "total": 98304,
         "used": 0,
         "free": 98304
       },
       {
-        "index": 2,
+        "id": 2,
         "total": 98304,
         "used": 0,
         "free": 98304
       },
       {
-        "index": 3,
+        "id": 3,
         "total": 98304,
         "used": 0,
         "free": 98304
       },
       {
-        "index": 4,
+        "id": 4,
         "total": 98304,
         "used": 0,
         "free": 98304
       },
       {
-        "index": 5,
+        "id": 5,
         "total": 98304,
         "used": 0,
         "free": 98304
       },
       {
-        "index": 6,
+        "id": 6,
         "total": 98304,
         "used": 0,
         "free": 98304
       },
       {
-        "index": 7,
+        "id": 7,
         "total": 98304,
         "used": 0,
         "free": 98304
@@ -79,5 +79,5 @@
     ],
     "available_gpus": "0,1,2,3,4,5,6,7"
   },
-  "text": "Vendor: kunlunxin\nDevice Name: P800\nDriver Version: 5.41.0.0\nRuntime: xre\nRuntime Version: 5.37.1\nDetected 8 KunlunXin P800 GPU(s).\nGPU Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       98,304           0      98,304\n   1       98,304           0      98,304\n   2       98,304           0      98,304\n   3       98,304           0      98,304\n   4       98,304           0      98,304\n   5       98,304           0      98,304\n   6       98,304           0      98,304\n   7       98,304           0      98,304\nAvailable GPUs: 0,1,2,3,4,5,6,7\n"
+  "text": "Vendor: kunlunxin\nDevice: P800\nDriver: 5.41.0.0\nRuntime: xre\nRuntime Version: 5.37.1\nDetected 8 KunlunXin P800 GPU(s).\nAvailable GPUs: 0,1,2,3,4,5,6,7\nGPUs Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       98,304           0      98,304\n   1       98,304           0      98,304\n   2       98,304           0      98,304\n   3       98,304           0      98,304\n   4       98,304           0      98,304\n   5       98,304           0      98,304\n   6       98,304           0      98,304\n   7       98,304           0      98,304\n"
 }

@@ -23,10 +23,19 @@ Enflame capture to cover the device-count regression.
 | MetaX | C550 | 8 | 3.9.6 | maca | 3.8.1.3 |
 | TsingMicro | TX8110 | 32 | 0.28791.2 | tsm | 1.4.0 |
 | Enflame | ZIXIAOC200 | 8 | 1.10.6 | tops | 1.10.6 |
+| Ascend | 910B4 | 8 | 26.0.rc1 | cann | 9.0.0 |
+| AMD | unknown | 8 | 6.16.13 | rocm | 7.2.3 |
+| T-Head | PPU-ZW810E | 16 | 1.3.2-d7f5a2 | ppu | 2.1.0-a5f865 |
 
-All nine containers completed text, JSON and YAML checks successfully. Memory
+All twelve containers completed text, JSON and YAML checks successfully. Memory
 usage and available indices are snapshots, not permanent hardware properties.
 
-Ascend, T-Head, AMD and Sunrise could not be reached: the bastion returned
-`No found asset` for the supplied account. They have synthetic parser coverage
-in `tests/test_gpu_check.py`, but no real-output fixture from this verification.
+Ascend, AMD and T-Head were rechecked after their bastion access was restored.
+CANN 9 uses the distribution manifest `share/info/runtime/version.info`; the
+PPU SDK uses `release.yaml`, not the `ppu-smi` tool version. AMD's product-name
+query returned a libdrm error and its other tools did not expose a reliable
+market model, so `device` remains null (text: `unknown`) rather than inferring
+it from the backend or container name.
+
+Sunrise hardware verification is deferred. It retains synthetic parser coverage
+in `tests/test_gpu_check.py`, but has no real-output fixture from this verification.

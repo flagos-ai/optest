@@ -804,7 +804,11 @@ def run_vendor_check(key):
                 "device_count": count if count is not None else len(gpus),
                 "memory_unit": "MiB",
                 "available_gpus": avail_str,
-                "gpus": gpus,
+                "gpus": [
+                    {"id": g["index"], "total": g["total"],
+                     "used": g["used"], "free": g["free"]}
+                    for g in gpus
+                ],
             }
         eprint(f"No {unit} has sufficient memory, waiting for {SLEEP_TIME} seconds...")
         time.sleep(SLEEP_TIME)
@@ -818,22 +822,22 @@ def render_text(result):
     """Render the same concise summary for stdout and saved text files."""
     lines = [f"Vendor: {result['vendor']}"]
     for label, field in (
-        ("Device Name", "device_name"),
-        ("Driver Version", "driver_version"),
+        ("Device", "device"),
+        ("Driver", "driver"),
         ("Runtime", "runtime"),
         ("Runtime Version", "runtime_version"),
     ):
         lines.append(f"{label}: {result[field] or 'unknown'}")
-    device = f" {result['device_name']}" if result["device_name"] else ""
+    device = f" {result['device']}" if result["device"] else ""
     lines.extend([
         (f"Detected {result['device_count']} {VENDOR_NAMES[result['vendor']]}"
          f"{device} {result['unit']}(s)."),
-        "GPU Usage:",
+        f"Available GPUs: {result['available_gpus']}",
+        "GPUs Usage:",
         _table_header(result["unit"]),
     ])
     for g in result["gpus"]:
-        lines.append(_table_row(g["index"], g["total"], g["used"], g["free"]))
-    lines.append(f"Available GPUs: {result['available_gpus']}")
+        lines.append(_table_row(g["id"], g["total"], g["used"], g["free"]))
     return "\n".join(lines) + "\n"
 
 

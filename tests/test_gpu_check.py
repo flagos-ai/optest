@@ -89,16 +89,16 @@ class GPUCheckTest(unittest.TestCase):
         self.assertEqual(status, 0)
         self.assertEqual(err, "")
         self.assertEqual(out, """Vendor: iluvatar
-Device Name: BI-V150
-Driver Version: 5.0.0
+Device: BI-V150
+Driver: 5.0.0
 Runtime: corex
 Runtime Version: 4.5.0
 Detected 2 Iluvatar BI-V150 GPU(s).
-GPU Usage:
+Available GPUs: 0,1
+GPUs Usage:
  GPU  Total (MiB)  Used (MiB)  Free (MiB)
    0       32,768          68      32,700
    1       32,768          68      32,700
-Available GPUs: 0,1
 """)
 
     def test_structured_stdout_contains_only_document(self):
@@ -109,13 +109,16 @@ Available GPUs: 0,1
                 self.assertEqual(status, 0)
                 self.assertEqual(err, "")
                 result = load(out)
-                self.assertEqual(result["device_name"], "BI-V150")
+                self.assertEqual(result["device"], "BI-V150")
+                self.assertEqual(result["driver"], "5.0.0")
+                self.assertNotIn("device_name", result)
+                self.assertNotIn("driver_version", result)
                 self.assertEqual(result["runtime_version"], "4.5.0")
                 self.assertEqual(result["device_count"], 2)
                 self.assertEqual(result["memory_unit"], "MiB")
                 self.assertEqual(result["available_gpus"], "0,1")
                 self.assertEqual(result["gpus"][0], {
-                    "index": 0, "total": 32768, "used": 68, "free": 32700,
+                    "id": 0, "total": 32768, "used": 68, "free": 32700,
                 })
 
     def test_output_file_matches_redirected_stdout_in_every_format(self):
@@ -146,7 +149,7 @@ Available GPUs: 0,1
         })
         result = gpu_metadata.collect_metadata("nvidia", {}, run)
         self.assertEqual(result, {
-            "device_name": "H800", "driver_version": "580.95.05",
+            "device": "H800", "driver": "580.95.05",
             "runtime": "cuda", "runtime_version": "12.8",
         })
         self.install_version("cuda", "version.json", '{"cuda": {"version": "13.3.0"}}')
@@ -174,8 +177,8 @@ Available GPUs: 0,1
                     cmd += ["info"]
                 run = command_runner({tuple(cmd): table + "\nDriver Version: 5.0.0"})
                 result = gpu_metadata.collect_metadata(key, {}, run)
-                self.assertEqual(result["device_name"], name)
-                self.assertEqual(result["driver_version"], "5.0.0")
+                self.assertEqual(result["device"], name)
+                self.assertEqual(result["driver"], "5.0.0")
                 self.assertEqual(result["runtime"], runtime)
                 self.assertEqual(result["runtime_version"], version)
 
@@ -204,9 +207,32 @@ Available GPUs: 0,1
         result = gpu_metadata.collect_metadata("nvidia", {}, command_runner({}))
         self.assertIsNone(result["runtime_version"])
 
+    def test_cann_runtime_manifest_ignores_components_and_requirements(self):
+        run = command_runner({("npu-smi", "info"): "| 0 910B4 OK |"})
+        self.install_version("cann", "share/info/msprof/version.info",
+                             "[PACKAGE]\nVersion=26.0.0\n")
+        self.install_version("cann", "share/info/runtime/version.info",
+                             'required_package_runtime_version="9.0"\n')
+        self.assertIsNone(gpu_metadata.collect_metadata("ascend", {}, run)["runtime_version"])
+        self.install_version("cann", "share/info/runtime/version.info",
+                             "Version=9.0.0\nversion_dir=cann\n")
+        self.assertEqual(gpu_metadata.collect_metadata("ascend", {}, run)["runtime_version"],
+                         "9.0.0")
+
+    def test_ppu_runtime_uses_sdk_manifest_not_smi_tool_version(self):
+        run = command_runner({
+            ("ppu-smi",): "Driver Version: 1.3.2-d7f5a2\nGPU 0: PPU-ZW810E",
+            ("ppu-smi", "--version"): "ppu-smi version: 1.28",
+        })
+        self.install_version("ppu", "VERSION.txt", "ppu_sdk_detection_magic\n")
+        self.assertIsNone(gpu_metadata.collect_metadata("thead", {}, run)["runtime_version"])
+        self.install_version("ppu", "release.yaml", "version: 2.1.0-a5f865\n")
+        self.assertEqual(gpu_metadata.collect_metadata("thead", {}, run)["runtime_version"],
+                         "2.1.0-a5f865")
+
     def test_mixed_models_are_not_silently_reduced_to_first_model(self):
         run = command_runner({("mx-smi",): "| 0 C500 |\n| 1 C550 |\n| 2 C500 |"})
-        self.assertEqual(gpu_metadata.collect_metadata("metax", {}, run)["device_name"], "C500, C550")
+        self.assertEqual(gpu_metadata.collect_metadata("metax", {}, run)["device"], "C500, C550")
 
     def test_xre_uses_runtime_header_not_driver_compatibility(self):
         self.install_version("xre", "version.txt", "Driver compatible version: 4.0.0\n")
@@ -234,7 +260,7 @@ Available GPUs: 0,1
         with mock.patch.object(gpu_check, "_run", side_effect=without_metadata), \
                 mock.patch.object(gpu_check, "_vendor_env", return_value={}):
             result = gpu_check.run_vendor_check("iluvatar")
-        self.assertIsNone(result["driver_version"])
+        self.assertIsNone(result["driver"])
         self.assertEqual(result["available_gpus"], "0,1")
 
     def test_retry_diagnostics_do_not_contaminate_structured_stdout(self):

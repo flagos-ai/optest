@@ -1,0 +1,103 @@
+{
+  "vendor": "amd",
+  "image": "harbor.baai.ac.cn/flaggems/flaggems-test-amd-w7900d:20260928",
+  "environment": {
+    "ROCM_PATH": "/opt/rocm"
+  },
+  "commands": [
+    {
+      "argv": [
+        "rocm-smi"
+      ],
+      "returncode": 0,
+      "stdout": "\n\n=========================================== ROCm System Management Interface ===========================================\n===================================================== Concise Info =====================================================\nDevice  Node  IDs              Temp    Power   Partitions          SCLK     MCLK     Fan     Perf  PwrCap  VRAM%  GPU%  \n              (DID,     GUID)  (Edge)  (Avg)   (Mem, Compute, ID)                                                       \n========================================================================================================================\n0       2     0x744b,   <redacted-id>   44.0°C  143.0W  N/A, N/A, 0         2236Mhz  1124Mhz  21.96%  auto  241.0W  78%    100%  \n1       3     0x744b,   <redacted-id>  43.0°C  130.0W  N/A, N/A, 0         2226Mhz  1124Mhz  21.96%  auto  241.0W  70%    100%  \n2       4     0x744b,   <redacted-id>  54.0°C  193.0W  N/A, N/A, 0         2172Mhz  1124Mhz  24.71%  auto  241.0W  60%    100%  \n3       5     0x744b,   <redacted-id>  51.0°C  202.0W  N/A, N/A, 0         2142Mhz  1124Mhz  25.88%  auto  241.0W  59%    100%  \n4       6     0x744b,   <redacted-id>  40.0°C  111.0W  N/A, N/A, 0         2257Mhz  1124Mhz  20.78%  auto  241.0W  72%    100%  \n5       7     0x744b,   <redacted-id>  41.0°C  84.0W   N/A, N/A, 0         2241Mhz  1124Mhz  20.0%   auto  241.0W  54%    100%  \n6       8     0x744b,   <redacted-id>  50.0°C  196.0W  N/A, N/A, 0         2136Mhz  1124Mhz  23.92%  auto  241.0W  24%    100%  \n7       9     0x744b,   <redacted-id>  51.0°C  196.0W  N/A, N/A, 0         2184Mhz  1124Mhz  23.92%  auto  241.0W  24%    100%  \n========================================================================================================================\n================================================= End of ROCm SMI Log ==================================================\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "rocm-smi",
+        "--showproductname",
+        "--showdriverversion"
+      ],
+      "returncode": 0,
+      "stdout": "\n\n============================ ROCm System Management Interface ============================\n============================== Version of System Component ===============================\nDriver version: 6.16.13\n==========================================================================================\n====================================== Product Info ======================================\nGPU[0]\t\t: get_name, Error when calling libdrm\nGPU[0]\t\t: Card Series: \t\tN/A\nGPU[0]\t\t: Card Model: \t\t0x744b\nGPU[0]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[0]\t\t: Card SKU: \t\t<redacted-sku>\nGPU[0]\t\t: Subsystem ID: \t0x0e0c\nGPU[0]\t\t: Device Rev: \t\t0x00\nGPU[0]\t\t: Node ID: \t\t2\nGPU[0]\t\t: GUID: \t\t<redacted-id>\nGPU[0]\t\t: GFX Version: \t\tgfx1100\nGPU[1]\t\t: get_name, Error when calling libdrm\nGPU[1]\t\t: Card Series: \t\tN/A\nGPU[1]\t\t: Card Model: \t\t0x744b\nGPU[1]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[1]\t\t: Card SKU: \t\t<redacted-sku>\nGPU[1]\t\t: Subsystem ID: \t0x0e0c\nGPU[1]\t\t: Device Rev: \t\t0x00\nGPU[1]\t\t: Node ID: \t\t3\nGPU[1]\t\t: GUID: \t\t<redacted-id>\nGPU[1]\t\t: GFX Version: \t\tgfx1100\nGPU[2]\t\t: get_name, Error when calling libdrm\nGPU[2]\t\t: Card Series: \t\tN/A\nGPU[2]\t\t: Card Model: \t\t0x744b\nGPU[2]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[2]\t\t: Card SKU: \t\t<redacted-sku>\nGPU[2]\t\t: Subsystem ID: \t0x0e0c\nGPU[2]\t\t: Device Rev: \t\t0x00\nGPU[2]\t\t: Node ID: \t\t4\nGPU[2]\t\t: GUID: \t\t<redacted-id>\nGPU[2]\t\t: GFX Version: \t\tgfx1100\nGPU[3]\t\t: get_name, Error when calling libdrm\nGPU[3]\t\t: Card Series: \t\tN/A\nGPU[3]\t\t: Card Model: \t\t0x744b\nGPU[3]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[3]\t\t: Card SKU: \t\t<redacted-sku>\nGPU[3]\t\t: Subsystem ID: \t0x0e0c\nGPU[3]\t\t: Device Rev: \t\t0x00\nGPU[3]\t\t: Node ID: \t\t5\nGPU[3]\t\t: GUID: \t\t<redacted-id>\nGPU[3]\t\t: GFX Version: \t\tgfx1100\nGPU[4]\t\t: get_name, Error when calling libdrm\nGPU[4]\t\t: Card Series: \t\tN/A\nGPU[4]\t\t: Card Model: \t\t0x744b\nGPU[4]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[4]\t\t: Card SKU: \t\t<redacted-sku>\nGPU[4]\t\t: Subsystem ID: \t0x0e0c\nGPU[4]\t\t: Device Rev: \t\t0x00\nGPU[4]\t\t: Node ID: \t\t6\nGPU[4]\t\t: GUID: \t\t<redacted-id>\nGPU[4]\t\t: GFX Version: \t\tgfx1100\nGPU[5]\t\t: get_name, Error when calling libdrm\nGPU[5]\t\t: Card Series: \t\tN/A\nGPU[5]\t\t: Card Model: \t\t0x744b\nGPU[5]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[5]\t\t: Card SKU: \t\t<redacted-sku>\nGPU[5]\t\t: Subsystem ID: \t0x0e0c\nGPU[5]\t\t: Device Rev: \t\t0x00\nGPU[5]\t\t: Node ID: \t\t7\nGPU[5]\t\t: GUID: \t\t<redacted-id>\nGPU[5]\t\t: GFX Version: \t\tgfx1100\nGPU[6]\t\t: get_name, Error when calling libdrm\nGPU[6]\t\t: Card Series: \t\tN/A\nGPU[6]\t\t: Card Model: \t\t0x744b\nGPU[6]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[6]\t\t: Card SKU: \t\t<redacted-sku>\nGPU[6]\t\t: Subsystem ID: \t0x0e0c\nGPU[6]\t\t: Device Rev: \t\t0x00\nGPU[6]\t\t: Node ID: \t\t8\nGPU[6]\t\t: GUID: \t\t<redacted-id>\nGPU[6]\t\t: GFX Version: \t\tgfx1100\nGPU[7]\t\t: get_name, Error when calling libdrm\nGPU[7]\t\t: Card Series: \t\tN/A\nGPU[7]\t\t: Card Model: \t\t0x744b\nGPU[7]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[7]\t\t: Card SKU: \t\t<redacted-sku>\nGPU[7]\t\t: Subsystem ID: \t0x0e0c\nGPU[7]\t\t: Device Rev: \t\t0x00\nGPU[7]\t\t: Node ID: \t\t9\nGPU[7]\t\t: GUID: \t\t<redacted-id>\nGPU[7]\t\t: GFX Version: \t\tgfx1100\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "rocm-smi",
+        "--showmeminfo",
+        "vram",
+        "--json"
+      ],
+      "returncode": 0,
+      "stdout": "{\"card0\": {\"VRAM Total Memory (B)\": \"51522830336\", \"VRAM Total Used Memory (B)\": \"40208257024\"}, \"card1\": {\"VRAM Total Memory (B)\": \"51522830336\", \"VRAM Total Used Memory (B)\": \"36526247936\"}, \"card2\": {\"VRAM Total Memory (B)\": \"51522830336\", \"VRAM Total Used Memory (B)\": \"31094427648\"}, \"card3\": {\"VRAM Total Memory (B)\": \"51522830336\", \"VRAM Total Used Memory (B)\": \"30620528640\"}, \"card4\": {\"VRAM Total Memory (B)\": \"51522830336\", \"VRAM Total Used Memory (B)\": \"37600489472\"}, \"card5\": {\"VRAM Total Memory (B)\": \"51522830336\", \"VRAM Total Used Memory (B)\": \"27980025856\"}, \"card6\": {\"VRAM Total Memory (B)\": \"51522830336\", \"VRAM Total Used Memory (B)\": \"12811804672\"}, \"card7\": {\"VRAM Total Memory (B)\": \"51522830336\", \"VRAM Total Used Memory (B)\": \"12868816896\"}}\n",
+      "stderr": ""
+    }
+  ],
+  "files": {
+    "/opt/rocm/.info/version": "7.2.3\n"
+  },
+  "expected": {
+    "vendor": "amd",
+    "device": null,
+    "driver": "6.16.13",
+    "runtime": "rocm",
+    "runtime_version": "7.2.3",
+    "unit": "GPU",
+    "device_count": 8,
+    "memory_unit": "MiB",
+    "available_gpus": "6,7",
+    "gpus": [
+      {
+        "id": 0,
+        "total": 49136,
+        "used": 38345,
+        "free": 10791
+      },
+      {
+        "id": 1,
+        "total": 49136,
+        "used": 34834,
+        "free": 14302
+      },
+      {
+        "id": 2,
+        "total": 49136,
+        "used": 29653,
+        "free": 19483
+      },
+      {
+        "id": 3,
+        "total": 49136,
+        "used": 29202,
+        "free": 19934
+      },
+      {
+        "id": 4,
+        "total": 49136,
+        "used": 35858,
+        "free": 13278
+      },
+      {
+        "id": 5,
+        "total": 49136,
+        "used": 26683,
+        "free": 22453
+      },
+      {
+        "id": 6,
+        "total": 49136,
+        "used": 12218,
+        "free": 36918
+      },
+      {
+        "id": 7,
+        "total": 49136,
+        "used": 12272,
+        "free": 36864
+      }
+    ]
+  },
+  "text": "Vendor: amd\nDevice: unknown\nDriver: 6.16.13\nRuntime: rocm\nRuntime Version: 7.2.3\nDetected 8 AMD GPU(s).\nAvailable GPUs: 6,7\nGPUs Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       49,136      38,345      10,791\n   1       49,136      34,834      14,302\n   2       49,136      29,653      19,483\n   3       49,136      29,202      19,934\n   4       49,136      35,858      13,278\n   5       49,136      26,683      22,453\n   6       49,136      12,218      36,918\n   7       49,136      12,272      36,864\n"
+}

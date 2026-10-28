@@ -66,8 +66,8 @@
   "files": {},
   "expected": {
     "vendor": "iluvatar",
-    "device_name": "BI-V150",
-    "driver_version": "5.0.0",
+    "device": "BI-V150",
+    "driver": "5.0.0",
     "runtime": "corex",
     "runtime_version": "4.5.0",
     "unit": "GPU",
@@ -75,97 +75,97 @@
     "device_count": 16,
     "gpus": [
       {
-        "index": 0,
+        "id": 0,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 1,
+        "id": 1,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 2,
+        "id": 2,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 3,
+        "id": 3,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 4,
+        "id": 4,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 5,
+        "id": 5,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 6,
+        "id": 6,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 7,
+        "id": 7,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 8,
+        "id": 8,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 9,
+        "id": 9,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 10,
+        "id": 10,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 11,
+        "id": 11,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 12,
+        "id": 12,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 13,
+        "id": 13,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 14,
+        "id": 14,
         "total": 32768,
         "used": 68,
         "free": 32700
       },
       {
-        "index": 15,
+        "id": 15,
         "total": 32768,
         "used": 68,
         "free": 32700
@@ -173,5 +173,5 @@
     ],
     "available_gpus": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15"
   },
-  "text": "Vendor: iluvatar\nDevice Name: BI-V150\nDriver Version: 5.0.0\nRuntime: corex\nRuntime Version: 4.5.0\nDetected 16 Iluvatar BI-V150 GPU(s).\nGPU Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       32,768          68      32,700\n   1       32,768          68      32,700\n   2       32,768          68      32,700\n   3       32,768          68      32,700\n   4       32,768          68      32,700\n   5       32,768          68      32,700\n   6       32,768          68      32,700\n   7       32,768          68      32,700\n   8       32,768          68      32,700\n   9       32,768          68      32,700\n  10       32,768          68      32,700\n  11       32,768          68      32,700\n  12       32,768          68      32,700\n  13       32,768          68      32,700\n  14       32,768          68      32,700\n  15       32,768          68      32,700\nAvailable GPUs: 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15\n"
+  "text": "Vendor: iluvatar\nDevice: BI-V150\nDriver: 5.0.0\nRuntime: corex\nRuntime Version: 4.5.0\nDetected 16 Iluvatar BI-V150 GPU(s).\nAvailable GPUs: 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15\nGPUs Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       32,768          68      32,700\n   1       32,768          68      32,700\n   2       32,768          68      32,700\n   3       32,768          68      32,700\n   4       32,768          68      32,700\n   5       32,768          68      32,700\n   6       32,768          68      32,700\n   7       32,768          68      32,700\n   8       32,768          68      32,700\n   9       32,768          68      32,700\n  10       32,768          68      32,700\n  11       32,768          68      32,700\n  12       32,768          68      32,700\n  13       32,768          68      32,700\n  14       32,768          68      32,700\n  15       32,768          68      32,700\n"
 }

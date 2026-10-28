@@ -139,8 +139,8 @@
   "files": {},
   "expected": {
     "vendor": "enflame",
-    "device_name": "ZIXIAOC200",
-    "driver_version": "1.10.6",
+    "device": "ZIXIAOC200",
+    "driver": "1.10.6",
     "runtime": "tops",
     "runtime_version": "1.10.6",
     "unit": "GPU",
@@ -148,49 +148,49 @@
     "device_count": 8,
     "gpus": [
       {
-        "index": 0,
+        "id": 0,
         "total": 42976,
         "used": 1130,
         "free": 41846
       },
       {
-        "index": 1,
+        "id": 1,
         "total": 42976,
         "used": 1130,
         "free": 41846
       },
       {
-        "index": 2,
+        "id": 2,
         "total": 42976,
         "used": 1130,
         "free": 41846
       },
       {
-        "index": 3,
+        "id": 3,
         "total": 42976,
         "used": 1130,
         "free": 41846
       },
       {
-        "index": 4,
+        "id": 4,
         "total": 42976,
         "used": 1130,
         "free": 41846
       },
       {
-        "index": 5,
+        "id": 5,
         "total": 42976,
         "used": 1130,
         "free": 41846
       },
       {
-        "index": 6,
+        "id": 6,
         "total": 42976,
         "used": 1130,
         "free": 41846
       },
       {
-        "index": 7,
+        "id": 7,
         "total": 42976,
         "used": 1130,
         "free": 41846
@@ -198,5 +198,5 @@
     ],
     "available_gpus": "0,1,2,3,4,5,6,7"
   },
-  "text": "Vendor: enflame\nDevice Name: ZIXIAOC200\nDriver Version: 1.10.6\nRuntime: tops\nRuntime Version: 1.10.6\nDetected 8 Enflame ZIXIAOC200 GPU(s).\nGPU Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       42,976       1,130      41,846\n   1       42,976       1,130      41,846\n   2       42,976       1,130      41,846\n   3       42,976       1,130      41,846\n   4       42,976       1,130      41,846\n   5       42,976       1,130      41,846\n   6       42,976       1,130      41,846\n   7       42,976       1,130      41,846\nAvailable GPUs: 0,1,2,3,4,5,6,7\n"
+  "text": "Vendor: enflame\nDevice: ZIXIAOC200\nDriver: 1.10.6\nRuntime: tops\nRuntime Version: 1.10.6\nDetected 8 Enflame ZIXIAOC200 GPU(s).\nAvailable GPUs: 0,1,2,3,4,5,6,7\nGPUs Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       42,976       1,130      41,846\n   1       42,976       1,130      41,846\n   2       42,976       1,130      41,846\n   3       42,976       1,130      41,846\n   4       42,976       1,130      41,846\n   5       42,976       1,130      41,846\n   6       42,976       1,130      41,846\n   7       42,976       1,130      41,846\n"
 }

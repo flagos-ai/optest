@@ -133,8 +133,8 @@
   },
   "expected": {
     "vendor": "mthreads",
-    "device_name": "MTT-S5000",
-    "driver_version": "5.2.0-server",
+    "device": "MTT-S5000",
+    "driver": "5.2.0-server",
     "runtime": "musa",
     "runtime_version": "5.2.0",
     "unit": "GPU",
@@ -142,49 +142,49 @@
     "device_count": 8,
     "gpus": [
       {
-        "index": 0,
+        "id": 0,
         "total": 81920,
         "used": 0,
         "free": 81920
       },
       {
-        "index": 1,
+        "id": 1,
         "total": 81920,
         "used": 0,
         "free": 81920
       },
       {
-        "index": 2,
+        "id": 2,
         "total": 81920,
         "used": 0,
         "free": 81920
       },
       {
-        "index": 3,
+        "id": 3,
         "total": 81920,
         "used": 0,
         "free": 81920
       },
       {
-        "index": 4,
+        "id": 4,
         "total": 81920,
         "used": 0,
         "free": 81920
       },
       {
-        "index": 5,
+        "id": 5,
         "total": 81920,
         "used": 0,
         "free": 81920
       },
       {
-        "index": 6,
+        "id": 6,
         "total": 81920,
         "used": 0,
         "free": 81920
       },
       {
-        "index": 7,
+        "id": 7,
         "total": 81920,
         "used": 0,
         "free": 81920
@@ -192,5 +192,5 @@
     ],
     "available_gpus": "0,1,2,3,4,5,6,7"
   },
-  "text": "Vendor: mthreads\nDevice Name: MTT-S5000\nDriver Version: 5.2.0-server\nRuntime: musa\nRuntime Version: 5.2.0\nDetected 8 Moore Threads MTT-S5000 GPU(s).\nGPU Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       81,920           0      81,920\n   1       81,920           0      81,920\n   2       81,920           0      81,920\n   3       81,920           0      81,920\n   4       81,920           0      81,920\n   5       81,920           0      81,920\n   6       81,920           0      81,920\n   7       81,920           0      81,920\nAvailable GPUs: 0,1,2,3,4,5,6,7\n"
+  "text": "Vendor: mthreads\nDevice: MTT-S5000\nDriver: 5.2.0-server\nRuntime: musa\nRuntime Version: 5.2.0\nDetected 8 Moore Threads MTT-S5000 GPU(s).\nAvailable GPUs: 0,1,2,3,4,5,6,7\nGPUs Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       81,920           0      81,920\n   1       81,920           0      81,920\n   2       81,920           0      81,920\n   3       81,920           0      81,920\n   4       81,920           0      81,920\n   5       81,920           0      81,920\n   6       81,920           0      81,920\n   7       81,920           0      81,920\n"
 }

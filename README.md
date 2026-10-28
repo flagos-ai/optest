@@ -337,7 +337,7 @@ partial result document.
 The name `runtime` identifies the vendor software environment installed in the
 container for FlagGems, FlagTree and similar consumers. It is an umbrella term
 for the distribution, which can also include SDK headers, compilers and
-libraries. `runtime_version` is its release version; `driver_version` describes
+libraries. `runtime_version` is its release version; `driver` describes
 the host driver separately.
 
 | Vendor key | Accelerator vendor | Management command | Unit | Runtime |
@@ -365,7 +365,10 @@ a mixed host are joined with `, ` rather than silently selecting the first.
 
 Runtime versions are read from distribution metadata such as `version.json`,
 `version.txt`, `version`, `VERSION` and `.info/version` under the installation
-root. CANN also checks `ascend_toolkit_install.info` and `version.cfg`. XRE
+root. CANN also checks `ascend_toolkit_install.info`, `version.cfg` and the
+CANN 9 `share/info/runtime/version.info` distribution manifest, not tool
+component versions or dependency requirements. T-Head reads the PPU SDK's
+`release.yaml`, independently of the `ppu-smi` tool version. XRE
 prefers `XPURT_VERSION_STR` in `include/xpu/version.h`, avoiding driver
 compatibility versions in `version.txt`, and also checks its `xre/` subdirectory.
 Explicit installation environment variables
@@ -394,15 +397,20 @@ JSON and YAML share these fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `vendor` | string | Stable vendor key from the table above. |
-| `device_name` | string or null | Normalized device model, e.g. `BI-V150`, `H800`, `MTT-S5000`, `C500`. |
-| `driver_version` | string or null | Installed driver release reported by the vendor. |
+| `device` | string or null | Normalized device model, e.g. `BI-V150`, `H800`, `MTT-S5000`, `C500`. |
+| `driver` | string or null | Installed driver release reported by the vendor. |
 | `runtime` | string | Vendor software environment name, e.g. `corex`, `cuda`, `cann`. |
 | `runtime_version` | string or null | Installed environment release, independent of the host driver. |
 | `unit` | string | Accelerator unit, e.g. GPU, NPU or DCU. |
 | `device_count` | integer | Number of detected devices. |
 | `memory_unit` | string | Always `MiB`; applies to all per-device memory values. |
 | `available_gpus` | string | Comma-separated available indices; retained for existing CI consumers. |
-| `gpus` | array | Entries with integer `index`, `total`, `used` and `free` fields. Existing memory keys are preserved. |
+| `gpus` | array | Entries with integer `id`, `total`, `used` and `free` fields. `id` is the device index used in `available_gpus`; existing memory keys are preserved. |
+
+The GPU-check schema uses `device`, `driver` and per-device `id` (not
+`device_name`, `driver_version` or `index`). The existing `available_gpus` name
+is retained for CI compatibility; `unit` identifies the vendor's accelerator
+type even when it is called NPU, DCU, MLU or PPU.
 
 ### Examples
 
@@ -427,16 +435,16 @@ by host.
 
 ```text
 Vendor: iluvatar
-Device Name: BI-V150
-Driver Version: 5.0.0
+Device: BI-V150
+Driver: 5.0.0
 Runtime: corex
 Runtime Version: 4.5.0
 Detected 2 Iluvatar BI-V150 GPU(s).
-GPU Usage:
+Available GPUs: 0,1
+GPUs Usage:
  GPU  Total (MiB)  Used (MiB)  Free (MiB)
    0       32,768          68      32,700
    1       32,768          68      32,700
-Available GPUs: 0,1
 ```
 
 With `--format json`:
@@ -444,8 +452,8 @@ With `--format json`:
 ```json
 {
   "vendor": "iluvatar",
-  "device_name": "BI-V150",
-  "driver_version": "5.0.0",
+  "device": "BI-V150",
+  "driver": "5.0.0",
   "runtime": "corex",
   "runtime_version": "4.5.0",
   "unit": "GPU",
@@ -454,13 +462,13 @@ With `--format json`:
   "available_gpus": "0,1",
   "gpus": [
     {
-      "index": 0,
+      "id": 0,
       "total": 32768,
       "used": 68,
       "free": 32700
     },
     {
-      "index": 1,
+      "id": 1,
       "total": 32768,
       "used": 68,
       "free": 32700
@@ -474,8 +482,8 @@ With `--format yaml` (versions remain strings, including values such as
 
 ```yaml
 vendor: iluvatar
-device_name: BI-V150
-driver_version: 5.0.0
+device: BI-V150
+driver: 5.0.0
 runtime: corex
 runtime_version: 4.5.0
 unit: GPU
@@ -483,11 +491,11 @@ device_count: 2
 memory_unit: MiB
 available_gpus: 0,1
 gpus:
-- index: 0
+- id: 0
   total: 32768
   used: 68
   free: 32700
-- index: 1
+- id: 1
   total: 32768
   used: 68
   free: 32700

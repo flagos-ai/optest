@@ -113,6 +113,17 @@ def _file_version(path, runtime):
     if runtime == "dtk" and path.name == ".dtk_version":
         match = re.search(rf"^DTK-({VERSION})\s*$", text, re.MULTILINE)
         return match.group(1) if match else None
+    if runtime == "cann" and path.name == "version.info":
+        # CANN 9 records the distribution release in its runtime manifest.
+        # Do not infer it from dependency requirements or tool components.
+        if not re.search(r"^version_dir=cann\s*$", text, re.MULTILINE):
+            return None
+        match = re.search(rf"^Version=({VERSION})\s*$", text, re.MULTILINE)
+        return match.group(1) if match else None
+    if runtime == "ppu" and path.name == "release.yaml":
+        # The SDK release manifest is independent of the ppu-smi tool version.
+        match = re.search(rf"^version:\s*({VERSION})\s*$", text, re.MULTILINE)
+        return match.group(1) if match else None
     if path.suffix == ".json":
         try:
             data = json.loads(text)
@@ -142,13 +153,15 @@ def _runtime_version(key, env, run, smi_text):
     filenames = ["version.json", "version.txt", "version", "VERSION", ".info/version"]
     if key == "ascend":
         filenames += ["ascend_toolkit_install.info", "*/ascend_toolkit_install.info",
-                      "version.cfg", "*/version.cfg"]
+                      "version.cfg", "*/version.cfg", "share/info/runtime/version.info"]
     elif key == "kunlunxin":
         filenames = ["include/xpu/version.h", "xre/include/xpu/version.h"] + filenames + [
             "xre/version.txt", "xre/version",
         ]
     elif key == "hygon":
         filenames = [".dtk_version"] + filenames
+    elif key == "thead":
+        filenames = ["release.yaml"] + filenames
     for root in roots:
         for filename in filenames:
             try:
@@ -250,8 +263,8 @@ def collect_metadata(key, env, run):
     if key == "ascend" and not driver:
         driver = _file_version(Path("/usr/local/Ascend/driver/version.info"), "driver")
     return {
-        "device_name": name,
-        "driver_version": driver,
+        "device": name,
+        "driver": driver,
         "runtime": RUNTIMES[key][0],
         "runtime_version": _runtime_version(key, env, run, table),
     }

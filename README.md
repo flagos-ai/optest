@@ -371,8 +371,13 @@ compatibility versions in `version.txt`, and also checks its `xre/` subdirectory
 Explicit installation environment variables
 (such as `COREX_ROOT`, `DTKROOT`, `CUDA_HOME`, `ASCEND_HOME_PATH`, `MACA_PATH` and
 `MUSA_INSTALL_PATH`) take priority over conventional installation directories.
-CUDA additionally supports `nvcc --version`; other vendors can supply an
-explicit runtime-labelled version in their management-tool output.
+CUDA additionally supports `nvcc --version` and the `cuda-libraries-*`
+distribution package in runtime-only images. CoreX releases are read from the
+vendor build string in `bin/clang --version`, DTK from `.dtk_version`, MUSA
+from `musa_toolkits.version` in `version.json`, and TOPS from the `topsruntime`
+package. TsingMicro exposes separate driver and runtime versions through
+`tsm_smi --version`; other vendors can supply an explicit runtime-labelled
+version in their management-tool output.
 
 The CUDA compatibility version in an SMI header is **not** the installed CUDA
 release. Likewise, IX-ML and the Iluvatar driver's CUDA compatibility version
@@ -380,6 +385,9 @@ are **not** the CoreX release. Missing metadata is `null` in JSON/YAML and
 `unknown` in text; it does not prevent checking memory availability. Runtime
 images that omit these metadata sources may therefore report an unknown
 version.
+
+Real-output regression captures and the verified hardware/runtime matrix are
+listed in [tests/fixtures/gpu_check](tests/fixtures/gpu_check/README.md).
 
 JSON and YAML share these fields:
 

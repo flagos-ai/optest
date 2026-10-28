@@ -62,7 +62,7 @@ MODELS = {
     "ascend": r"\b(?:Ascend\s*)?(9\d{2}[A-Z]?\d?)\b",
     "cambricon": r"\bMLU[\w-]+\b",
     "amd": r"\b(?:Instinct\s+)?(?:MI\d+[A-Z]*|Radeon\s+(?:PRO\s+)?[\w-]+)\b",
-    "enflame": r"\b(?:S\d+|GCU[\w-]*)\b",
+    "enflame": r"\b(?:S\d+|ZIXIAO[\w-]+|GCU[\w-]+)\b",
     "hygon": r"\b(?:BW|K|Z)\d+[A-Z0-9-]*\b",
     "iluvatar": r"\bBI-[A-Z0-9-]+\b",
     "kunlunxin": r"\b(?:P\d{3,4}[A-Z]*|R\d{3,4}[A-Z]*)\b",
@@ -82,6 +82,10 @@ def _unique(values):
 
 
 def _model_names(key, text):
+    if key == "hygon":
+        # A board may be described as "BW200, UBB BW1000". Prefer its UBB
+        # product designation over the chip family on the same line.
+        text = re.sub(r"\bBW\w+,\s*UBB\s+(BW\w+)", r"\1", text)
     matches = re.findall(MODELS[key], text, re.IGNORECASE)
     if key == "mthreads":
         matches = [re.sub(r"[-\s]+", "-", name) for name in matches]
@@ -90,7 +94,7 @@ def _model_names(key, text):
 
 def _label_version(text, label, version_pattern=VERSION):
     match = re.search(
-        rf"\b(?:{label})\s*(?:version|release)?\s*[:=]?\s*[vV]?({version_pattern})",
+        rf"\b(?:{label})\s*(?:version|ver|release)?\s*[:=|]?\s*[vV]?({version_pattern})",
         text, re.IGNORECASE,
     )
     return match.group(1) if match else None
@@ -106,6 +110,9 @@ def _file_version(path, runtime):
         match = re.search(rf'^\s*#\s*define\s+XPURT_VERSION_STR\s+"({VERSION})"',
                           text, re.MULTILINE)
         return match.group(1) if match else None
+    if runtime == "dtk" and path.name == ".dtk_version":
+        match = re.search(rf"^DTK-({VERSION})\s*$", text, re.MULTILINE)
+        return match.group(1) if match else None
     if path.suffix == ".json":
         try:
             data = json.loads(text)
@@ -113,7 +120,8 @@ def _file_version(path, runtime):
             return None
         if not isinstance(data, dict):
             return None
-        value = data.get(runtime, data)
+        distribution = "musa_toolkits" if runtime == "musa" else runtime
+        value = data.get(distribution, data)
         if isinstance(value, dict):
             value = value.get("version")
         return str(value) if isinstance(value, (str, int, float)) else None
@@ -139,6 +147,8 @@ def _runtime_version(key, env, run, smi_text):
         filenames = ["include/xpu/version.h", "xre/include/xpu/version.h"] + filenames + [
             "xre/version.txt", "xre/version",
         ]
+    elif key == "hygon":
+        filenames = [".dtk_version"] + filenames
     for root in roots:
         for filename in filenames:
             try:
@@ -154,11 +164,35 @@ def _runtime_version(key, env, run, smi_text):
             value = _cuda_version(str(Path(root) / "bin/nvcc"), env, run)
             if value:
                 return value
+        elif key == "iluvatar":
+            rc, out, err = run([str(Path(root) / "bin/clang"), "--version"], env=env)
+            if rc == 0:
+                # CoreX embeds its release and build date in Clang's vendor
+                # build string; Clang's own version is a different product.
+                match = re.search(r"\((\d+\.\d+\.\d+)\.\d{8}\b", out + err)
+                if match:
+                    return match.group(1)
     # CUDA's SMI header reports driver capability, NOT the installed toolkit.
     # Likewise IX-ML and the CUDA compatibility version are not CoreX releases.
     if key == "nvidia":
-        return _cuda_version("nvcc", env, run)
-    return _label_version(smi_text, re.escape(runtime),
+        value = _cuda_version("nvcc", env, run)
+        if value:
+            return value
+        # Runtime-only CUDA images omit nvcc and version.json. The libraries
+        # metapackage records the distribution release, unlike cudart's build.
+        rc, out, _ = run(["dpkg-query", "-W", "-f=${Package}\\t${Version}\\n",
+                          "cuda-libraries-*"], env=env)
+        if rc == 0:
+            releases = re.findall(r"(?m)^cuda-libraries-\d+-\d+\s+(\d+\.\d+\.\d+)(?:-\S+)?$", out)
+            if len(set(releases)) == 1:
+                return releases[0]
+        return None
+    if key == "enflame":
+        rc, out, _ = run(["dpkg-query", "-W", "-f=${Version}", "topsruntime"], env=env)
+        if rc == 0 and re.fullmatch(VERSION, out.strip()):
+            return out.strip()
+    label = r"tsm|runtime" if key == "tsingmicro" else re.escape(runtime)
+    return _label_version(smi_text, label,
                           TSM_VERSION if runtime == "tsm" else VERSION)
 
 
@@ -174,6 +208,10 @@ def collect_metadata(key, env, run):
     rc, table, _ = run(base, env=env)
     if rc != 0:
         table = ""
+    if key == "tsingmicro":
+        rc, out, _ = run([command, "--version"], env=env)
+        if rc == 0:
+            table += "\n" + out
     name = _model_names(key, table)
     driver = _label_version(table, r"driver(?:\s+version)?",
                             TSM_VERSION if key == "tsingmicro" else VERSION)

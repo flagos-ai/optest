@@ -1,0 +1,177 @@
+{
+  "vendor": "iluvatar",
+  "image": "harbor.baai.ac.cn/flaggems/flaggems-test-iluvatar-bi-v150:20261014",
+  "environment": {
+    "COREX_ROOT": "/usr/local/corex"
+  },
+  "commands": [
+    {
+      "argv": [
+        "ixsmi",
+        "--query-gpu=name",
+        "--format=csv,noheader"
+      ],
+      "returncode": 0,
+      "stdout": "Iluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\nIluvatar BI-V150 OAM\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ixsmi"
+      ],
+      "returncode": 0,
+      "stdout": "+--------------------------------------------------------------------------------+\n|  IX-ML: 5.0.0            Driver Version: 5.0.0          CUDA Version: 10.2     |\n|----------------------------------+----------------------+----------------------|\n| GPU  Name                        | Bus-Id               | Clock-SM  Clock-Mem  |\n| Fan  Temp  Perf    Pwr:Usage/Cap |      Memory-Usage    | GPU-Util  Compute M. |\n|==================================+======================+======================|\n| 0    Iluvatar BI-V150 OAM        | 0000:ab:00.0     | 500MHz    1600MHz    |\n| N/A  25C   P0       N/A / N/A    | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 1    Iluvatar BI-V150 OAM        | 0000:ab:00.0     | 500MHz    1600MHz    |\n| N/A  25C   P0       63W / 600W   | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 2    Iluvatar BI-V150 OAM        | 0000:ab:00.0     | 500MHz    1600MHz    |\n| N/A  28C   P0       N/A / N/A    | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 3    Iluvatar BI-V150 OAM        | 0000:ab:00.0     | 500MHz    1600MHz    |\n| N/A  26C   P0       63W / 600W   | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 4    Iluvatar BI-V150 OAM        | 0000:00:00.0     | 500MHz    1600MHz    |\n| N/A  29C   P0       N/A / N/A    | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 5    Iluvatar BI-V150 OAM        | 0000:00:00.0     | 500MHz    1600MHz    |\n| N/A  28C   P0       63W / 600W   | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 6    Iluvatar BI-V150 OAM        | 0000:ab:00.0     | 500MHz    1600MHz    |\n| N/A  29C   P0       N/A / N/A    | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 7    Iluvatar BI-V150 OAM        | 0000:00:00.0     | 500MHz    1600MHz    |\n| N/A  27C   P0       63W / 600W   | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 8    Iluvatar BI-V150 OAM        | 0000:ab:00.0     | 500MHz    1600MHz    |\n| N/A  28C   P0       N/A / N/A    | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 9    Iluvatar BI-V150 OAM        | 0000:ab:00.0     | 500MHz    1600MHz    |\n| N/A  26C   P0       63W / 600W   | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 10   Iluvatar BI-V150 OAM        | 0000:00:00.0     | 500MHz    1600MHz    |\n| N/A  27C   P0       N/A / N/A    | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 11   Iluvatar BI-V150 OAM        | 0000:ab:00.0     | 500MHz    1600MHz    |\n| N/A  25C   P0       63W / 600W   | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 12   Iluvatar BI-V150 OAM        | 0000:ab:00.0     | 500MHz    1600MHz    |\n| N/A  26C   P0       N/A / N/A    | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 13   Iluvatar BI-V150 OAM        | 0000:ab:00.0     | 500MHz    1600MHz    |\n| N/A  27C   P0       63W / 600W   | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 14   Iluvatar BI-V150 OAM        | 0000:ab:00.0     | 500MHz    1600MHz    |\n| N/A  27C   P0       N/A / N/A    | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n| 15   Iluvatar BI-V150 OAM        | 0000:ab:00.0     | 500MHz    1600MHz    |\n| N/A  25C   P0       63W / 600W   | 68MiB / 32768MiB     | 0%        Default    |\n+----------------------------------+----------------------+----------------------+\n\n+--------------------------------------------------------------------------------+\n| Processes:                                                          GPU Memory |\n|================================================================================|\n|  No running processes found                                                    |\n+--------------------------------------------------------------------------------+\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ixsmi",
+        "--query-gpu=driver_version",
+        "--format=csv,noheader"
+      ],
+      "returncode": 0,
+      "stdout": "5.0.0\n5.0.0\n5.0.0\n5.0.0\n5.0.0\n5.0.0\n5.0.0\n5.0.0\n5.0.0\n5.0.0\n5.0.0\n5.0.0\n5.0.0\n5.0.0\n5.0.0\n5.0.0\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/local/corex/bin/clang",
+        "--version"
+      ],
+      "returncode": 0,
+      "stdout": "clang version 22.1.0git (4.5.0.20000101 <redacted-hash>)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /usr/local/corex-4.5.0/bin\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ixsmi",
+        "--query-gpu=memory.used",
+        "--format=csv,noheader,nounits"
+      ],
+      "returncode": 0,
+      "stdout": "68\n68\n68\n68\n68\n68\n68\n68\n68\n68\n68\n68\n68\n68\n68\n68\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ixsmi",
+        "--query-gpu=memory.total",
+        "--format=csv,noheader,nounits"
+      ],
+      "returncode": 0,
+      "stdout": "32768\n32768\n32768\n32768\n32768\n32768\n32768\n32768\n32768\n32768\n32768\n32768\n32768\n32768\n32768\n32768\n",
+      "stderr": ""
+    }
+  ],
+  "files": {},
+  "expected": {
+    "vendor": "iluvatar",
+    "device_name": "BI-V150",
+    "driver_version": "5.0.0",
+    "runtime": "corex",
+    "runtime_version": "4.5.0",
+    "unit": "GPU",
+    "memory_unit": "MiB",
+    "device_count": 16,
+    "gpus": [
+      {
+        "index": 0,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 1,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 2,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 3,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 4,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 5,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 6,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 7,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 8,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 9,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 10,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 11,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 12,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 13,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 14,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      },
+      {
+        "index": 15,
+        "total": 32768,
+        "used": 68,
+        "free": 32700
+      }
+    ],
+    "available_gpus": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15"
+  },
+  "text": "Vendor: iluvatar\nDevice Name: BI-V150\nDriver Version: 5.0.0\nRuntime: corex\nRuntime Version: 4.5.0\nDetected 16 Iluvatar BI-V150 GPU(s).\nGPU Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       32,768          68      32,700\n   1       32,768          68      32,700\n   2       32,768          68      32,700\n   3       32,768          68      32,700\n   4       32,768          68      32,700\n   5       32,768          68      32,700\n   6       32,768          68      32,700\n   7       32,768          68      32,700\n   8       32,768          68      32,700\n   9       32,768          68      32,700\n  10       32,768          68      32,700\n  11       32,768          68      32,700\n  12       32,768          68      32,700\n  13       32,768          68      32,700\n  14       32,768          68      32,700\n  15       32,768          68      32,700\nAvailable GPUs: 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15\n"
+}

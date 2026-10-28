@@ -1,0 +1,202 @@
+{
+  "vendor": "enflame",
+  "image": "harbor.baai.ac.cn/flagos-app/vllm0.24.0-enflame-tops1.10.6:2.2.0-0.3.0",
+  "environment": {},
+  "commands": [
+    {
+      "argv": [
+        "efsmi",
+        "-L"
+      ],
+      "returncode": 0,
+      "stdout": "-------------------------------------------------------------------------------\n--------------------- Enflame System Management Interface ---------------------\n--------- Enflame Tech, All Rights Reserved. 2024-2026 Copyright (C) ----------\n-------------------------------------------------------------------------------\n                                                                               \nDEV    SN                Slot    ID           Bus             CPU Affinity     UUID\n-------------------------------------------------------------------------------------------\n0      <redacted-id>     N/A     1ea0:2a22    0000:00:00.0    0-127            <redacted-id>\n1      <redacted-id>     N/A     1ea0:2a22    0000:00:00.0    0-127            <redacted-id>\n2      <redacted-id>     N/A     1ea0:2a22    0000:00:00.0    0-127            <redacted-id>\n3      <redacted-id>     N/A     1ea0:2a22    0000:00:00.0    0-127            <redacted-id>\n4      <redacted-id>     N/A     1ea0:2a22    0000:00:00.0    128-255          <redacted-id>\n5      <redacted-id>     N/A     1ea0:2a22    0000:00:00.0    128-255          <redacted-id>\n6      <redacted-id>     N/A     1ea0:2a22    0000:00:00.0    128-255          <redacted-id>\n7      <redacted-id>     N/A     1ea0:2a22    0000:ab:00.0    128-255          <redacted-id>\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "efsmi"
+      ],
+      "returncode": 0,
+      "stdout": "-------------------------------------------------------------------------------\n--------------------- Enflame System Management Interface ---------------------\n--------- Enflame Tech, All Rights Reserved. 2024-2026 Copyright (C) ----------\n-------------------------------------------------------------------------------\n                                                                               \n+<redacted-date>, <redacted-time> CST-----------------------------------------------------+\n| EFSMI: 1.10.6                Driver Ver: 1.10.6                             |\n+-----------------------------+-------------------+---------------------------+\n| DEV    NAME                 | Boot FW VER       | BUS-ID      ECC           |\n| TEMP   Lpm   Pwr(Usage/Cap) | Mem      GCU Virt | DUsed       SN            |\n|=============================================================================|\n| 0      ZIXIAOC200           | 35.6.5            | <redacted-time>.0  Enable        |\n| 55℃    LP0      140W / 300W | 42976MiB  Disable | 0%          <redacted-id> |\n+-----------------------------+-------------------+---------------------------+\n| 1      ZIXIAOC200           | 35.6.5            | <redacted-time>.0  Enable        |\n| 55℃    LP0      136W / 300W | 42976MiB  Disable | 0%          <redacted-id> |\n+-----------------------------+-------------------+---------------------------+\n| 2      ZIXIAOC200           | 35.6.5            | <redacted-time>.0  Enable        |\n| 55℃    LP0      138W / 300W | 42976MiB  Disable | 0%          <redacted-id> |\n+-----------------------------+-------------------+---------------------------+\n| 3      ZIXIAOC200           | 35.6.5            | <redacted-time>.0  Enable        |\n| 56℃    LP0      141W / 300W | 42976MiB  Disable | 0%          <redacted-id> |\n+-----------------------------+-------------------+---------------------------+\n| 4      ZIXIAOC200           | 35.6.5            | <redacted-time>.0  Enable        |\n| 56℃    LP0      138W / 300W | 42976MiB  Disable | 0%          <redacted-id> |\n+-----------------------------+-------------------+---------------------------+\n| 5      ZIXIAOC200           | 35.6.5            | <redacted-time>.0  Enable        |\n| 55℃    LP0      135W / 300W | 42976MiB  Disable | 0%          <redacted-id> |\n+-----------------------------+-------------------+---------------------------+\n| 6      ZIXIAOC200           | 35.6.5            | <redacted-time>.0  Enable        |\n| 58℃    LP0      138W / 300W | 42976MiB  Disable | 0%          <redacted-id> |\n+-----------------------------+-------------------+---------------------------+\n| 7      ZIXIAOC200           | 35.6.5            | <redacted-time>.0  Enable        |\n| 59℃    LP0      139W / 300W | 42976MiB  Disable | 0%          <redacted-id> |\n+-----------------------------+-------------------+---------------------------+\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "dpkg-query",
+        "-W",
+        "-f=${Version}",
+        "topsruntime"
+      ],
+      "returncode": 0,
+      "stdout": "1.10.6",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "efsmi",
+        "-i",
+        "0",
+        "-q",
+        "-d",
+        "MEMORY"
+      ],
+      "returncode": 0,
+      "stdout": "-------------------------------------------------------------------------------\n--------------------- Enflame System Management Interface ---------------------\n--------- Enflame Tech, All Rights Reserved. 2024-2026 Copyright (C) ----------\n-------------------------------------------------------------------------------\n                                                                               \nDEV ID 0\n    Device Mem Info\n        Total Size              : 42976 MiB\n        Reserved Size           : 1129 MiB\n        Used Size               : 0 MiB\n        Free Size               : 41846 MiB\n    BAR1 Mem Info\n        Total Size              : 16 MiB\n    BAR2 Mem Info\n        Total Size              : 64 GiB\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "efsmi",
+        "-i",
+        "1",
+        "-q",
+        "-d",
+        "MEMORY"
+      ],
+      "returncode": 0,
+      "stdout": "-------------------------------------------------------------------------------\n--------------------- Enflame System Management Interface ---------------------\n--------- Enflame Tech, All Rights Reserved. 2024-2026 Copyright (C) ----------\n-------------------------------------------------------------------------------\n                                                                               \nDEV ID 1\n    Device Mem Info\n        Total Size              : 42976 MiB\n        Reserved Size           : 1129 MiB\n        Used Size               : 0 MiB\n        Free Size               : 41846 MiB\n    BAR1 Mem Info\n        Total Size              : 16 MiB\n    BAR2 Mem Info\n        Total Size              : 64 GiB\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "efsmi",
+        "-i",
+        "2",
+        "-q",
+        "-d",
+        "MEMORY"
+      ],
+      "returncode": 0,
+      "stdout": "-------------------------------------------------------------------------------\n--------------------- Enflame System Management Interface ---------------------\n--------- Enflame Tech, All Rights Reserved. 2024-2026 Copyright (C) ----------\n-------------------------------------------------------------------------------\n                                                                               \nDEV ID 2\n    Device Mem Info\n        Total Size              : 42976 MiB\n        Reserved Size           : 1129 MiB\n        Used Size               : 0 MiB\n        Free Size               : 41846 MiB\n    BAR1 Mem Info\n        Total Size              : 16 MiB\n    BAR2 Mem Info\n        Total Size              : 64 GiB\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "efsmi",
+        "-i",
+        "3",
+        "-q",
+        "-d",
+        "MEMORY"
+      ],
+      "returncode": 0,
+      "stdout": "-------------------------------------------------------------------------------\n--------------------- Enflame System Management Interface ---------------------\n--------- Enflame Tech, All Rights Reserved. 2024-2026 Copyright (C) ----------\n-------------------------------------------------------------------------------\n                                                                               \nDEV ID 3\n    Device Mem Info\n        Total Size              : 42976 MiB\n        Reserved Size           : 1129 MiB\n        Used Size               : 0 MiB\n        Free Size               : 41846 MiB\n    BAR1 Mem Info\n        Total Size              : 16 MiB\n    BAR2 Mem Info\n        Total Size              : 64 GiB\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "efsmi",
+        "-i",
+        "4",
+        "-q",
+        "-d",
+        "MEMORY"
+      ],
+      "returncode": 0,
+      "stdout": "-------------------------------------------------------------------------------\n--------------------- Enflame System Management Interface ---------------------\n--------- Enflame Tech, All Rights Reserved. 2024-2026 Copyright (C) ----------\n-------------------------------------------------------------------------------\n                                                                               \nDEV ID 4\n    Device Mem Info\n        Total Size              : 42976 MiB\n        Reserved Size           : 1129 MiB\n        Used Size               : 0 MiB\n        Free Size               : 41846 MiB\n    BAR1 Mem Info\n        Total Size              : 16 MiB\n    BAR2 Mem Info\n        Total Size              : 64 GiB\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "efsmi",
+        "-i",
+        "5",
+        "-q",
+        "-d",
+        "MEMORY"
+      ],
+      "returncode": 0,
+      "stdout": "-------------------------------------------------------------------------------\n--------------------- Enflame System Management Interface ---------------------\n--------- Enflame Tech, All Rights Reserved. 2024-2026 Copyright (C) ----------\n-------------------------------------------------------------------------------\n                                                                               \nDEV ID 5\n    Device Mem Info\n        Total Size              : 42976 MiB\n        Reserved Size           : 1129 MiB\n        Used Size               : 0 MiB\n        Free Size               : 41846 MiB\n    BAR1 Mem Info\n        Total Size              : 16 MiB\n    BAR2 Mem Info\n        Total Size              : 64 GiB\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "efsmi",
+        "-i",
+        "6",
+        "-q",
+        "-d",
+        "MEMORY"
+      ],
+      "returncode": 0,
+      "stdout": "-------------------------------------------------------------------------------\n--------------------- Enflame System Management Interface ---------------------\n--------- Enflame Tech, All Rights Reserved. 2024-2026 Copyright (C) ----------\n-------------------------------------------------------------------------------\n                                                                               \nDEV ID 6\n    Device Mem Info\n        Total Size              : 42976 MiB\n        Reserved Size           : 1129 MiB\n        Used Size               : 0 MiB\n        Free Size               : 41846 MiB\n    BAR1 Mem Info\n        Total Size              : 16 MiB\n    BAR2 Mem Info\n        Total Size              : 64 GiB\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "efsmi",
+        "-i",
+        "7",
+        "-q",
+        "-d",
+        "MEMORY"
+      ],
+      "returncode": 0,
+      "stdout": "-------------------------------------------------------------------------------\n--------------------- Enflame System Management Interface ---------------------\n--------- Enflame Tech, All Rights Reserved. 2024-2026 Copyright (C) ----------\n-------------------------------------------------------------------------------\n                                                                               \nDEV ID 7\n    Device Mem Info\n        Total Size              : 42976 MiB\n        Reserved Size           : 1129 MiB\n        Used Size               : 0 MiB\n        Free Size               : 41846 MiB\n    BAR1 Mem Info\n        Total Size              : 16 MiB\n    BAR2 Mem Info\n        Total Size              : 64 GiB\n",
+      "stderr": ""
+    }
+  ],
+  "files": {},
+  "expected": {
+    "vendor": "enflame",
+    "device_name": "ZIXIAOC200",
+    "driver_version": "1.10.6",
+    "runtime": "tops",
+    "runtime_version": "1.10.6",
+    "unit": "GPU",
+    "memory_unit": "MiB",
+    "device_count": 8,
+    "gpus": [
+      {
+        "index": 0,
+        "total": 42976,
+        "used": 1130,
+        "free": 41846
+      },
+      {
+        "index": 1,
+        "total": 42976,
+        "used": 1130,
+        "free": 41846
+      },
+      {
+        "index": 2,
+        "total": 42976,
+        "used": 1130,
+        "free": 41846
+      },
+      {
+        "index": 3,
+        "total": 42976,
+        "used": 1130,
+        "free": 41846
+      },
+      {
+        "index": 4,
+        "total": 42976,
+        "used": 1130,
+        "free": 41846
+      },
+      {
+        "index": 5,
+        "total": 42976,
+        "used": 1130,
+        "free": 41846
+      },
+      {
+        "index": 6,
+        "total": 42976,
+        "used": 1130,
+        "free": 41846
+      },
+      {
+        "index": 7,
+        "total": 42976,
+        "used": 1130,
+        "free": 41846
+      }
+    ],
+    "available_gpus": "0,1,2,3,4,5,6,7"
+  },
+  "text": "Vendor: enflame\nDevice Name: ZIXIAOC200\nDriver Version: 1.10.6\nRuntime: tops\nRuntime Version: 1.10.6\nDetected 8 Enflame ZIXIAOC200 GPU(s).\nGPU Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       42,976       1,130      41,846\n   1       42,976       1,130      41,846\n   2       42,976       1,130      41,846\n   3       42,976       1,130      41,846\n   4       42,976       1,130      41,846\n   5       42,976       1,130      41,846\n   6       42,976       1,130      41,846\n   7       42,976       1,130      41,846\nAvailable GPUs: 0,1,2,3,4,5,6,7\n"
+}

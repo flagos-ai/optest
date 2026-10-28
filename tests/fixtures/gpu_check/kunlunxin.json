@@ -1,0 +1,83 @@
+{
+  "vendor": "kunlunxin",
+  "image": "harbor.baai.ac.cn/flaggems/flaggems-test-kunlunxin-p800:20261014",
+  "environment": {
+    "XPU_HOME": "/usr/local/xpu"
+  },
+  "commands": [
+    {
+      "argv": [
+        "xpu-smi"
+      ],
+      "returncode": 0,
+      "stdout": "+-----------------------------------------------------------------------------+\n| XPU-SMI               Driver Version: 5.41.0.0     XPU-RT Version: 5.37.1   |\n|-------------------------------+----------------------+----------------------+\n| XPU  Name        Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |\n| Fan  Temp  Perf  Pwr:Usage/Cap|         Memory-Usage | XPU-Util  Compute M. |\n|                               |             L3-Usage |            SR-IOV M. |\n|===============================+======================+======================|\n|   0  P800 OAM           N/A   | 0000:00:00.0 N/A |                    0 |\n| N/A   33C  N/A     86W / 400W |      0MiB / 98304MiB |      0%      Default |\n|                               |      0MiB /    96MiB |             Disabled |\n+-------------------------------+----------------------+----------------------+\n|   1  P800 OAM           N/A   | 0000:00:00.0 N/A |                    0 |\n| N/A   37C  N/A     85W / 400W |      0MiB / 98304MiB |      0%      Default |\n|                               |      0MiB /    96MiB |             Disabled |\n+-------------------------------+----------------------+----------------------+\n|   2  P800 OAM           N/A   | 0000:ab:00.0 N/A |                    0 |\n| N/A   36C  N/A     87W / 400W |      0MiB / 98304MiB |      0%      Default |\n|                               |      0MiB /    96MiB |             Disabled |\n+-------------------------------+----------------------+----------------------+\n|   3  P800 OAM           N/A   | 0000:ab:00.0 N/A |                    0 |\n| N/A   38C  N/A     86W / 400W |      0MiB / 98304MiB |      0%      Default |\n|                               |      0MiB /    96MiB |             Disabled |\n+-------------------------------+----------------------+----------------------+\n|   4  P800 OAM           N/A   | 0000:ab:00.0 N/A |                    0 |\n| N/A   36C  N/A     86W / 400W |      0MiB / 98304MiB |      0%      Default |\n|                               |      0MiB /    96MiB |             Disabled |\n+-------------------------------+----------------------+----------------------+\n|   5  P800 OAM           N/A   | 0000:ab:00.0 N/A |                    0 |\n| N/A   36C  N/A     87W / 400W |      0MiB / 98304MiB |      0%      Default |\n|                               |      0MiB /    96MiB |             Disabled |\n+-------------------------------+----------------------+----------------------+\n|   6  P800 OAM           N/A   | 0000:ab:00.0 N/A |                    0 |\n| N/A   38C  N/A     86W / 400W |      0MiB / 98304MiB |      0%      Default |\n|                               |      0MiB /    96MiB |             Disabled |\n+-------------------------------+----------------------+----------------------+\n|   7  P800 OAM           N/A   | 0000:ab:00.0 N/A |                    0 |\n| N/A   35C  N/A     86W / 400W |      0MiB / 98304MiB |      0%      Default |\n|                               |      0MiB /    96MiB |             Disabled |\n+-------------------------------+----------------------+----------------------+\n                                                                               \n+-----------------------------------------------------------------------------+\n| Processes:                                                                  |\n|        ID   ID                                                   Usage      |\n|=============================================================================|\n|  No running processes found                                                 |\n+-----------------------------------------------------------------------------+\n",
+      "stderr": ""
+    }
+  ],
+  "files": {
+    "/usr/local/xpu/version.txt": "5.37.1.0\npeermem\nDriver Compatible Version:\n        515.58\nCUDA Compatible Version:\n        12.9\n======================================\n        <redacted-date>\nCommit ID:\n        xre-close: <redacted-hash>\n        xre-open:  <redacted-hash>\n",
+    "/usr/local/xpu/include/xpu/version.h": "#ifndef XPU_VERSION_H\n#define XPU_VERSION_H\n#define XPURT_VERSION_MAJOR 5\n#define XPURT_VERSION_MINOR 37\n#define XPURT_VERSION_THIRD 1\n#define XPURT_COMMIT \"<redacted-hash>\"\n#define XPURT_CHANGESET 99999\n#define XPURT_VERSION_STR \"5.37.1\"\n#define XPURT_AGILE_PIPELINE \"KL3_Release_129\"\n#endif\n"
+  },
+  "expected": {
+    "vendor": "kunlunxin",
+    "device_name": "P800",
+    "driver_version": "5.41.0.0",
+    "runtime": "xre",
+    "runtime_version": "5.37.1",
+    "unit": "GPU",
+    "memory_unit": "MiB",
+    "device_count": 8,
+    "gpus": [
+      {
+        "index": 0,
+        "total": 98304,
+        "used": 0,
+        "free": 98304
+      },
+      {
+        "index": 1,
+        "total": 98304,
+        "used": 0,
+        "free": 98304
+      },
+      {
+        "index": 2,
+        "total": 98304,
+        "used": 0,
+        "free": 98304
+      },
+      {
+        "index": 3,
+        "total": 98304,
+        "used": 0,
+        "free": 98304
+      },
+      {
+        "index": 4,
+        "total": 98304,
+        "used": 0,
+        "free": 98304
+      },
+      {
+        "index": 5,
+        "total": 98304,
+        "used": 0,
+        "free": 98304
+      },
+      {
+        "index": 6,
+        "total": 98304,
+        "used": 0,
+        "free": 98304
+      },
+      {
+        "index": 7,
+        "total": 98304,
+        "used": 0,
+        "free": 98304
+      }
+    ],
+    "available_gpus": "0,1,2,3,4,5,6,7"
+  },
+  "text": "Vendor: kunlunxin\nDevice Name: P800\nDriver Version: 5.41.0.0\nRuntime: xre\nRuntime Version: 5.37.1\nDetected 8 KunlunXin P800 GPU(s).\nGPU Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       98,304           0      98,304\n   1       98,304           0      98,304\n   2       98,304           0      98,304\n   3       98,304           0      98,304\n   4       98,304           0      98,304\n   5       98,304           0      98,304\n   6       98,304           0      98,304\n   7       98,304           0      98,304\nAvailable GPUs: 0,1,2,3,4,5,6,7\n"
+}

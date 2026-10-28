@@ -301,7 +301,8 @@ def sample_amd(env, count):
 # ---- enflame -------------------------------------------------------------- #
 def detect_enflame(env):
     _, out, _ = _run(["efsmi", "-L"], env=env)
-    count = sum(1 for line in out.splitlines() if re.search(r"\d+:\d+:", line))
+    count = sum(1 for line in out.splitlines()
+                if re.match(r"^\s*\d+\s+.*\b[\da-fA-F]{4}:[\da-fA-F]{2}:[\da-fA-F]{2}\.\d\b", line))
     if count == 0:
         eprint("No Enflame GPUs detected. Please ensure you have Enflame GPUs installed and properly configured.")
         raise VendorCheckError()

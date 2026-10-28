@@ -116,6 +116,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import traceback
 import time
 import types
 from decimal import getcontext
@@ -449,11 +450,20 @@ def _probe_gems():
     for mod_name, lib_name in _KNOWN_LIBS:
         try:
             mod = importlib.import_module(mod_name)
+        except ModuleNotFoundError as e:
+            if e.name == mod_name:
+                continue
+            perror(f"{mod_name} is present but failed to import:")
+            traceback.print_exc()
+            sys.exit(1)
         except ImportError:
-            continue
+            perror(f"{mod_name} is present but failed to import:")
+            traceback.print_exc()
+            sys.exit(1)
         except Exception as e:
-            pwarn(f"{mod_name} present but failed to import: {e}")
-            continue
+            perror(f"{mod_name} is present but failed to import: {e}")
+            traceback.print_exc()
+            sys.exit(1)
 
         info = {"library_name": lib_name}
         try:

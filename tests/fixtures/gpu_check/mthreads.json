@@ -1,0 +1,196 @@
+{
+  "vendor": "mthreads",
+  "image": "harbor.baai.ac.cn/flagos-app/vllm0.24.0-mthreads-musa5.2.0:2.2.0-0.3.0",
+  "environment": {
+    "MUSA_INSTALL_PATH": "/usr/local/musa",
+    "MUSA_HOME": "/usr/local/musa"
+  },
+  "commands": [
+    {
+      "argv": [
+        "mthreads-gmi",
+        "-L"
+      ],
+      "returncode": 0,
+      "stdout": "GPU 0 : MTT S5000  (UUID : <redacted-id>)\nGPU 1 : MTT S5000  (UUID : <redacted-id>)\nGPU 2 : MTT S5000  (UUID : <redacted-id>)\nGPU 3 : MTT S5000  (UUID : <redacted-id>)\nGPU 4 : MTT S5000  (UUID : <redacted-id>)\nGPU 5 : MTT S5000  (UUID : <redacted-id>)\nGPU 6 : MTT S5000  (UUID : <redacted-id>)\nGPU 7 : MTT S5000  (UUID : <redacted-id>)\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "mthreads-gmi"
+      ],
+      "returncode": 0,
+      "stdout": "---------------------------------------------------------------------\n    mthreads-gmi:2.4.2           Driver Version:5.2.0-server\n---------------------------------------------------------------------\nID   Name                 |PCIe                |%GPU  Mem             \n     Device Type   Perf   |Pcie Lane Width     |Temp  MPC Capable     \n                                               |      ECC Mode        \n+-------------------------------------------------------------------+\n0    MTT S5000            |0000:ab:00.0    |0%    0MiB(81920MiB)\n     Physical      N/A    |16x(16x)            |43C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n1    MTT S5000            |0000:ab:00.0    |0%    0MiB(81920MiB)\n     Physical      N/A    |16x(16x)            |47C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n2    MTT S5000            |0000:ab:00.0    |0%    0MiB(81920MiB)\n     Physical      N/A    |16x(16x)            |47C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n3    MTT S5000            |0000:ab:00.0    |0%    0MiB(81920MiB)\n     Physical      N/A    |16x(16x)            |42C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n4    MTT S5000            |0000:ab:00.0    |0%    0MiB(81920MiB)\n     Physical      N/A    |16x(16x)            |45C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n5    MTT S5000            |0000:ab:00.0    |0%    0MiB(81920MiB)\n     Physical      N/A    |16x(16x)            |48C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n6    MTT S5000            |0000:ab:00.0    |0%    0MiB(81920MiB)\n     Physical      N/A    |16x(16x)            |49C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n7    MTT S5000            |0000:ab:00.0    |0%    0MiB(81920MiB)\n     Physical      N/A    |16x(16x)            |46C   YES             \n                                               |      On-die, EDC     \n---------------------------------------------------------------------\n\n---------------------------------------------------------------------\nProcesses:\n                                                               Usage\n+-------------------------------------------------------------------+\n   No running processes found\n---------------------------------------------------------------------\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "mthreads-gmi",
+        "-q",
+        "-d",
+        "MEMORY",
+        "-i",
+        "0"
+      ],
+      "returncode": 0,
+      "stdout": "Driver Version                                    :  5.2.0-server\nAttached GPUs                                     :  8\n\nGPU0 0000:ab:00.0                             \n    FB Memory Spec                                \n        Bandwidth                                 :  1600GBps\n    FB Memory Usage                               \n        Total                                     :  81920MiB\n        Used                                      :  0MiB\n        Free                                      :  81920MiB\n\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "mthreads-gmi",
+        "-q",
+        "-d",
+        "MEMORY",
+        "-i",
+        "1"
+      ],
+      "returncode": 0,
+      "stdout": "Driver Version                                    :  5.2.0-server\nAttached GPUs                                     :  8\n\nGPU1 0000:ab:00.0                             \n    FB Memory Spec                                \n        Bandwidth                                 :  1600GBps\n    FB Memory Usage                               \n        Total                                     :  81920MiB\n        Used                                      :  0MiB\n        Free                                      :  81920MiB\n\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "mthreads-gmi",
+        "-q",
+        "-d",
+        "MEMORY",
+        "-i",
+        "2"
+      ],
+      "returncode": 0,
+      "stdout": "Driver Version                                    :  5.2.0-server\nAttached GPUs                                     :  8\n\nGPU2 0000:ab:00.0                             \n    FB Memory Spec                                \n        Bandwidth                                 :  1600GBps\n    FB Memory Usage                               \n        Total                                     :  81920MiB\n        Used                                      :  0MiB\n        Free                                      :  81920MiB\n\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "mthreads-gmi",
+        "-q",
+        "-d",
+        "MEMORY",
+        "-i",
+        "3"
+      ],
+      "returncode": 0,
+      "stdout": "Driver Version                                    :  5.2.0-server\nAttached GPUs                                     :  8\n\nGPU3 0000:ab:00.0                             \n    FB Memory Spec                                \n        Bandwidth                                 :  1600GBps\n    FB Memory Usage                               \n        Total                                     :  81920MiB\n        Used                                      :  0MiB\n        Free                                      :  81920MiB\n\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "mthreads-gmi",
+        "-q",
+        "-d",
+        "MEMORY",
+        "-i",
+        "4"
+      ],
+      "returncode": 0,
+      "stdout": "Driver Version                                    :  5.2.0-server\nAttached GPUs                                     :  8\n\nGPU4 0000:ab:00.0                             \n    FB Memory Spec                                \n        Bandwidth                                 :  1600GBps\n    FB Memory Usage                               \n        Total                                     :  81920MiB\n        Used                                      :  0MiB\n        Free                                      :  81920MiB\n\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "mthreads-gmi",
+        "-q",
+        "-d",
+        "MEMORY",
+        "-i",
+        "5"
+      ],
+      "returncode": 0,
+      "stdout": "Driver Version                                    :  5.2.0-server\nAttached GPUs                                     :  8\n\nGPU5 0000:ab:00.0                             \n    FB Memory Spec                                \n        Bandwidth                                 :  1600GBps\n    FB Memory Usage                               \n        Total                                     :  81920MiB\n        Used                                      :  0MiB\n        Free                                      :  81920MiB\n\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "mthreads-gmi",
+        "-q",
+        "-d",
+        "MEMORY",
+        "-i",
+        "6"
+      ],
+      "returncode": 0,
+      "stdout": "Driver Version                                    :  5.2.0-server\nAttached GPUs                                     :  8\n\nGPU6 0000:ab:00.0                             \n    FB Memory Spec                                \n        Bandwidth                                 :  1600GBps\n    FB Memory Usage                               \n        Total                                     :  81920MiB\n        Used                                      :  0MiB\n        Free                                      :  81920MiB\n\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "mthreads-gmi",
+        "-q",
+        "-d",
+        "MEMORY",
+        "-i",
+        "7"
+      ],
+      "returncode": 0,
+      "stdout": "Driver Version                                    :  5.2.0-server\nAttached GPUs                                     :  8\n\nGPU7 0000:ab:00.0                             \n    FB Memory Spec                                \n        Bandwidth                                 :  1600GBps\n    FB Memory Usage                               \n        Total                                     :  81920MiB\n        Used                                      :  0MiB\n        Free                                      :  81920MiB\n\n",
+      "stderr": ""
+    }
+  ],
+  "files": {
+    "/usr/local/musa/version.json": "{\n  \"musa_toolkits\": {\n    \"version\": \"5.2.0\"\n  },\n  \"mcc\": {\n    \"version\": \"5.2.0\"\n  },\n  \"mtjpeg\": {\n    \"version\": \"1.0.5\"\n  },\n  \"mualg\": {\n    \"version\": \"1.17.2\"\n  },\n  \"mublasLt\": {\n    \"version\": \"1.13.0\"\n  },\n  \"mublas\": {\n    \"version\": \"1.13.0\"\n  },\n  \"mufft\": {\n    \"version\": \"1.12.0\"\n  },\n  \"mupp\": {\n    \"version\": \"1.13.0\"\n  },\n  \"MUPTI\": {\n    \"version\": \"1.3.0\"\n  },\n  \"murand\": {\n    \"version\": \"1.3.0\"\n  },\n  \"musa_runtime\": {\n    \"version\": \"5.2.0\"\n  },\n  \"musify\": {\n    \"version\": \"1.3.0\"\n  },\n  \"musolver\": {\n    \"version\": \"1.6.0\"\n  },\n  \"musparse\": {\n    \"version\": \"1.7.0\"\n  },\n  \"muthrust\": {\n    \"version\": \"1.17.2\"\n  }\n}\n"
+  },
+  "expected": {
+    "vendor": "mthreads",
+    "device": "MTT-S5000",
+    "driver": "5.2.0-server",
+    "runtime": "musa",
+    "runtime_version": "5.2.0",
+    "unit": "GPU",
+    "memory_unit": "MiB",
+    "device_count": 8,
+    "gpus": [
+      {
+        "id": 0,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 1,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 2,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 3,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 4,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 5,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 6,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 7,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      }
+    ],
+    "available_gpus": "0,1,2,3,4,5,6,7"
+  },
+  "text": "Vendor: mthreads\nDevice: MTT-S5000\nDriver: 5.2.0-server\nRuntime: musa\nRuntime Version: 5.2.0\nDetected 8 Moore Threads MTT-S5000 GPU(s).\nAvailable GPUs: 0,1,2,3,4,5,6,7\nGPUs Usage:\n GPU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       81,920           0      81,920\n   1       81,920           0      81,920\n   2       81,920           0      81,920\n   3       81,920           0      81,920\n   4       81,920           0      81,920\n   5       81,920           0      81,920\n   6       81,920           0      81,920\n   7       81,920           0      81,920\n"
+}

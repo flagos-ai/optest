@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # Copyright 2026 FlagOS Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,10 +17,8 @@
 Unified vendor GPU availability check: ``flagos-gpu-check``.
 
 This single command replaces the thirteen per-vendor ``gpu_check_<vendor>.sh``
-scripts. It first *probes* the host to decide which accelerator vendor is
-present, prints ``Available Vendor: <vendor>``, then runs that vendor's
-memory-availability check and prints ``Available GPUs: <csv>`` once at least one
-device has enough free memory (the weekly workflow greps the latter line).
+scripts. It probes the host vendor, collects device and runtime metadata, and
+reports memory availability once at least one device has enough free memory.
 
 Probing uses two signals, in this priority order:
 
@@ -35,7 +31,7 @@ Device-node probing is preferred because several vendors ship an
 them without reading the inline comments.
 
 Output format is selectable with ``--format {text,json,yaml}`` (default
-``text``, which reproduces the original scripts' human-readable tables), and the
+``text`` for a concise human-readable summary), and the
 rendered result can be saved to a file with ``--output PATH``.
 """
 
@@ -48,27 +44,23 @@ import shutil
 import subprocess
 import sys
 import time
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 
 import yaml
+
+if __package__:
+    from .gpu_metadata import VENDOR_NAMES, collect_metadata
+else:
+    from gpu_metadata import VENDOR_NAMES, collect_metadata
 
 # Configuration parameters (identical to the original shell scripts).
 MEM_THRESHOLD = 30000  # Minimum free memory required (MiB)
 SLEEP_TIME = 120       # Wait time between retries (seconds)
 MAX_WAIT = 600         # Maximum total wait time (seconds)
 
-# Human-readable progress/table output goes here. In text mode this is stdout
-# (so the weekly workflow can grep "^Available GPUs:"); in json/yaml mode it is
-# redirected to stderr so stdout carries only the structured document.
-_HUMAN = sys.stdout
-
 
 class VendorCheckError(Exception):
-    """Raised after the relevant human-readable error has already been printed."""
-
-
-def hprint(msg=""):
-    """Print a human-readable progress/table line to the active human stream."""
-    print(msg, file=_HUMAN)
+    """Raised after the relevant diagnostic has been printed to stderr."""
 
 
 def eprint(msg=""):
@@ -76,12 +68,15 @@ def eprint(msg=""):
     print(msg, file=sys.stderr)
 
 
-def _run(cmd, env=None):
-    """Run a command, returning (returncode, stdout, stderr); never raises."""
+def _run(cmd, env=None, timeout=None):
+    """Run a command, returning (returncode, stdout, stderr)."""
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
-    except FileNotFoundError:
-        return 127, "", ""
+        proc = subprocess.run(cmd, check=False, capture_output=True, text=True,
+                              env=env, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, "", f"Command timed out: {cmd[0]}"
+    except OSError as exc:
+        return 127, "", str(exc)
     return proc.returncode, proc.stdout, proc.stderr
 
 
@@ -114,44 +109,40 @@ def _vendor_env(key):
     if key == "iluvatar":
         prepend("LD_LIBRARY_PATH", "/usr/local/corex/lib")
     elif key == "kunlunxin":
-        env["XPU_HOME"] = "/usr/local/xpu"
-        prepend("PATH", "/usr/local/xpu/bin")
-        prepend("LD_LIBRARY_PATH", "/usr/local/xpu/lib")
+        root = env.setdefault("XPU_HOME", "/usr/local/xpu")
+        prepend("PATH", f"{root}/bin")
+        prepend("LD_LIBRARY_PATH", f"{root}/lib")
     elif key == "mthreads":
-        env["MUSA_INSTALL_PATH"] = "/usr/local/musa"
-        prepend("PATH", "/usr/local/musa/bin")
-        prepend("LD_LIBRARY_PATH", "/usr/local/musa/lib")
+        root = env.setdefault("MUSA_INSTALL_PATH", "/usr/local/musa")
+        prepend("PATH", f"{root}/bin")
+        prepend("LD_LIBRARY_PATH", f"{root}/lib")
     elif key == "tsingmicro":
-        env["KUIPER_HOME"] = "/home/secure/runtime/kuiper"
-        prepend("PATH", "/home/secure/runtime/kuiper/bin")
-        prepend("LD_LIBRARY_PATH", "/home/secure/runtime/kuiper/lib")
+        root = env.setdefault("KUIPER_HOME", "/home/secure/runtime/kuiper")
+        prepend("PATH", f"{root}/bin")
+        prepend("LD_LIBRARY_PATH", f"{root}/lib")
     return env
 
 
 # --------------------------------------------------------------------------- #
 # Vendor detect() / sample() implementations.
 #
-# detect(env)        -> device count (int) or None; prints the original
-#                       "Detected N ..." preamble; raises VendorCheckError after
-#                       printing the original failure message.
+# detect(env)        -> device count (int) or None; raises VendorCheckError
+#                       after printing a diagnostic to stderr.
 # sample(env, count) -> (gpus, available) where gpus is a list of
 #                       {"index","total","used","free"} dicts and available is a
-#                       list of indices with free >= MEM_THRESHOLD. Prints the
-#                       per-GPU table (and any per-device warnings) exactly as
-#                       the original script did.
+#                       list of indices with free >= MEM_THRESHOLD.
 # --------------------------------------------------------------------------- #
 
 # ---- nvidia --------------------------------------------------------------- #
 def detect_nvidia(env):
     if shutil.which("nvidia-smi", path=env.get("PATH")) is None:
-        hprint("Error: nvidia-smi command not found.")
+        eprint("Error: nvidia-smi command not found.")
         raise VendorCheckError()
     _, out, _ = _run(["nvidia-smi", "-L"], env=env)
     count = sum(1 for line in out.splitlines() if "NVIDIA " in line)
     if count == 0:
-        hprint("No NVIDIA GPU cards detected.")
+        eprint("No NVIDIA GPU cards detected.")
         raise VendorCheckError()
-    hprint(f"Detected {count} NVIDIA GPU card(s).")
     return count
 
 
@@ -159,17 +150,15 @@ def _sample_mib_pair(cmd, env, count, unit, warn_query, warn_parse):
     """Shared sampler for nvidia/thead style ``<cmd> -i N`` '<used>MiB / <total>MiB'."""
     gpus = []
     available = []
-    hprint(_table_header(unit))
     for i in range(count):
         _, out, _ = _run(cmd + [str(i)], env=env)
         m = re.search(r"(\d+)MiB\s*/\s*(\d+)MiB", out)
         if not m:
-            hprint(warn_query.format(i=i))
+            eprint(warn_query.format(i=i))
             continue
         used = int(m.group(1))
         total = int(m.group(2))
         free = total - used
-        hprint(_table_row(i, total, used, free))
         gpus.append({"index": i, "total": total, "used": used, "free": free})
         if free >= MEM_THRESHOLD:
             available.append(i)
@@ -189,21 +178,19 @@ def detect_ascend(env):
     rc, out, err = _run(["npu-smi", "info"], env=env)
     combined = out + err  # original runs `npu-smi info 2>&1`
     if rc != 0:
-        hprint("Failed to run npu-smi. Please check if npu-smi is installed and working correctly.")
+        eprint("Failed to run npu-smi. Please check if npu-smi is installed and working correctly.")
         raise VendorCheckError()
     count = sum(1 for line in combined.splitlines() if "OK" in line)
     if count == 0:
-        hprint("No Ascend NPUs detected. Please ensure you have Ascend NPUs installed and properly configured.")
+        eprint("No Ascend NPUs detected. Please ensure you have Ascend NPUs installed and properly configured.")
         raise VendorCheckError()
-    hprint(f"Detected {count} Ascend NPU chip(s).")
-    hprint(combined.rstrip("\n"))  # original echoes the full npu-smi info table
     return count
 
 
 def sample_ascend(env, count):
     rc, out, _ = _run(["npu-smi", "info"], env=env)
     if rc != 0:
-        hprint("Failed to query NPU information.")
+        eprint("Failed to query NPU information.")
         raise VendorCheckError()
     # Chip lines contain a PCIe address like "0000:"; the HBM usage is the last
     # "<used> / <total>" pair on the line.
@@ -215,18 +202,16 @@ def sample_ascend(env, count):
                 hbm.append(pairs[-1])
     gpus = []
     available = []
-    hprint(_table_header("NPU"))
     for i, entry in enumerate(hbm):
         parts = entry.split("/")
         used_s = parts[0].strip()
         total_s = parts[1].strip() if len(parts) > 1 else ""
         if not used_s or not total_s:
-            hprint(f"Warning: Failed to parse memory info for chip {i}.")
+            eprint(f"Warning: Failed to parse memory info for chip {i}.")
             continue
         used = int(used_s)
         total = int(total_s)
         free = total - used
-        hprint(_table_row(i, total, used, free))
         gpus.append({"index": i, "total": total, "used": used, "free": free})
         if free >= MEM_THRESHOLD:
             available.append(i)
@@ -237,7 +222,7 @@ def sample_ascend(env, count):
 def detect_cambricon(env):
     rc, out, _ = _run(["cnmon"], env=env)
     if rc == 127:
-        hprint("Failed to run cnmon. Please check if cnmon is installed and working correctly.")
+        eprint("Failed to run cnmon. Please check if cnmon is installed and working correctly.")
         raise VendorCheckError()
     count = len(re.findall(r"\d+ MiB/ \d+ MiB", out))
     # NOTE: the original shell used `$?` of `cnmon | grep -c`, so a zero match
@@ -245,9 +230,8 @@ def detect_cambricon(env):
     # distinguish the two cases: a missing/erroring cnmon vs. a healthy cnmon
     # that simply reports no cards, which is clearer and keeps both messages.
     if count == 0:
-        hprint("No Cambricon MLUs detected. Please ensure you have MLU cards installed and properly configured.")
+        eprint("No Cambricon MLUs detected. Please ensure you have MLU cards installed and properly configured.")
         raise VendorCheckError()
-    hprint(f"Detected {count} Cambricon MLU card(s).")
     return count
 
 
@@ -257,18 +241,16 @@ def sample_cambricon(env, count):
     gpus = []
     available = []
     i = 0
-    hprint(_table_header("MLU"))
     for line in lines:
         used_m = re.match(r"^\d+", line)
         total_m = re.search(r"\d+(?= MiB$)", line)
         if not used_m or not total_m:
-            hprint(f"Warning: Failed to parse memory info for card {i}.")
+            eprint(f"Warning: Failed to parse memory info for card {i}.")
             i += 1
             continue
         used = int(used_m.group(0))
         total = int(total_m.group(0))
         free = total - used
-        hprint(_table_row(i, total, used, free))
         gpus.append({"index": i, "total": total, "used": used, "free": free})
         if free >= MEM_THRESHOLD:
             available.append(i)
@@ -279,27 +261,24 @@ def sample_cambricon(env, count):
 # ---- amd ------------------------------------------------------------------ #
 def detect_amd(env):
     if shutil.which("rocm-smi", path=env.get("PATH")) is None:
-        hprint("Error: rocm-smi command not found. Please check if ROCm is installed.")
+        eprint("Error: rocm-smi command not found. Please check if ROCm is installed.")
         raise VendorCheckError()
-    return None  # amd iterates over the JSON cards; no separate count/preamble
+    # AMD iterates over the JSON cards; no separate count/preamble.
 
 
 def sample_amd(env, count):
     # rocm-smi reports VRAM in bytes via JSON; keys differ across ROCm versions,
     # so match on lowercased substrings ("total memory" / "used memory") and
-    # convert to MiB. The per-GPU table is printed to stderr for debugging; only
-    # the "Available GPUs:" line goes to the human stream (stdout in text mode),
-    # which the weekly workflow greps for.
+    # convert to MiB. Rendering is handled after sampling succeeds.
     _, out, _ = _run(["rocm-smi", "--showmeminfo", "vram", "--json"], env=env)
     try:
         data = json.loads(out)
-    except Exception:
+    except ValueError:
         eprint("Failed to parse rocm-smi JSON output.")
-        hprint("Failed to query GPU memory information via rocm-smi.")
+        eprint("Failed to query GPU memory information via rocm-smi.")
         raise VendorCheckError()
     gpus = []
     available = []
-    eprint(_table_header("GPU"))
     for i, (_card, info) in enumerate(sorted(data.items())):
         total_b = used_b = None
         for k, v in info.items():
@@ -313,7 +292,6 @@ def sample_amd(env, count):
         total = total_b // (1024 * 1024)
         used = used_b // (1024 * 1024)
         free = total - used
-        eprint("%4d %12d %11d %11d" % (i, total, used, free))
         gpus.append({"index": i, "total": total, "used": used, "free": free})
         if free >= MEM_THRESHOLD:
             available.append(i)
@@ -323,11 +301,11 @@ def sample_amd(env, count):
 # ---- enflame -------------------------------------------------------------- #
 def detect_enflame(env):
     _, out, _ = _run(["efsmi", "-L"], env=env)
-    count = sum(1 for line in out.splitlines() if re.search(r"\d+:\d+:", line))
+    count = sum(1 for line in out.splitlines()
+                if re.match(r"^\s*\d+\s+.*\b[\da-fA-F]{4}:[\da-fA-F]{2}:[\da-fA-F]{2}\.\d\b", line))
     if count == 0:
-        hprint("No Enflame GPUs detected. Please ensure you have Enflame GPUs installed and properly configured.")
+        eprint("No Enflame GPUs detected. Please ensure you have Enflame GPUs installed and properly configured.")
         raise VendorCheckError()
-    hprint(f"Detected {count} Enflame GPU chip(s).")
     return count
 
 
@@ -347,18 +325,16 @@ def _enflame_mem_field(text, label):
 def sample_enflame(env, count):
     gpus = []
     available = []
-    hprint(_table_header("GPU"))
     for i in range(count):
         _, out, _ = _run(["efsmi", "-i", str(i), "-q", "-d", "MEMORY"], env=env)
         total_s = _enflame_mem_field(out, "Total Size")
         free_s = _enflame_mem_field(out, "Free Size")
         if not free_s or not total_s:
-            hprint(f"Warning: Failed to parse memory info for chip {i}.")
+            eprint(f"Warning: Failed to parse memory info for chip {i}.")
             continue
         total = int(total_s)
         free = int(free_s)
         used = total - free
-        hprint(_table_row(i, total, used, free))
         gpus.append({"index": i, "total": total, "used": used, "free": free})
         if free >= MEM_THRESHOLD:
             available.append(i)
@@ -368,14 +344,13 @@ def sample_enflame(env, count):
 # ---- hygon ---------------------------------------------------------------- #
 def detect_hygon(env):
     if shutil.which("hy-smi", path=env.get("PATH")) is None:
-        hprint("Error: hy-smi command not found. Please check if DTK is installed.")
+        eprint("Error: hy-smi command not found. Please check if DTK is installed.")
         raise VendorCheckError()
     _, out, _ = _run(["hy-smi"], env=env)
     count = sum(1 for line in out.splitlines() if "Normal" in line)
     if count == 0:
-        hprint("No Hygon DCU cards detected.")
+        eprint("No Hygon DCU cards detected.")
         raise VendorCheckError()
-    hprint(f"Detected {count} Hygon DCU card(s).")
     return count
 
 
@@ -396,14 +371,12 @@ def sample_hygon(env, count):
     total = _hygon_mem_values(out, "Total Memory")
     gpus = []
     available = []
-    hprint(_table_header("DCU"))
     for i in range(count):
         if i >= len(total) or i >= len(usage):
             continue
         total_i = int(total[i])
         used_i = int(usage[i])
         free_i = total_i - used_i
-        hprint(_table_row(i, total_i, used_i, free_i))
         gpus.append({"index": i, "total": total_i, "used": used_i, "free": free_i})
         if free_i >= MEM_THRESHOLD:
             available.append(i)
@@ -415,11 +388,8 @@ def detect_iluvatar(env):
     _, out, _ = _run(["ixsmi", "--query-gpu=name", "--format=csv,noheader"], env=env)
     count = sum(1 for line in out.splitlines() if line.strip())
     if count == 0:
-        hprint("No Iluvatar GPUs detected. Please ensure you have Iluvatar GPUs installed and properly configured.")
+        eprint("No Iluvatar GPUs detected. Please ensure you have Iluvatar GPUs installed and properly configured.")
         raise VendorCheckError()
-    hprint(f"Detected {count} Iluvatar GPU(s).")
-    _, table, _ = _run(["ixsmi"], env=env)  # original runs bare `ixsmi` to print the table
-    hprint(table.rstrip("\n"))
     return count
 
 
@@ -433,14 +403,12 @@ def sample_iluvatar(env, count):
     total = _csv_values(["ixsmi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"], env)
     gpus = []
     available = []
-    hprint(_table_header("GPU"))
     for i in range(count):
         if i >= len(usage) or i >= len(total):
             continue
         used_i = int(usage[i])
         total_i = int(total[i])
         free_i = total_i - used_i
-        hprint(_table_row(i, total_i, used_i, free_i))
         gpus.append({"index": i, "total": total_i, "used": used_i, "free": free_i})
         if free_i >= MEM_THRESHOLD:
             available.append(i)
@@ -452,9 +420,8 @@ def detect_kunlunxin(env):
     _, out, _ = _run(["xpu-smi"], env=env)
     count = sum(1 for line in out.splitlines() if "P800" in line)
     if count == 0:
-        hprint("No KLX GPUs detected. Please ensure you have KLX cards installed and properly configured.")
+        eprint("No KLX GPUs detected. Please ensure you have KLX cards installed and properly configured.")
         raise VendorCheckError()
-    hprint(f"Detected {count} KLX GPU(s).")
     return count
 
 
@@ -471,7 +438,6 @@ def sample_kunlunxin(env, count):
                 total.append(fields[10])
     gpus = []
     available = []
-    hprint(_table_header("GPU"))
     for i in range(count):
         if i >= len(total) or i >= len(usage):
             continue
@@ -479,7 +445,6 @@ def sample_kunlunxin(env, count):
         total_i = int(total[i][:-3])
         used_i = int(usage[i][:-3])
         free_i = total_i - used_i
-        hprint(_table_row(i, total_i, used_i, free_i))
         gpus.append({"index": i, "total": total_i, "used": used_i, "free": free_i})
         if free_i >= MEM_THRESHOLD:
             available.append(i)
@@ -490,7 +455,7 @@ def sample_kunlunxin(env, count):
 def detect_metax(env):
     rc, out, _ = _run(["mx-smi"], env=env)
     if rc == 127:
-        hprint("Failed to run mx-smi. Please check if mx-smi is installed and working correctly.")
+        eprint("Failed to run mx-smi. Please check if mx-smi is installed and working correctly.")
         raise VendorCheckError()
     count = None
     for line in out.splitlines():
@@ -500,16 +465,15 @@ def detect_metax(env):
                 count = fields[3]
             break
     if count is None:
-        hprint("Failed to run mx-smi. Please check if mx-smi is installed and working correctly.")
+        eprint("Failed to run mx-smi. Please check if mx-smi is installed and working correctly.")
         raise VendorCheckError()
     try:
         count = int(count)
     except ValueError:
         count = 0
     if count == 0:
-        hprint("No MetaX GPUs detected. Please ensure you have MetaX GPUs installed and properly configured.")
+        eprint("No MetaX GPUs detected. Please ensure you have MetaX GPUs installed and properly configured.")
         raise VendorCheckError()
-    hprint(f"Detected {count} MetaX GPU chip(s).")
     return count
 
 
@@ -524,7 +488,6 @@ def sample_metax(env, count):
     gpus = []
     available = []
     i = 0
-    hprint(_table_header("GPU"))
     for entry in entries:
         parts = entry.split("/")
         if len(parts) < 2 or not parts[0] or not parts[1]:
@@ -532,7 +495,6 @@ def sample_metax(env, count):
         used_i = int(parts[0])
         total_i = int(parts[1])
         free_i = total_i - used_i
-        hprint(_table_row(i, total_i, used_i, free_i))
         gpus.append({"index": i, "total": total_i, "used": used_i, "free": free_i})
         if free_i >= MEM_THRESHOLD:
             available.append(i)
@@ -545,9 +507,8 @@ def detect_mthreads(env):
     _, out, _ = _run(["mthreads-gmi", "-L"], env=env)
     count = sum(1 for line in out.splitlines() if "GPU " in line)
     if count == 0:
-        hprint("No Moore Threads GPUs detected. Please ensure you have GPUs installed and properly configured.")
+        eprint("No Moore Threads GPUs detected. Please ensure you have GPUs installed and properly configured.")
         raise VendorCheckError()
-    hprint(f"Detected {count} Moore Threads GPU(s).")
     return count
 
 
@@ -563,7 +524,6 @@ def _mthreads_field(section_lines, keyword):
 def sample_mthreads(env, count):
     gpus = []
     available = []
-    hprint(_table_header("GPU"))
     for i in range(count):
         _, out, _ = _run(["mthreads-gmi", "-q", "-d", "MEMORY", "-i", str(i)], env=env)
         lines = out.splitlines()
@@ -575,12 +535,11 @@ def sample_mthreads(env, count):
         total_s = _mthreads_field(section, "Total")
         used_s = _mthreads_field(section, "Used")
         if not used_s or not total_s:
-            hprint(f"Warning: Failed to query GPU {i} memory information.")
+            eprint(f"Warning: Failed to query GPU {i} memory information.")
             continue
         total_i = int(total_s)
         used_i = int(used_s)
         free_i = total_i - used_i
-        hprint(_table_row(i, total_i, used_i, free_i))
         gpus.append({"index": i, "total": total_i, "used": used_i, "free": free_i})
         if free_i >= MEM_THRESHOLD:
             available.append(i)
@@ -591,71 +550,68 @@ def sample_mthreads(env, count):
 def detect_sunrise(env):
     rc, out, _ = _run(["pt_smi"], env=env)
     if rc == 127:
-        hprint("Failed to run pt_smi. Please check if pt_smi is installed and working correctly.")
+        eprint("Failed to run pt_smi. Please check if pt_smi is installed and working correctly.")
         raise VendorCheckError()
-    count = len(re.findall(r"\d+B / \d+MiB", out))
+    count = len(_sunrise_memory(out))
     if count == 0:
-        hprint("No Sunrise GPUs detected. Please ensure you have Sunrise GPUs installed and properly configured.")
+        eprint("No Sunrise GPUs detected. Please ensure you have Sunrise GPUs installed and properly configured.")
         raise VendorCheckError()
-    hprint(f"Detected {count} Sunrise GPU chip(s).")
     return count
+
+
+def _sunrise_memory(text):
+    return re.findall(
+        r"(\d+(?:\.\d+)?)\s*(B|KiB|MiB|GiB)\s*/\s*"
+        r"(\d+(?:\.\d+)?)\s*(B|KiB|MiB|GiB)", text,
+    )
+
+
+def _to_mib(value, unit, rounding):
+    scale = {"B": 1, "KiB": 1024, "MiB": 1024**2, "GiB": 1024**3}[unit]
+    return int((Decimal(value) * scale / 1024**2).to_integral_value(rounding=rounding))
 
 
 def sample_sunrise(env, count):
     _, out, _ = _run(["pt_smi"], env=env)
-    lines = re.findall(r"\d+B / \d+MiB", out)
+    lines = _sunrise_memory(out)
     gpus = []
     available = []
-    i = 0
-    hprint(_table_header("GPU"))
-    for line in lines:
-        # Matches the original: used is the leading "<n>B" value, total the
-        # "<n>MiB" value (units are left as-is, mirroring the shell script).
-        used_m = re.match(r"^\d+", line)
-        total_m = re.search(r"\d+(?=MiB)", line)
-        if not used_m or not total_m:
-            hprint(f"Warning: Failed to parse memory info for chip {i}.")
-            i += 1
-            continue
-        used = int(used_m.group(0))
-        total = int(total_m.group(0))
+    for i, (used_s, used_unit, total_s, total_unit) in enumerate(lines):
+        # Round usage up to whole MiB so availability is conservative.
+        used = _to_mib(used_s, used_unit, ROUND_CEILING)
+        total = _to_mib(total_s, total_unit, ROUND_FLOOR)
         free = total - used
-        hprint(_table_row(i, total, used, free))
         gpus.append({"index": i, "total": total, "used": used, "free": free})
         if free >= MEM_THRESHOLD:
             available.append(i)
-        i += 1
     return gpus, available
 
 
 # ---- thead ---------------------------------------------------------------- #
 def detect_thead(env):
     if shutil.which("ppu-smi", path=env.get("PATH")) is None:
-        hprint("Error: ppu-smi command not found.")
+        eprint("Error: ppu-smi command not found.")
         raise VendorCheckError()
     _, out, _ = _run(["ppu-smi", "-L"], env=env)
     count = sum(1 for line in out.splitlines() if "PPU-" in line)
     if count == 0:
-        hprint("No T-Head PPU cards detected.")
+        eprint("No T-Head PPU cards detected.")
         raise VendorCheckError()
-    hprint(f"Detected {count} T-Head PPU card(s).")
     return count
 
 
 def sample_thead(env, count):
     gpus = []
     available = []
-    hprint(_table_header("PPU"))
     for i in range(count):
         _, out, _ = _run(["ppu-smi", "-i", str(i)], env=env)
         m = re.search(r"(\d+)MiB\s*/\s*(\d+)MiB", out)
         if not m:
-            hprint(f"Warning: Failed to query PPU {i} memory.")
+            eprint(f"Warning: Failed to query PPU {i} memory.")
             continue
         used = int(m.group(1))
         total = int(m.group(2))
         free = total - used
-        hprint(_table_row(i, total, used, free))
         gpus.append({"index": i, "total": total, "used": used, "free": free})
         if free >= MEM_THRESHOLD:
             available.append(i)
@@ -677,9 +633,8 @@ def detect_tsingmicro(env):
     except ValueError:
         count = 0
     if count == 0:
-        hprint("No TsingMicro cards detected. Please ensure you have TsingMicro cards installed and properly configured.")
+        eprint("No TsingMicro cards detected. Please ensure you have TsingMicro cards installed and properly configured.")
         raise VendorCheckError()
-    hprint(f"Detected {count} TsingMicro card(s).")
     return count
 
 
@@ -702,7 +657,6 @@ def sample_tsingmicro(env, count):
             total.append(fields[12])
     gpus = []
     available = []
-    hprint(_table_header("GPU"))
     for i in range(count):
         if i >= len(total) or i >= len(usage):
             continue
@@ -710,7 +664,6 @@ def sample_tsingmicro(env, count):
         total_i = int(total[i][:-1])
         used_i = int(usage[i][:-1])
         free_i = total_i - used_i
-        hprint(_table_row(i, total_i, used_i, free_i))
         gpus.append({"index": i, "total": total_i, "used": used_i, "free": free_i})
         if free_i >= MEM_THRESHOLD:
             available.append(i)
@@ -835,32 +788,56 @@ def run_vendor_check(key):
     env = _vendor_env(key)
     unit = vendor["unit"]
     count = vendor["detect"](env)
+    def metadata_run(cmd, env):
+        return _run(cmd, env=env, timeout=5)
+
+    metadata = collect_metadata(key, env, metadata_run)
     waited = 0
     while True:
         gpus, available = vendor["sample"](env, count)
         if available:
             avail_str = ",".join(str(i) for i in available)
-            hprint(f"Available GPUs: {avail_str}")
             return {
                 "vendor": key,
+                **metadata,
                 "unit": unit,
+                "device_count": count if count is not None else len(gpus),
+                "memory_unit": "MiB",
                 "available_gpus": avail_str,
-                "gpus": gpus,
+                "gpus": [
+                    {"id": g["index"], "total": g["total"],
+                     "used": g["used"], "free": g["free"]}
+                    for g in gpus
+                ],
             }
-        hprint(f"No {unit} has sufficient memory, waiting for {SLEEP_TIME} seconds...")
+        eprint(f"No {unit} has sufficient memory, waiting for {SLEEP_TIME} seconds...")
         time.sleep(SLEEP_TIME)
         waited += SLEEP_TIME
         if waited >= MAX_WAIT:
-            hprint(f"Error: Timed out waiting for available {unit}.")
+            eprint(f"Error: Timed out waiting for available {unit}.")
             raise VendorCheckError()
 
 
 def render_text(result):
-    """Reproduce the human-readable summary for a saved text file."""
-    lines = [f"Available Vendor: {result['vendor']}", _table_header(result["unit"])]
+    """Render the same concise summary for stdout and saved text files."""
+    lines = [f"Vendor: {result['vendor']}"]
+    for label, field in (
+        ("Device", "device"),
+        ("Driver", "driver"),
+        ("Runtime", "runtime"),
+        ("Runtime Version", "runtime_version"),
+    ):
+        lines.append(f"{label}: {result[field] or 'unknown'}")
+    device = f" {result['device']}" if result["device"] else ""
+    lines.extend([
+        (f"Detected {result['device_count']} {VENDOR_NAMES[result['vendor']]}"
+         f"{device} {result['unit']}(s)."),
+        f"Available GPUs: {result['available_gpus']}",
+        "GPUs Usage:",
+        _table_header(result["unit"]),
+    ])
     for g in result["gpus"]:
-        lines.append(_table_row(g["index"], g["total"], g["used"], g["free"]))
-    lines.append(f"Available GPUs: {result['available_gpus']}")
+        lines.append(_table_row(g["id"], g["total"], g["used"], g["free"]))
     return "\n".join(lines) + "\n"
 
 
@@ -873,15 +850,13 @@ def render_output(result, fmt):
 
 
 def main():
-    global _HUMAN
-
     parser = argparse.ArgumentParser(
         prog="flagos-gpu-check",
         description="Probe the host GPU vendor and report available GPUs.",
     )
     parser.add_argument(
         "-f", "--format", choices=["text", "json", "yaml"], default="text",
-        help="output format (default: text, matching the original scripts)",
+        help="output format (default: text); diagnostics always go to stderr",
     )
     parser.add_argument(
         "-o", "--output", metavar="PATH",
@@ -889,15 +864,9 @@ def main():
     )
     parser.add_argument(
         "--vendor", choices=sorted(VENDORS), metavar="VENDOR",
-        help="skip auto-probe and force a specific vendor "
-             "(one of: %s)" % ", ".join(sorted(VENDORS)),
+        help=f"skip auto-probe and force a specific vendor (one of: {', '.join(sorted(VENDORS))})",
     )
     args = parser.parse_args()
-
-    # In json/yaml mode keep stdout clean for the structured document by routing
-    # all human/progress output (including the vendor line and tables) to stderr.
-    if args.format != "text":
-        _HUMAN = sys.stderr
 
     if args.vendor:
         key = args.vendor
@@ -907,28 +876,21 @@ def main():
             eprint("Error: no supported vendor GPU detected on this host.")
             return 1
 
-    hprint(f"Available Vendor: {key}")
-
     try:
         result = run_vendor_check(key)
     except VendorCheckError:
         return 1
 
-    if args.format == "text":
-        # The human-readable table + "Available GPUs:" line already streamed to
-        # stdout above; only write the summary file when requested.
-        if args.output:
-            with open(args.output, "w", encoding="utf-8") as fh:
-                fh.write(render_text(result))
-            eprint(f"[saved] {args.output}")
-    else:
-        rendered = render_output(result, args.format)
-        if args.output:
-            with open(args.output, "w", encoding="utf-8") as fh:
+    rendered = render_output(result, args.format)
+    if args.output:
+        try:
+            with open(args.output, "w", encoding="utf-8", newline="\n") as fh:
                 fh.write(rendered)
-            eprint(f"[saved] {args.output}")
-        else:
-            sys.stdout.write(rendered)
+        except OSError as exc:
+            eprint(f"Error: cannot write {args.output}: {exc}")
+            return 1
+    else:
+        sys.stdout.write(rendered)
 
     return 0
 

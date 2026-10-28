@@ -1,0 +1,82 @@
+{
+  "vendor": "cambricon",
+  "image": "harbor.baai.ac.cn/flaggems/flaggems-test-cambricon-mlu590-m9de:20260929",
+  "environment": {
+    "NEUWARE_HOME": "/usr/local/neuware"
+  },
+  "commands": [
+    {
+      "argv": [
+        "cnmon"
+      ],
+      "returncode": 0,
+      "stdout": "+------------------------------------------------------------------------------+\n| CNMON v6.2.15                                                 Driver v6.2.15 |\n+-------------------------------+----------------------+-----------------------+\n| Card  VF  Name       Firmware |               Bus-Id | Util        Ecc-Error |\n| Module-Id Temp  Pwr:Usage/Cap |         Memory-Usage | Mode     Compute-Mode |\n|===============================+======================+=======================|\n| 0     /   MLU590-M9DE  v1.1.0 |         0000:00:00.0 | 0%                  0 |\n| 7         52C     87 W/ 500 W |     0 MiB/ 81920 MiB | FULL          Default |\n+-------------------------------+----------------------+-----------------------+\n| 1     /   MLU590-M9DE  v1.1.0 |         0000:00:00.0 | 0%                  0 |\n| 6         46C     85 W/ 500 W |     0 MiB/ 81920 MiB | FULL          Default |\n+-------------------------------+----------------------+-----------------------+\n| 2     /   MLU590-M9DE  v1.1.0 |         0000:00:00.0 | 0%                  0 |\n| 5         46C     89 W/ 500 W |     0 MiB/ 81920 MiB | FULL          Default |\n+-------------------------------+----------------------+-----------------------+\n| 3     /   MLU590-M9DE  v1.1.0 |         0000:00:00.0 | 0%                  0 |\n| 4         52C     88 W/ 500 W |     0 MiB/ 81920 MiB | FULL          Default |\n+-------------------------------+----------------------+-----------------------+\n| 4     /   MLU590-M9DE  v1.1.0 |         0000:00:00.0 | 0%                  0 |\n| 2         45C     87 W/ 500 W |     0 MiB/ 81920 MiB | FULL          Default |\n+-------------------------------+----------------------+-----------------------+\n| 5     /   MLU590-M9DE  v1.1.0 |         0000:00:00.0 | 0%                  0 |\n| 3         52C     89 W/ 500 W |     0 MiB/ 81920 MiB | FULL          Default |\n+-------------------------------+----------------------+-----------------------+\n| 6     /   MLU590-M9DE  v1.1.0 |         0000:ab:00.0 | 0%                  0 |\n| 0         53C     92 W/ 500 W |     0 MiB/ 81920 MiB | FULL          Default |\n+-------------------------------+----------------------+-----------------------+\n| 7     /   MLU590-M9DE  v1.1.0 |         0000:ab:00.0 | 0%                  0 |\n| 1         47C     87 W/ 500 W |     0 MiB/ 81920 MiB | FULL          Default |\n+-------------------------------+----------------------+-----------------------+\n\n+------------------------------------------------------------------------------+\n| Processes:                                                                   |\n|  Card  MI  PID     Command Line                             MLU Memory Usage |\n|==============================================================================|\n|  No running processes found                                                  |\n+------------------------------------------------------------------------------+\n\n\n",
+      "stderr": ""
+    }
+  ],
+  "files": {
+    "/usr/local/neuware/version.txt": "Neuware Version 4.7.6\n"
+  },
+  "expected": {
+    "vendor": "cambricon",
+    "device": "MLU590-M9DE",
+    "driver": "6.2.15",
+    "runtime": "neuware",
+    "runtime_version": "4.7.6",
+    "unit": "MLU",
+    "memory_unit": "MiB",
+    "device_count": 8,
+    "gpus": [
+      {
+        "id": 0,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 1,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 2,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 3,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 4,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 5,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 6,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      },
+      {
+        "id": 7,
+        "total": 81920,
+        "used": 0,
+        "free": 81920
+      }
+    ],
+    "available_gpus": "0,1,2,3,4,5,6,7"
+  },
+  "text": "Vendor: cambricon\nDevice: MLU590-M9DE\nDriver: 6.2.15\nRuntime: neuware\nRuntime Version: 4.7.6\nDetected 8 Cambricon MLU590-M9DE MLU(s).\nAvailable GPUs: 0,1,2,3,4,5,6,7\nGPUs Usage:\n MLU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       81,920           0      81,920\n   1       81,920           0      81,920\n   2       81,920           0      81,920\n   3       81,920           0      81,920\n   4       81,920           0      81,920\n   5       81,920           0      81,920\n   6       81,920           0      81,920\n   7       81,920           0      81,920\n"
+}

@@ -320,126 +320,185 @@ when a specific implementation must be checked.
 
 | Option | Purpose and typical use |
 | --- | --- |
-| `-f, --format text` | Human-readable progress and memory table. This is the default and is best for interactive use and CI logs. |
-| `-f, --format json` | Machine-readable output for workflow parsing. Progress remains visible on stderr while stdout contains only JSON. |
-| `-f, --format yaml` | Structured output for configuration-oriented tools and inspection. Progress remains on stderr. |
-| `-o, --output PATH` | Save the final rendered result in the selected format. In text mode, progress still streams to stdout. |
-| `--vendor VENDOR` | Skip auto-detection and force one of the supported vendor keys below. |
+| `-f, --format text` | Concise device, driver, runtime and memory summary (default). |
+| `-f, --format json` | A single JSON document on stdout, suitable for direct parsing or redirection. |
+| `-f, --format yaml` | A single YAML document on stdout. |
+| `-o, --output PATH` | Write the same final document to a UTF-8 file instead of stdout, in any format. |
+| `--vendor VENDOR` | Skip auto-detection and force a supported vendor key below. |
 | `-h, --help` | Show command help. |
 
-Supported vendors:
+Successful checks print no raw management-tool tables, timestamps or process
+lists. Retry messages, warnings and errors go only to stderr in every format.
+With `--output`, stdout is empty. Failures exit nonzero without emitting a
+partial result document.
 
-| Vendor key | Accelerator vendor | Management command | Reported unit |
-| --- | --- | --- | --- |
-| `amd` | AMD | `rocm-smi` | GPU |
-| `ascend` | Huawei Ascend | `npu-smi` | NPU |
-| `cambricon` | Cambricon | `cnmon` | MLU |
-| `enflame` | Enflame | `efsmi` | GPU |
-| `hygon` | Hygon | `hy-smi` | DCU |
-| `iluvatar` | Iluvatar CoreX | `ixsmi` | GPU |
-| `kunlunxin` | KunlunXin | `xpu-smi` | GPU |
-| `metax` | MetaX | `mx-smi` | GPU |
-| `mthreads` | Moore Threads | `mthreads-gmi` | GPU |
-| `nvidia` | NVIDIA | `nvidia-smi` | GPU |
-| `sunrise` | Sunrise | `pt_smi` | GPU |
-| `thead` | T-Head | `ppu-smi` | PPU |
-| `tsingmicro` | TsingMicro | `tsm_smi` | GPU |
+### Device and runtime metadata
 
-Examples:
+The name `runtime` identifies the vendor software environment installed in the
+container for FlagGems, FlagTree and similar consumers. It is an umbrella term
+for the distribution, which can also include SDK headers, compilers and
+libraries. `runtime_version` is its release version; `driver` describes
+the host driver separately.
+
+| Vendor key | Accelerator vendor | Management command | Unit | Runtime |
+| --- | --- | --- | --- | --- |
+| `amd` | AMD | `rocm-smi` | GPU | `rocm` |
+| `ascend` | Huawei Ascend | `npu-smi` | NPU | `cann` |
+| `cambricon` | Cambricon | `cnmon` | MLU | `neuware` |
+| `enflame` | Enflame | `efsmi` | GPU | `tops` |
+| `hygon` | Hygon | `hy-smi` | DCU | `dtk` |
+| `iluvatar` | Iluvatar | `ixsmi` | GPU | `corex` |
+| `kunlunxin` | KunlunXin | `xpu-smi` | GPU | `xre` |
+| `metax` | MetaX | `mx-smi` | GPU | `maca` |
+| `mthreads` | Moore Threads | `mthreads-gmi` | GPU | `musa` |
+| `nvidia` | NVIDIA | `nvidia-smi` | GPU | `cuda` |
+| `sunrise` | Sunrise | `pt_smi` | GPU | `tangrt` |
+| `thead` | T-Head | `ppu-smi` | PPU | `ppu` |
+| `tsingmicro` | TsingMicro | `tsm_smi` | GPU | `tsm` |
+
+Metadata is best effort and does not require importing PyTorch or vendor
+Python modules. Model and driver information comes from management-tool
+queries; Ascend also checks its driver installation metadata. Device names
+omit known vendor and form-factor decorations, for example
+`Iluvatar BI-V150 OAM` becomes `BI-V150`. Distinct models or driver versions on
+a mixed host are joined with `, ` rather than silently selecting the first.
+
+Runtime versions are read from distribution metadata such as `version.json`,
+`version.txt`, `version`, `VERSION` and `.info/version` under the installation
+root. CANN also checks `ascend_toolkit_install.info`, `version.cfg` and the
+CANN 9 `share/info/runtime/version.info` distribution manifest, not tool
+component versions or dependency requirements. T-Head reads the PPU SDK's
+`release.yaml`, independently of the `ppu-smi` tool version. XRE
+prefers `XPURT_VERSION_STR` in `include/xpu/version.h`, avoiding driver
+compatibility versions in `version.txt`, and also checks its `xre/` subdirectory.
+Explicit installation environment variables
+(such as `COREX_ROOT`, `DTKROOT`, `CUDA_HOME`, `ASCEND_HOME_PATH`, `MACA_PATH` and
+`MUSA_INSTALL_PATH`) take priority over conventional installation directories.
+CUDA additionally supports `nvcc --version` and the `cuda-libraries-*`
+distribution package in runtime-only images. CoreX releases are read from the
+vendor build string in `bin/clang --version`, DTK from `.dtk_version`, MUSA
+from `musa_toolkits.version` in `version.json`, and TOPS from the `topsruntime`
+package. TsingMicro exposes separate driver and runtime versions through
+`tsm_smi --version`; other vendors can supply an explicit runtime-labelled
+version in their management-tool output.
+
+The CUDA compatibility version in an SMI header is **not** the installed CUDA
+release. Likewise, IX-ML and the Iluvatar driver's CUDA compatibility version
+are **not** the CoreX release. Missing metadata is `null` in JSON/YAML and
+`unknown` in text; it does not prevent checking memory availability. Runtime
+images that omit these metadata sources may therefore report an unknown
+version.
+
+Real-output regression captures and the verified hardware/runtime matrix are
+listed in [tests/fixtures/gpu_check](tests/fixtures/gpu_check/README.md).
+
+JSON and YAML share these fields:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vendor` | string | Stable vendor key from the table above. |
+| `device` | string or null | Normalized device model, e.g. `BI-V150`, `H800`, `MTT-S5000`, `C500`. |
+| `driver` | string or null | Installed driver release reported by the vendor. |
+| `runtime` | string | Vendor software environment name, e.g. `corex`, `cuda`, `cann`. |
+| `runtime_version` | string or null | Installed environment release, independent of the host driver. |
+| `unit` | string | Accelerator unit, e.g. GPU, NPU or DCU. |
+| `device_count` | integer | Number of detected devices. |
+| `memory_unit` | string | Always `MiB`; applies to all per-device memory values. |
+| `available_gpus` | string | Comma-separated available indices; retained for existing CI consumers. |
+| `gpus` | array | Entries with integer `id`, `total`, `used` and `free` fields. `id` is the device index used in `available_gpus`; existing memory keys are preserved. |
+
+The GPU-check schema uses `device`, `driver` and per-device `id` (not
+`device_name`, `driver_version` or `index`). The existing `available_gpus` name
+is retained for CI compatibility; `unit` identifies the vendor's accelerator
+type even when it is called NPU, DCU, MLU or PPU.
+
+### Examples
 
 ```bash
-# Auto-detect the vendor and print a human-readable table.
+# Auto-detect the vendor and print a human-readable summary.
 flagos-gpu-check
 
-# Produce clean JSON on stdout for a CI parser.
-flagos-gpu-check --format json
+# Either form produces a standard JSON file.
+flagos-gpu-check --format json > gpu-status.json
+flagos-gpu-check --format json --output gpu-status.json
 
-# Save YAML while retaining progress messages on stderr.
-flagos-gpu-check --format yaml --output /tmp/gpu-status.yaml
+# YAML supports both redirection and --output too.
+flagos-gpu-check --format yaml --output gpu-status.yaml
 
-# Force a vendor when device-node auto-detection is not available.
+# Force a vendor when device-node auto-detection is unavailable.
 flagos-gpu-check --vendor ascend
 ```
 
-### NVIDIA output example
-
-This is the complete text output captured from an eight-device NVIDIA H800
-runner. Memory usage changes over time, so the values on another host will
-differ.
+The following representative two-device Iluvatar example illustrates separate
+driver and container runtime versions. Counts, versions and memory usage vary
+by host.
 
 ```text
-Available Vendor: nvidia
-Detected 8 NVIDIA GPU card(s).
+Vendor: iluvatar
+Device: BI-V150
+Driver: 5.0.0
+Runtime: corex
+Runtime Version: 4.5.0
+Detected 2 Iluvatar BI-V150 GPU(s).
+Available GPUs: 0,1
+GPUs Usage:
  GPU  Total (MiB)  Used (MiB)  Free (MiB)
-   0       81,559           0      81,559
-   1       81,559           0      81,559
-   2       81,559           0      81,559
-   3       81,559           0      81,559
-   4       81,559           0      81,559
-   5       81,559           0      81,559
-   6       81,559           0      81,559
-   7       81,559           0      81,559
-Available GPUs: 0,1,2,3,4,5,6,7
+   0       32,768          68      32,700
+   1       32,768          68      32,700
 ```
 
-The same run with `--format json` produces this structured result on stdout:
+With `--format json`:
 
 ```json
 {
-  "vendor": "nvidia",
+  "vendor": "iluvatar",
+  "device": "BI-V150",
+  "driver": "5.0.0",
+  "runtime": "corex",
+  "runtime_version": "4.5.0",
   "unit": "GPU",
-  "available_gpus": "0,1,2,3,4,5,6,7",
+  "device_count": 2,
+  "memory_unit": "MiB",
+  "available_gpus": "0,1",
   "gpus": [
     {
-      "index": 0,
-      "total": 81559,
-      "used": 0,
-      "free": 81559
+      "id": 0,
+      "total": 32768,
+      "used": 68,
+      "free": 32700
     },
     {
-      "index": 1,
-      "total": 81559,
-      "used": 0,
-      "free": 81559
-    },
-    {
-      "index": 2,
-      "total": 81559,
-      "used": 0,
-      "free": 81559
-    },
-    {
-      "index": 3,
-      "total": 81559,
-      "used": 0,
-      "free": 81559
-    },
-    {
-      "index": 4,
-      "total": 81559,
-      "used": 0,
-      "free": 81559
-    },
-    {
-      "index": 5,
-      "total": 81559,
-      "used": 0,
-      "free": 81559
-    },
-    {
-      "index": 6,
-      "total": 81559,
-      "used": 0,
-      "free": 81559
-    },
-    {
-      "index": 7,
-      "total": 81559,
-      "used": 0,
-      "free": 81559
+      "id": 1,
+      "total": 32768,
+      "used": 68,
+      "free": 32700
     }
   ]
 }
+```
+
+With `--format yaml` (versions remain strings, including values such as
+`26.04`):
+
+```yaml
+vendor: iluvatar
+device: BI-V150
+driver: 5.0.0
+runtime: corex
+runtime_version: 4.5.0
+unit: GPU
+device_count: 2
+memory_unit: MiB
+available_gpus: 0,1
+gpus:
+- id: 0
+  total: 32768
+  used: 68
+  free: 32700
+- id: 1
+  total: 32768
+  used: 68
+  free: 32700
 ```
 
 ## Target Repository Test Dependencies

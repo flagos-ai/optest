@@ -1,0 +1,103 @@
+{
+  "vendor": "hygon",
+  "image": "harbor.baai.ac.cn/flagos-app/vllm0.24.0-hygon-dtk26.04:2.2.0-0.3.0",
+  "environment": {
+    "ROCM_PATH": "/opt/dtk",
+    "DTKROOT": "/opt/dtk"
+  },
+  "commands": [
+    {
+      "argv": [
+        "hy-smi"
+      ],
+      "returncode": 0,
+      "stdout": "\n================================= System Management Interface ==================================\n================================================================================================\nHCU     Temp     AvgPwr     Perf     PwrCap     VRAM%      HCU%      Dec%      Enc%      Mode     \n0       36.0C    132.0W     auto     800.0W     0%         0.0%      0.0%      0.0%      Normal   \n1       36.0C    132.0W     auto     800.0W     0%         0.0%      0.0%      0.0%      Normal   \n2       32.0C    132.0W     auto     800.0W     0%         0.0%      0.0%      0.0%      Normal   \n3       32.0C    132.0W     auto     800.0W     0%         0.0%      0.0%      0.0%      Normal   \n4       37.0C    132.0W     auto     800.0W     0%         0.0%      0.0%      0.0%      Normal   \n5       37.0C    132.0W     auto     800.0W     0%         0.0%      0.0%      0.0%      Normal   \n6       35.0C    132.0W     auto     800.0W     0%         0.0%      0.0%      0.0%      Normal   \n7       34.0C    132.0W     auto     800.0W     0%         0.0%      0.0%      0.0%      Normal   \n================================================================================================\n======================================== End of SMI Log ========================================\n\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "hy-smi",
+        "--showproductname",
+        "--showdriverversion"
+      ],
+      "returncode": 0,
+      "stdout": "\n================================= System Management Interface ==================================\n================================================================================================\nDriver Version: 6.3.30-V1.4.1a\n================================================================================================\n================================================================================================\nHCU[0]\t\t: Card Series:\t\t BW200, UBB BW1000\nHCU[0]\t\t: Card Vendor:\t\t C-3000 IC Design Co., Ltd.\nHCU[1]\t\t: Card Series:\t\t BW200, UBB BW1000\nHCU[1]\t\t: Card Vendor:\t\t C-3000 IC Design Co., Ltd.\nHCU[2]\t\t: Card Series:\t\t BW200, UBB BW1000\nHCU[2]\t\t: Card Vendor:\t\t C-3000 IC Design Co., Ltd.\nHCU[3]\t\t: Card Series:\t\t BW200, UBB BW1000\nHCU[3]\t\t: Card Vendor:\t\t C-3000 IC Design Co., Ltd.\nHCU[4]\t\t: Card Series:\t\t BW200, UBB BW1000\nHCU[4]\t\t: Card Vendor:\t\t C-3000 IC Design Co., Ltd.\nHCU[5]\t\t: Card Series:\t\t BW200, UBB BW1000\nHCU[5]\t\t: Card Vendor:\t\t C-3000 IC Design Co., Ltd.\nHCU[6]\t\t: Card Series:\t\t BW200, UBB BW1000\nHCU[6]\t\t: Card Vendor:\t\t C-3000 IC Design Co., Ltd.\nHCU[7]\t\t: Card Series:\t\t BW200, UBB BW1000\nHCU[7]\t\t: Card Vendor:\t\t C-3000 IC Design Co., Ltd.\n================================================================================================\n======================================== End of SMI Log ========================================\n\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "hy-smi",
+        "--showmeminfo",
+        "vram"
+      ],
+      "returncode": 0,
+      "stdout": "\n================================= System Management Interface ==================================\n================================================================================================\nHCU[0]\t\t: vram Total Memory (MiB): 65520\nHCU[0]\t\t: vram Total Used Memory (MiB): 2\nHCU[1]\t\t: vram Total Memory (MiB): 65520\nHCU[1]\t\t: vram Total Used Memory (MiB): 2\nHCU[2]\t\t: vram Total Memory (MiB): 65520\nHCU[2]\t\t: vram Total Used Memory (MiB): 2\nHCU[3]\t\t: vram Total Memory (MiB): 65520\nHCU[3]\t\t: vram Total Used Memory (MiB): 2\nHCU[4]\t\t: vram Total Memory (MiB): 65520\nHCU[4]\t\t: vram Total Used Memory (MiB): 2\nHCU[5]\t\t: vram Total Memory (MiB): 65520\nHCU[5]\t\t: vram Total Used Memory (MiB): 2\nHCU[6]\t\t: vram Total Memory (MiB): 65520\nHCU[6]\t\t: vram Total Used Memory (MiB): 2\nHCU[7]\t\t: vram Total Memory (MiB): 65520\nHCU[7]\t\t: vram Total Used Memory (MiB): 2\n================================================================================================\n======================================== End of SMI Log ========================================\n\n",
+      "stderr": ""
+    }
+  ],
+  "files": {
+    "/opt/dtk/.dtk_version": "DTK-26.04-rc4\n"
+  },
+  "expected": {
+    "vendor": "hygon",
+    "device": "BW1000",
+    "driver": "6.3.30-V1.4.1a",
+    "runtime": "dtk",
+    "runtime_version": "26.04-rc4",
+    "unit": "DCU",
+    "memory_unit": "MiB",
+    "device_count": 8,
+    "gpus": [
+      {
+        "id": 0,
+        "total": 65520,
+        "used": 2,
+        "free": 65518
+      },
+      {
+        "id": 1,
+        "total": 65520,
+        "used": 2,
+        "free": 65518
+      },
+      {
+        "id": 2,
+        "total": 65520,
+        "used": 2,
+        "free": 65518
+      },
+      {
+        "id": 3,
+        "total": 65520,
+        "used": 2,
+        "free": 65518
+      },
+      {
+        "id": 4,
+        "total": 65520,
+        "used": 2,
+        "free": 65518
+      },
+      {
+        "id": 5,
+        "total": 65520,
+        "used": 2,
+        "free": 65518
+      },
+      {
+        "id": 6,
+        "total": 65520,
+        "used": 2,
+        "free": 65518
+      },
+      {
+        "id": 7,
+        "total": 65520,
+        "used": 2,
+        "free": 65518
+      }
+    ],
+    "available_gpus": "0,1,2,3,4,5,6,7"
+  },
+  "text": "Vendor: hygon\nDevice: BW1000\nDriver: 6.3.30-V1.4.1a\nRuntime: dtk\nRuntime Version: 26.04-rc4\nDetected 8 Hygon BW1000 DCU(s).\nAvailable GPUs: 0,1,2,3,4,5,6,7\nGPUs Usage:\n DCU  Total (MiB)  Used (MiB)  Free (MiB)\n   0       65,520           2      65,518\n   1       65,520           2      65,518\n   2       65,520           2      65,518\n   3       65,520           2      65,518\n   4       65,520           2      65,518\n   5       65,520           2      65,518\n   6       65,520           2      65,518\n   7       65,520           2      65,518\n"
+}

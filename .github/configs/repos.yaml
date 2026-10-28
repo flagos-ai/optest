@@ -94,7 +94,7 @@ repos:
       P800: {enabled: true}
       W7900D: {enabled: false}
       TX8110: {enabled: false}
-      S60: {enabled: false}   # Enflame disabled outside FlagGems for now.
+      S60: {enabled: true}
 
   # =========================================================================
   FlagGems-sglang:
@@ -122,7 +122,7 @@ repos:
       P800: {enabled: true}
       W7900D: {enabled: false}
       TX8110: {enabled: false}
-      S60: {enabled: false}   # Enflame disabled outside FlagGems for now.
+      S60: {enabled: true}
 
   # =========================================================================
   FlagAttention:

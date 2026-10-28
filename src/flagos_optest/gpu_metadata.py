@@ -68,7 +68,7 @@ MODELS = {
     "kunlunxin": r"\b(?:P\d{3,4}[A-Z]*|R\d{3,4}[A-Z]*)\b",
     "metax": r"\bC\d{3,4}[A-Z]*\b",
     "mthreads": r"\bMTT[-\s]+S\d+[A-Z]*\b",
-    "sunrise": r"\b(?:Sunrise[-\s]+)?(P(?:T)?\d{3,4}[A-Z]*)\b",
+    "sunrise": r"\b(?:Sunrise[-\s]+)?(S\d+|P(?:T)?\d{3,4}[A-Z]*)\b",
     "thead": r"\bPPU-[A-Z0-9-]+\b",
     "tsingmicro": r"\bTX\d+[A-Z]*\b",
 }

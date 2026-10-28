@@ -165,6 +165,7 @@ Available GPUs: 0,1
             ("metax", "| 0 MetaX C500 |", "C500", "maca", "3.8.1.3"),
             ("mthreads", "GPU 0: MTT S5000", "MTT-S5000", "musa", "5.2.0"),
             ("sunrise", "Device Name: Sunrise P1000", "P1000", "tangrt", "1.0.0"),
+            ("sunrise", "Device Name: Sunrise SR-SUN-S2-X1", "S2", "tangrt", "1.0.0"),
             ("thead", "GPU 0: PPU-ZW810E", "PPU-ZW810E", "ppu", "2.0.0"),
             ("tsingmicro", "| TX8110 |", "TX8110", "tsm", "1.0.0"),
         ]

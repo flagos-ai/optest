@@ -565,10 +565,13 @@ def _probe_accelerator():
     metadata = probe_accelerator_metadata()
     ENV_INFO.update(metadata)
     pinfo(
-        "Accelerator metadata ... "
-        f"vendor={metadata['vendor']} device={metadata['device']} "
-        f"driver={metadata['driver']} runtime={metadata['runtime']} "
-        f"runtime_version={metadata['runtime_version']}"
+        f"Accelerator ... {metadata['vendor'] or 'unknown'} / "
+        f"{metadata['device'] or 'unknown'}"
+    )
+    pinfo(f"Driver ... {metadata['driver'] or 'unknown'}")
+    pinfo(
+        f"Runtime ... {metadata['runtime'] or 'unknown'} "
+        f"{metadata['runtime_version'] or 'unknown'}"
     )
 
 

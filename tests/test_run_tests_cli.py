@@ -234,15 +234,24 @@ class AcceleratorMetadataTest(unittest.TestCase):
             "runtime": "cuda",
             "runtime_version": "13.3.0",
         }
+        output = io.StringIO()
         with mock.patch.object(
             run_tests, "probe_accelerator_metadata", return_value=expected
         ), mock.patch.object(run_tests, "ENV_INFO", {}) as env, redirect_stdout(
-            io.StringIO()
+            output
         ):
             run_tests._probe_accelerator()
 
         self.assertEqual(env, expected)
         self.assertNotIn("sdk", env)
+        self.assertEqual(
+            output.getvalue().splitlines(),
+            [
+                "[INFO] Accelerator ... nvidia / H800",
+                "[INFO] Driver ... 610.57.04",
+                "[INFO] Runtime ... cuda 13.3.0",
+            ],
+        )
 
 
 if __name__ == "__main__":

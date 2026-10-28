@@ -225,7 +225,9 @@ time, and test completion.
 [INFO] FlagGems (flag_gems) detected ... 0.0+ge510c6bbe (vendor=nvidia, device=cuda)
 [INFO] Canonical device context ... vendor=nvidia, device=cuda (from flag_gems)
 [INFO] vllm detected ... 0.24.0
-[INFO] Accelerator metadata ... vendor=nvidia device=H800 driver=610.57.04 runtime=cuda runtime_version=13.3.0
+[INFO] Accelerator ... nvidia / H800
+[INFO] Driver ... 610.57.04
+[INFO] Runtime ... cuda 13.3.0
 [INFO] Testing 3 operators ...
 [INFO] Only 3 operators requested, skipping mark collection
 [INFO] [18:48:59][GPU  0] accuracy  abs ...

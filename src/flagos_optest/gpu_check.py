@@ -849,7 +849,6 @@ def render_text(result):
         (f"Detected {result['device_count']} {VENDOR_NAMES[result['vendor']]}"
          f"{device} {result['unit']}(s)."),
         f"Available GPUs: {result['available_gpus']}",
-        "GPUs Usage:",
         _table_header(result["unit"]),
     ])
     for g in result["gpus"]:

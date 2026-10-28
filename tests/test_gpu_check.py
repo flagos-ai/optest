@@ -95,7 +95,6 @@ Runtime: corex
 Runtime Version: 4.5.0
 Detected 2 Iluvatar BI-V150 GPU(s).
 Available GPUs: 0,1
-GPUs Usage:
  GPU  Total (MiB)  Used (MiB)  Free (MiB)
    0       32,768          68      32,700
    1       32,768          68      32,700

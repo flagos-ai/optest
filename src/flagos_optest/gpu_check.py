@@ -779,6 +779,25 @@ def probe_vendor():
     return None
 
 
+def probe_accelerator_metadata(key=None):
+    """Return normalized vendor, device, driver and runtime metadata."""
+    key = key or probe_vendor()
+    if key is None:
+        return {
+            "vendor": None,
+            "device": None,
+            "driver": None,
+            "runtime": None,
+            "runtime_version": None,
+        }
+    env = _vendor_env(key)
+
+    def metadata_run(cmd, env):
+        return _run(cmd, env=env, timeout=5)
+
+    return {"vendor": key, **collect_metadata(key, env, metadata_run)}
+
+
 # --------------------------------------------------------------------------- #
 # Retry loop and output rendering
 # --------------------------------------------------------------------------- #
@@ -788,10 +807,7 @@ def run_vendor_check(key):
     env = _vendor_env(key)
     unit = vendor["unit"]
     count = vendor["detect"](env)
-    def metadata_run(cmd, env):
-        return _run(cmd, env=env, timeout=5)
-
-    metadata = collect_metadata(key, env, metadata_run)
+    metadata = probe_accelerator_metadata(key)
     waited = 0
     while True:
         gpus, available = vendor["sample"](env, count)

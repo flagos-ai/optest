@@ -473,7 +473,7 @@ jobs:
           # printenv | grep -viE '^(https?_proxy|all_proxy)=' || true
           OPS="${{ needs.prepare.outputs.ops }}"
           if [ "${OPS}" = "all" ]; then
-            if [ "${{ matrix.vendor }}" = "Enflame" ]; then
+            if [ "${{ matrix.vendor }}" = "Enflame" ] && [ "${{ needs.prepare.outputs.library_name }}" = "FlagGems" ]; then
               OP_LIST_FILE="/data/flaggems/ops_list.txt"
               if [ ! -f "${OP_LIST_FILE}" ]; then
                 echo "[Run ops tests] ERROR: Enflame op list file not found: ${OP_LIST_FILE}"

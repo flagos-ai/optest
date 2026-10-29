@@ -577,6 +577,26 @@ equivalent of `python -m pip install '.[<vendor>]'`; when absent, it skips the
 vendor-extra install. Target-specific package names therefore stay in the
 target repository's `pyproject.toml` instead of `repos.yaml`.
 
+A repository may add pip arguments only to vendor-extra installs through
+`vendor_pip_args`. `default` applies to every vendor and a normalized vendor
+key such as `nvidia` applies only to that vendor; the two lists are additive.
+Currently `--no-deps` is the only supported argument. The base target and
+`test` extra are still installed normally in a separate command:
+
+```yaml
+repos:
+  FlagTrain:
+    vendor_pip_args:
+      nvidia: ["--no-deps"]
+```
+
+This first runs `pip install './target[test]'` normally. If `--no-deps` is
+configured, the workflow reads the selected vendor requirements from
+`pyproject.toml` and installs those requirements directly with
+`pip install --no-deps ...`. Passing `--no-deps` to the target extra itself
+would skip installing the extra's packages. To disable transitive dependency
+resolution for every vendor extra, put `["--no-deps"]` under `default` instead.
+
 ## Repository Layout
 
 ```text
@@ -599,6 +619,8 @@ form the GitHub checkout target. Each repository entry can define:
 | `default_branch` | Target branch used when the workflow does not receive an explicit ref. |
 | `backends.<name>.enabled` | Enables or disables a shared hardware backend for that repository. |
 | `container_images.<backend>` | Repository-specific image override for a backend. |
+| `vendor_pip_args.default` | Pip arguments appended to every vendor-extra install. |
+| `vendor_pip_args.<vendor>` | Additional pip arguments for one normalized vendor key. |
 | `deps.default` | Explicit fallback packages installed for every enabled backend. Prefer target `pyproject.toml` vendor extras. |
 | `deps.<backend>` | Explicit fallback packages installed only for one backend. Prefer target `pyproject.toml` vendor extras. |
 | `base_data` | Optional performance-baseline JSON path in the target checkout. |

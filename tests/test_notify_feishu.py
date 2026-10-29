@@ -189,7 +189,10 @@ class NotifyFeishuRefTest(unittest.TestCase):
         self.assertIn("FLAGOS_GPU_RUNTIME_VERSION", gpu_check["run"])
         self.assertIn("Command: pip install ${EXTRA_DEPS}", install_target["run"])
         self.assertIn("Command: pip install ./target[test]", install_target["run"])
-        self.assertIn("Command: pip install ./target[${FLAGOS_GPU_VENDOR}]", install_target["run"])
+        self.assertIn(
+            'flagos-install-target-deps ./target "${FLAGOS_GPU_VENDOR}" ${VENDOR_PIP_ARGS}',
+            install_target["run"],
+        )
 
     def test_workflow_retries_result_uploads(self):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))

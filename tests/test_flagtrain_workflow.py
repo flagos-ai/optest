@@ -15,6 +15,7 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -37,6 +38,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
     def test_flagtrain_images_and_enabled_backends(self):
         config = self.repos["repos"]["FlagTrain"]
         self.assertEqual(config["default_branch"], "main")
+        self.assertEqual(config["vendor_pip_args"], {"nvidia": ["--no-deps"]})
         self.assertEqual(
             config["container_images"],
             {
@@ -81,8 +83,86 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             for step in steps
             if step.get("name") == "Install target repository and dependencies"
         )["run"]
-        self.assertIn('pyproject.get("project", {}).get("optional-dependencies", {})', install)
-        self.assertIn('pip install "./target[${FLAGOS_GPU_VENDOR}]"', install)
+        self.assertIn(
+            'flagos-install-target-deps ./target "${FLAGOS_GPU_VENDOR}" ${VENDOR_PIP_ARGS}',
+            install,
+        )
+
+    def test_matrix_applies_no_deps_only_to_nvidia(self):
+        prepare_steps = self.workflow["jobs"]["prepare"]["steps"]
+        script = next(
+            step["run"] for step in prepare_steps if step.get("id") == "build-matrix"
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "github-output"
+            environment = {
+                **os.environ,
+                "REPO_INPUT": "FlagTrain",
+                "REF_INPUT": "",
+                "VENDORS_INPUT": "",
+                "OPS_INPUT": "",
+                "UPLOAD_LOG_INPUT": "",
+                "SEND_FEISHU_INPUT": "",
+                "GITHUB_OUTPUT": str(output),
+            }
+            completed = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                env=environment,
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            matrix_line = next(
+                line
+                for line in output.read_text(encoding="utf-8").splitlines()
+                if line.startswith("matrix_container=")
+            )
+            matrix = json.loads(matrix_line.removeprefix("matrix_container="))
+            args_by_backend = {
+                backend["name"]: backend["vendor_pip_args"]
+                for backend in matrix["include"]
+            }
+            self.assertEqual(args_by_backend["H800"], "--no-deps")
+            self.assertTrue(
+                all(
+                    not args
+                    for backend, args in args_by_backend.items()
+                    if backend != "H800"
+                )
+            )
+
+            # A repo-wide default applies to every vendor extra.
+            default_script = script.replace(
+                "rc = main['repos'][repo]\n",
+                "main['repos']['FlagTrain']['vendor_pip_args'] = "
+                "{'default': ['--no-deps']}\nrc = main['repos'][repo]\n",
+            )
+            output.write_text("", encoding="utf-8")
+            completed = subprocess.run(
+                [sys.executable, "-c", default_script],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                env=environment,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            matrix_line = next(
+                line
+                for line in output.read_text(encoding="utf-8").splitlines()
+                if line.startswith("matrix_container=")
+            )
+            matrix = json.loads(matrix_line.removeprefix("matrix_container="))
+            self.assertTrue(
+                all(
+                    backend["vendor_pip_args"] == "--no-deps"
+                    for backend in matrix["include"]
+                )
+            )
 
     def test_gpu_check_script_exports_metadata_with_unknown_values(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]

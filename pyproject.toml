@@ -45,6 +45,7 @@ flagos-add-labels = "flagos_optest.add_labels:main"
 flagos-psum-text = "flagos_optest._entrypoints:psum_text"
 flagos-psum-html = "flagos_optest._entrypoints:psum_html"
 flagos-psum-web = "flagos_optest._entrypoints:psum_web"
+flagos-install-target-deps = "flagos_optest.target_dependencies:main"
 # Single unified GPU check: auto-probes the host vendor, then reports available
 # GPUs. Replaces the former per-vendor flagos-gpu-check-<vendor> commands.
 flagos-gpu-check = "flagos_optest.gpu_check:main"

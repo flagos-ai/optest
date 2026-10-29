@@ -129,6 +129,10 @@ repos:
     default_branch: main
     # FlagTrain uses Megatron-RL images and maintains vendor dependencies as
     # optional-dependency groups in its own pyproject.toml.
+    # NVIDIA images provide the compatible torch/Triton stack. Avoid resolving
+    # the vendor extra's transitive dependencies, which would replace Triton.
+    vendor_pip_args:
+      nvidia: ["--no-deps"]
     container_images:
       H800: harbor.baai.ac.cn/flagos-app/megatron_rl0.17.1-generic-13.3:2.2.0-0.2.3
       BW1000: harbor.baai.ac.cn/flagos-app/megatron_rl0.17.1-hygon-dtk26.04:2.2.0-0.2.3
@@ -176,6 +180,15 @@ repos:
 # [project.optional-dependencies] in the target repository's pyproject.toml;
 # the workflow automatically installs the group matching flagos-gpu-check's
 # normalized vendor key.
+# Optional vendor-extra pip arguments use the same default + vendor merge:
+#
+#       vendor_pip_args:
+#         default: ["--no-deps"]       # applied to every vendor extra
+#         nvidia: ["--no-deps"]        # applied only to the NVIDIA extra
+#
+# Only supported pip arguments are accepted by the matrix builder. These
+# arguments affect `pip install ./target[<vendor>]` only; the target's base and
+# test extras are always installed with normal dependency resolution.
 #
 #   repos:
 #     SomeRepo:

@@ -120,6 +120,10 @@ class NotifyFeishuRefTest(unittest.TestCase):
         )
         self.assertNotIn("OVERRIDE_REF", notification["env"])
 
+    def test_workflow_run_name_identifies_target_repository(self):
+        workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(workflow["run-name"], "ops-test_${{ inputs.repo }}")
+
     def test_workflow_logs_effective_test_context_and_commands(self):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
         job = workflow["jobs"]["test-container"]

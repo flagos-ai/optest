@@ -23,6 +23,7 @@
 # Shared backend hardware config: .github/configs/backends/<NAME>.yaml
 # vendors: Nvidia,MThreads,KunLunXin,Iluvatar,Ascend,Hygon,Metax,THead,Cambricon,AMD,TsingMicro,Enflame
 name: ops-test
+run-name: ops-test_${{ inputs.repo }}
 
 permissions:
   contents: read

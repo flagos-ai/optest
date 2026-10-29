@@ -120,6 +120,77 @@ class NotifyFeishuRefTest(unittest.TestCase):
         )
         self.assertNotIn("OVERRIDE_REF", notification["env"])
 
+    def test_workflow_logs_effective_test_context_and_commands(self):
+        workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+        job = workflow["jobs"]["test-container"]
+        self.assertEqual(
+            job["env"]["TARGET_REPOSITORY"],
+            "${{ needs.prepare.outputs.target_repo }}",
+        )
+        self.assertEqual(
+            job["env"]["TARGET_REF"],
+            "${{ needs.prepare.outputs.checkout_ref }}",
+        )
+        self.assertEqual(job["env"]["TEST_OPS"], "${{ needs.prepare.outputs.ops }}")
+
+        steps = job["steps"]
+        run_tests = next(step for step in steps if step.get("name") == "Run ops tests")
+        script = run_tests["run"]
+
+        expected_log_entries = [
+            "Target repository: ${TARGET_REPOSITORY}",
+            "Target ref: ${TARGET_REF}",
+            "Target commit: ${TARGET_COMMIT}",
+            "Operator arguments: ${OP_ARGS}",
+            "Base-data arguments: ${BASE_DATA_ARG:-<none>}",
+            "Command: flagos-optest",
+            "Command: flagos-add-labels",
+            "Command: flagos-psum-text",
+            "Command: flagos-psum-html",
+        ]
+        for entry in expected_log_entries:
+            with self.subTest(entry=entry):
+                self.assertIn(entry, script)
+
+    def test_workflow_names_checkouts_and_install_commands(self):
+        workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+        prepare_steps = workflow["jobs"]["prepare"]["steps"]
+        self.assertTrue(
+            any(step.get("name") == "Checkout optest workflow source" for step in prepare_steps)
+        )
+
+        steps = workflow["jobs"]["test-container"]["steps"]
+        names = {step.get("name") for step in steps}
+        self.assertIn("Checkout optest source", names)
+        for attempt in range(1, 4):
+            self.assertIn(f"Checkout target repository (attempt {attempt})", names)
+
+        install = next(
+            step
+            for step in steps
+            if step.get("name") == "Install target repository and optest"
+        )
+        self.assertIn("Command: pip install ${EXTRA_DEPS}", install["run"])
+        self.assertIn("Command: pip install ./target[test]", install["run"])
+        self.assertIn("Command: pip install .", install["run"])
+
+    def test_workflow_retries_result_uploads(self):
+        workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+        steps = workflow["jobs"]["test-container"]["steps"]
+        publish = next(
+            step for step in steps if step.get("name") == "Publish results to op-monitor"
+        )
+        script = publish["run"]
+        curl_command = script[
+            script.index("curl -X POST") : script.index("--compressed")
+        ]
+        self.assertIn(
+            "--max-time 300 --retry 3 --retry-delay 15 --retry-all-errors",
+            curl_command,
+        )
+        retry_budget_seconds = 4 * 300 + 3 * 15
+        self.assertGreaterEqual(publish["timeout-minutes"] * 60, retry_budget_seconds)
+
 
 if __name__ == "__main__":
     unittest.main()

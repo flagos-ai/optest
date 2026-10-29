@@ -93,7 +93,8 @@ jobs:
     steps:
       # Checkout optest itself (this repo) for repos.yaml + backend configs.
       # `branch` input picks the optest branch; empty -> the dispatched ref.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Checkout optest workflow source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
@@ -224,29 +225,36 @@ jobs:
       DATE: ${{ needs.prepare.outputs.date }}
       # Library/repo name drives the results path, archive name and upload label.
       REPOSITORY_NAME: ${{ needs.prepare.outputs.library_name }}
+      TARGET_REPOSITORY: ${{ needs.prepare.outputs.target_repo }}
+      TARGET_REF: ${{ needs.prepare.outputs.checkout_ref }}
+      TEST_OPS: ${{ needs.prepare.outputs.ops }}
       OUTPUT_DIR: ${{ matrix.output_base_dir }}/${{ needs.prepare.outputs.library_name }}/${{ needs.prepare.outputs.date }}/logs_results_${{ needs.prepare.outputs.date }}
     steps:
       # Checkout optest itself (this repo) at workspace root: provides src/
       # and configs. `branch` input picks the optest branch; empty -> the
       # dispatched ref. The target library is checked out separately into ./target.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Checkout optest source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
       # Checkout the TARGET repo (the library under test) into ./target, with
       # the same 3-attempt retry the previous single-repo workflow used.
-      - id: checkout-attempt-1
+      - name: Checkout target repository (attempt 1)
+        id: checkout-attempt-1
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: ${{ needs.prepare.outputs.target_repo }}
           ref: ${{ needs.prepare.outputs.checkout_ref }}
           path: target
         continue-on-error: true
-      - id: sleep-1
+      - name: Wait before target checkout retry 2
+        id: sleep-1
         if: steps.checkout-attempt-1.outcome == 'failure'
         run: sleep 30s
 
-      - id: checkout-attempt-2
+      - name: Checkout target repository (attempt 2)
+        id: checkout-attempt-2
         if: steps.checkout-attempt-1.outcome == 'failure'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -254,11 +262,13 @@ jobs:
           ref: ${{ needs.prepare.outputs.checkout_ref }}
           path: target
         continue-on-error: true
-      - id: sleep-2
+      - name: Wait before target checkout retry 3
+        id: sleep-2
         if: steps.checkout-attempt-2.outcome == 'failure'
         run: sleep 30s
 
-      - id: checkout-attempt-3
+      - name: Checkout target repository (attempt 3)
+        id: checkout-attempt-3
         if: steps.checkout-attempt-2.outcome == 'failure'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -357,7 +367,7 @@ jobs:
             ' || true
           fi
 
-      - name: Install dependencies
+      - name: Install target repository and optest
         env: ${{ fromJSON(matrix.test_env) }}
         shell: bash --login -e -o pipefail {0}
         run: |
@@ -371,15 +381,20 @@ jobs:
           # Optional per-repo extra deps (from repos.yaml deps.*); empty = skip.
           EXTRA_DEPS="${{ matrix.deps }}"
           if [ -n "${EXTRA_DEPS}" ]; then
-            echo "[deps] Installing extra deps: ${EXTRA_DEPS}"
+            echo "[Install dependencies] Purpose: install configured backend and target-repository dependencies"
+            echo "[Install dependencies] Command: pip install ${EXTRA_DEPS}"
             pip install ${EXTRA_DEPS}
           else
-            echo "[deps] No extra deps configured; skipping."
+            echo "[Install dependencies] No extra dependencies configured; skipping optional pip install."
           fi
           # Install the target library (checked out into ./target).
+          echo "[Install dependencies] Purpose: install the target repository under test with its test dependencies"
+          echo '[Install dependencies] Command: pip install ./target[test]'
           pip install ./target[test]
           # Install this optest checkout so the workflow exercises the same
           # packaged console scripts that downstream users install.
+          echo "[Install dependencies] Purpose: install the optest source that provides the test and report commands"
+          echo "[Install dependencies] Command: pip install ."
           pip install .
 
       - name: Check GPU availability
@@ -458,11 +473,18 @@ jobs:
         env: ${{ fromJSON(matrix.test_env) }}
         shell: bash --login -e -o pipefail {0}
         run: |
+          TARGET_COMMIT="$(git rev-parse HEAD)"
+          echo "[Run ops tests] Target repository: ${TARGET_REPOSITORY}"
+          echo "[Run ops tests] Target ref: ${TARGET_REF}"
+          echo "[Run ops tests] Target commit: ${TARGET_COMMIT}"
+          echo "[Run ops tests] Target working directory: $(pwd)"
           echo "[Run ops tests] Running on backend: ${{ matrix.name }} (vendor: ${{ matrix.vendor }})"
+          echo "[Run ops tests] Container image: ${{ matrix.container_image }}"
+          echo "[Run ops tests] Timeout: ${{ matrix.ops_test_timeout }} minutes"
           echo "[Run ops tests] Test output directory: ${OUTPUT_DIR}"
           echo "[Run ops tests] Test GPUs: ${AVAILABLE_GPUS}"
           echo "[Run ops tests] Test date: ${DATE}"
-          echo "[Run ops tests] Test ops: ${{ needs.prepare.outputs.ops }}"
+          echo "[Run ops tests] Test ops: ${TEST_OPS}"
           mkdir -p "${OUTPUT_DIR}"
           # remove cache to avoid potential issues with stale files
           rm -rf ~/.triton/cache && rm -rf ~/.flaggems
@@ -471,7 +493,7 @@ jobs:
           # any case) since they may embed user:password that GitHub Actions
           # does not auto-mask for values from the container/runner env.
           # printenv | grep -viE '^(https?_proxy|all_proxy)=' || true
-          OPS="${{ needs.prepare.outputs.ops }}"
+          OPS="${TEST_OPS}"
           if [ "${OPS}" = "all" ]; then
             if [ "${{ matrix.vendor }}" = "Enflame" ] && [ "${{ needs.prepare.outputs.library_name }}" = "FlagGems" ]; then
               OP_LIST_FILE="/data/flaggems/ops_list.txt"
@@ -493,8 +515,12 @@ jobs:
           if [ -n "${BASE_DATA}" ]; then
             BASE_DATA_ARG="--base-data ${BASE_DATA}"
           fi
+          echo "[Run ops tests] Operator arguments: ${OP_ARGS}"
+          echo "[Run ops tests] Base data: ${BASE_DATA:-<none>}"
+          echo "[Run ops tests] Base-data arguments: ${BASE_DATA_ARG:-<none>}"
           # Run from the target checkout so the installed scheduler discovers
           # its conf/operators.yaml, tests/ and benchmark/ from the cwd.
+          echo "[Run ops tests] Command: flagos-optest --gpus \"${AVAILABLE_GPUS}\" ${OP_ARGS} ${BASE_DATA_ARG} --dump-output --output-dir \"${OUTPUT_DIR}\""
           flagos-optest \
             --gpus "${AVAILABLE_GPUS}" \
             ${OP_ARGS} \
@@ -502,8 +528,11 @@ jobs:
             --dump-output \
             --output-dir "${OUTPUT_DIR}"
           # process the test results to generate summary files
+          echo "[Run ops tests] Command: flagos-add-labels \"${OUTPUT_DIR}\""
           flagos-add-labels "${OUTPUT_DIR}"
+          echo "[Run ops tests] Command: flagos-psum-text -o \"${OUTPUT_DIR}/result.csv\" \"${OUTPUT_DIR}\""
           flagos-psum-text -o "${OUTPUT_DIR}/result.csv" "${OUTPUT_DIR}"
+          echo "[Run ops tests] Command: flagos-psum-html -o \"${OUTPUT_DIR}/result.html\" \"${OUTPUT_DIR}\""
           flagos-psum-html -o "${OUTPUT_DIR}/result.html" "${OUTPUT_DIR}"
 
       - name: Package results
@@ -521,7 +550,9 @@ jobs:
 
       - name: Publish results to op-monitor
         if: needs.prepare.outputs.publish_results == 'true'
-        timeout-minutes: 15
+        # Four possible 300-second attempts plus three 15-second retry delays
+        # need up to 20m45s; keep enough step-level overhead around that budget.
+        timeout-minutes: 25
         continue-on-error: true
         run: |
           # get backend name from matrix
@@ -541,6 +572,7 @@ jobs:
             -F "library_name=${{ needs.prepare.outputs.library_name }}" \
             -F "backend_name=${BACKEND_NAME}" \
             -F "test_date=${DATE}" \
+            --max-time 300 --retry 3 --retry-delay 15 --retry-all-errors \
             --compressed -o - -w "\nHTTP %{http_code}\n"
 
       - name: Send Feishu notification

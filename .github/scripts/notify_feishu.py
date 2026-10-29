@@ -45,13 +45,17 @@ OPTIONAL_VARS = [
     # Override vars for workflow_run context — when set, these take precedence
     # over the GitHub default env vars (which reflect the notification workflow,
     # not the original CI run).
-    "OVERRIDE_REF",  # e.g. github.event.workflow_run.head_branch
     "OVERRIDE_SHA",  # e.g. github.event.workflow_run.head_sha
     "OVERRIDE_RUN_URL",  # e.g. github.event.workflow_run.html_url
     "OVERRIDE_WORKFLOW",  # e.g. github.event.workflow_run.name
     "PR_NUMBER",  # e.g. github.event.workflow_run.pull_requests[0].number
     "PR_TITLE",  # PR title from GitHub API
 ]
+
+# TARGET_REF identifies the code under test in the centralized ops-test
+# workflow. OVERRIDE_REF remains a compatibility fallback for callers that use
+# this script to report another workflow's run.
+REF_VARS = ["TARGET_REF", "OVERRIDE_REF"]
 
 
 def check_env_vars() -> bool:
@@ -71,6 +75,11 @@ def check_env_vars() -> bool:
     for v in OPTIONAL_VARS:
         if not os.environ.get(v, "").strip():
             print(f"::warning::Optional environment variable '{v}' is not set")
+    if not any(os.environ.get(v, "").strip() for v in REF_VARS):
+        print(
+            "::warning::Optional environment variables "
+            "'TARGET_REF' and 'OVERRIDE_REF' are not set"
+        )
 
     if invalid:
         for v in invalid:
@@ -104,7 +113,11 @@ def main():
     repo = os.environ["GITHUB_REPOSITORY"]
     # Label shown in the title: the tested library if provided, else the repo.
     display_name = library_name or repo
-    ref = os.environ.get("OVERRIDE_REF") or os.environ["GITHUB_REF_NAME"]
+    ref = (
+        os.environ.get("TARGET_REF")
+        or os.environ.get("OVERRIDE_REF")
+        or os.environ["GITHUB_REF_NAME"]
+    )
     sha = os.environ.get("OVERRIDE_SHA") or os.environ["GITHUB_SHA"]
     actor = os.environ["GITHUB_ACTOR"]
     run_id = os.environ["GITHUB_RUN_ID"]
@@ -175,7 +188,7 @@ def main():
                         "is_short": True,
                         "text": {
                             "tag": "lark_md",
-                            "content": f"**Branch:** {ref}",
+                            "content": f"**Ref:** {ref}",
                         },
                     },
                     {

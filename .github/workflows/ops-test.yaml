@@ -553,10 +553,10 @@ jobs:
           # Title label: the full "<org>/<repo>" of the TARGET library under test
           # (e.g. flagos-ai/FlagGems-vllm), not optest's GITHUB_REPOSITORY.
           LIBRARY_NAME: ${{ needs.prepare.outputs.target_repo }}
-          # Branch/ref and commit must reflect the TARGET repo, not the optest
-          # run. OVERRIDE_REF/OVERRIDE_SHA take precedence over GITHUB_REF_NAME
-          # and GITHUB_SHA inside notify_feishu.py.
-          OVERRIDE_REF: ${{ needs.prepare.outputs.checkout_ref }}
+          # Ref and commit must reflect the TARGET repo, not the optest run.
+          # checkout_ref is the explicit workflow `ref` input when provided,
+          # otherwise the target repo's configured default_branch.
+          TARGET_REF: ${{ needs.prepare.outputs.checkout_ref }}
           OVERRIDE_SHA: ${{ steps.target-info.outputs.sha }}
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}

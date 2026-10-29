@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import os
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -79,6 +83,62 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         )["run"]
         self.assertIn('pyproject.get("project", {}).get("optional-dependencies", {})', install)
         self.assertIn('pip install "./target[${FLAGOS_GPU_VENDOR}]"', install)
+
+    def test_gpu_check_script_exports_metadata_with_unknown_values(self):
+        steps = self.workflow["jobs"]["test-container"]["steps"]
+        script = next(
+            step["run"]
+            for step in steps
+            if step.get("name") == "Check GPU availability"
+        )
+        replacements = {
+            "${{ matrix.gpu_check_script }}": "fake-gpu-check",
+            "${{ matrix.force_test_gpus }}": "false",
+            "${{ matrix.test_gpus }}": "0,1",
+            "${{ matrix.vendor }}": "Nvidia",
+        }
+        for expression, value in replacements.items():
+            script = script.replace(expression, value)
+
+        result = {
+            "vendor": "nvidia",
+            "device": "H800",
+            "driver": None,
+            "runtime": "cuda",
+            "runtime_version": "13.3.0",
+            "available_gpus": "0,1",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gpu_check = root / "fake-gpu-check"
+            gpu_check.write_text(
+                "#!/bin/sh\nprintf '%s\\n' '" + json.dumps(result) + "'\n",
+                encoding="utf-8",
+            )
+            gpu_check.chmod(0o755)
+            github_env = root / "github-env"
+            environment = {
+                **os.environ,
+                "GITHUB_ENV": str(github_env),
+                "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+            }
+            completed = subprocess.run(
+                ["bash", "-e", "-o", "pipefail", "-c", script],
+                check=False,
+                capture_output=True,
+                env=environment,
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn(
+                "[GPU check] Exported FLAGOS_GPU_DRIVER=<unknown>",
+                completed.stdout,
+            )
+            exported = github_env.read_text(encoding="utf-8").splitlines()
+            self.assertIn("AVAILABLE_GPUS=0,1", exported)
+            self.assertIn("FLAGOS_GPU_VENDOR=nvidia", exported)
+            self.assertIn("FLAGOS_GPU_DRIVER=", exported)
 
 
 if __name__ == "__main__":

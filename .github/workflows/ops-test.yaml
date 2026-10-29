@@ -473,7 +473,8 @@ jobs:
                   if "\n" in value or "\r" in value:
                       raise SystemExit(f"[GPU check] ERROR: invalid newline in {name}")
                   env_file.write(f"{name}={value}\n")
-                  print(f"[GPU check] Exported {name}={value or '<unknown>'}")
+                  display_value = value or "<unknown>"
+                  print(f"[GPU check] Exported {name}={display_value}")
           '
           else
             echo "[GPU check] Metadata unavailable; GPU environment variables were not exported."

@@ -169,14 +169,27 @@ class NotifyFeishuRefTest(unittest.TestCase):
         for attempt in range(1, 4):
             self.assertIn(f"Checkout target repository (attempt {attempt})", names)
 
-        install = next(
+        install_optest = next(
             step
             for step in steps
-            if step.get("name") == "Install target repository and optest"
+            if step.get("name") == "Configure package index and install optest"
         )
-        self.assertIn("Command: pip install ${EXTRA_DEPS}", install["run"])
-        self.assertIn("Command: pip install ./target[test]", install["run"])
-        self.assertIn("Command: pip install .", install["run"])
+        install_target = next(
+            step
+            for step in steps
+            if step.get("name") == "Install target repository and dependencies"
+        )
+        gpu_check = next(
+            step for step in steps if step.get("name") == "Check GPU availability"
+        )
+        self.assertIn("Command: pip install .", install_optest["run"])
+        self.assertIn("FLAGOS_GPU_VENDOR", gpu_check["run"])
+        self.assertIn("FLAGOS_GPU_DRIVER", gpu_check["run"])
+        self.assertIn("FLAGOS_GPU_RUNTIME", gpu_check["run"])
+        self.assertIn("FLAGOS_GPU_RUNTIME_VERSION", gpu_check["run"])
+        self.assertIn("Command: pip install ${EXTRA_DEPS}", install_target["run"])
+        self.assertIn("Command: pip install ./target[test]", install_target["run"])
+        self.assertIn("Command: pip install ./target[${FLAGOS_GPU_VENDOR}]", install_target["run"])
 
     def test_workflow_retries_result_uploads(self):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))

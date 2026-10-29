@@ -43,6 +43,7 @@ on:
           - FlagGems
           - FlagGems-vllm
           - FlagGems-sglang
+          - FlagTrain
           - FlagAttention
       branch:
         description: 'optest branch supplying the workflow, package, and configs. Leave empty to use the branch this run was dispatched from (--ref).'
@@ -368,32 +369,23 @@ jobs:
             ' || true
           fi
 
-      - name: Install target repository and optest
+      - name: Configure package index and install optest
         env: ${{ fromJSON(matrix.test_env) }}
         shell: bash --login -e -o pipefail {0}
         run: |
           if [ "${{ matrix.vendor }}" == "Nvidia" ]; then
-            pip config set global.index-url https://pypi.org/simple
+            export PIP_INDEX_URL=https://pypi.org/simple
+            echo "PIP_INDEX_URL=${PIP_INDEX_URL}" >> "$GITHUB_ENV"
           else
-            pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-            pip config set global.extra-index-url "https://mirrors.aliyun.com/pypi/simple/ https://mirrors.cloud.tencent.com/pypi/simple/ https://mirrors.163.com/pypi/simple/"
-            pip config set global.trusted-host "pypi.tuna.tsinghua.edu.cn mirrors.aliyun.com mirrors.cloud.tencent.com mirrors.163.com"
+            export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+            export PIP_EXTRA_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/ https://mirrors.cloud.tencent.com/pypi/simple/ https://mirrors.163.com/pypi/simple/"
+            export PIP_TRUSTED_HOST="pypi.tuna.tsinghua.edu.cn mirrors.aliyun.com mirrors.cloud.tencent.com mirrors.163.com"
+            echo "PIP_INDEX_URL=${PIP_INDEX_URL}" >> "$GITHUB_ENV"
+            echo "PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}" >> "$GITHUB_ENV"
+            echo "PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}" >> "$GITHUB_ENV"
           fi
-          # Optional per-repo extra deps (from repos.yaml deps.*); empty = skip.
-          EXTRA_DEPS="${{ matrix.deps }}"
-          if [ -n "${EXTRA_DEPS}" ]; then
-            echo "[Install dependencies] Purpose: install configured backend and target-repository dependencies"
-            echo "[Install dependencies] Command: pip install ${EXTRA_DEPS}"
-            pip install ${EXTRA_DEPS}
-          else
-            echo "[Install dependencies] No extra dependencies configured; skipping optional pip install."
-          fi
-          # Install the target library (checked out into ./target).
-          echo "[Install dependencies] Purpose: install the target repository under test with its test dependencies"
-          echo '[Install dependencies] Command: pip install ./target[test]'
-          pip install ./target[test]
           # Install this optest checkout so the workflow exercises the same
-          # packaged console scripts that downstream users install.
+          # packaged GPU-check command before target dependencies are resolved.
           echo "[Install dependencies] Purpose: install the optest source that provides the test and report commands"
           echo "[Install dependencies] Command: pip install ."
           pip install .
@@ -407,25 +399,26 @@ jobs:
           # JSON document to stdout (progress tables and the vendor line go to
           # stderr, still visible in the step log), so parsing is exact and
           # robust against formatting changes.
+          set +e
+          GPU_JSON=$(${{ matrix.gpu_check_script }} --format json)
+          GPU_RC=$?
+          set -e
+          if [ -n "${GPU_JSON}" ]; then
+            echo "[GPU check] GPU availability check JSON:"
+            echo "${GPU_JSON}"
+          fi
           if [ "${{ matrix.force_test_gpus }}" = "true" ]; then
             # This backend deliberately pins the GPUs under test to the
             # configured test_gpus list (e.g. TsingMicro exposes more cards than
             # we want to use). The check is run for logging/inspection only, so
             # a non-zero exit here must NOT fail the job; test_gpus is
             # authoritative below.
-            ${{ matrix.gpu_check_script }} --format json || true
             AVAILABLE_GPUS="${{ matrix.test_gpus }}"
             echo "[GPU check] force_test_gpus=true -> using configured test_gpus"
           else
             # Capture the exit code explicitly (instead of relying on set -e)
             # so a failure is reported clearly before we stop. A failed GPU
             # check means we have no reliable GPU list, so the job must exit 1.
-            set +e
-            GPU_JSON=$(${{ matrix.gpu_check_script }} --format json)
-            GPU_RC=$?
-            set -e
-            echo "[GPU check] GPU availability check JSON:"
-            echo "${GPU_JSON}"
             if [ "${GPU_RC}" -ne 0 ]; then
               echo "[GPU check] ERROR: '${{ matrix.gpu_check_script }}' failed with exit code ${GPU_RC}."
               exit 1
@@ -459,7 +452,76 @@ jobs:
             ')
             echo "[GPU check] KunLunXin skips GPU 0; using GPUs: ${AVAILABLE_GPUS}"
           fi
-          echo "AVAILABLE_GPUS=${AVAILABLE_GPUS}" >> $GITHUB_ENV
+          echo "AVAILABLE_GPUS=${AVAILABLE_GPUS}" >> "$GITHUB_ENV"
+          if [ "${GPU_RC}" -eq 0 ]; then
+            printf '%s' "${GPU_JSON}" | python3 -c '
+          import json
+          import os
+          import sys
+
+          data = json.load(sys.stdin)
+          fields = {
+              "FLAGOS_GPU_VENDOR": data.get("vendor"),
+              "FLAGOS_GPU_DEVICE": data.get("device"),
+              "FLAGOS_GPU_DRIVER": data.get("driver"),
+              "FLAGOS_GPU_RUNTIME": data.get("runtime"),
+              "FLAGOS_GPU_RUNTIME_VERSION": data.get("runtime_version"),
+          }
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+              for name, value in fields.items():
+                  value = "" if value is None else str(value)
+                  if "\n" in value or "\r" in value:
+                      raise SystemExit(f"[GPU check] ERROR: invalid newline in {name}")
+                  env_file.write(f"{name}={value}\n")
+                  print(f"[GPU check] Exported {name}={value or '<unknown>'}")
+          '
+          else
+            echo "[GPU check] Metadata unavailable; GPU environment variables were not exported."
+          fi
+
+      - name: Install target repository and dependencies
+        env: ${{ fromJSON(matrix.test_env) }}
+        shell: bash --login -e -o pipefail {0}
+        run: |
+          # Optional explicit deps remain supported for backend configuration;
+          # target-specific vendor packages belong in pyproject.toml extras.
+          EXTRA_DEPS="${{ matrix.deps }}"
+          if [ -n "${EXTRA_DEPS}" ]; then
+            echo "[Install dependencies] Purpose: install configured backend dependencies"
+            echo "[Install dependencies] Command: pip install ${EXTRA_DEPS}"
+            pip install ${EXTRA_DEPS}
+          else
+            echo "[Install dependencies] No explicit backend dependencies configured; skipping."
+          fi
+          echo "[Install dependencies] Purpose: install the target repository under test with its test dependencies"
+          echo '[Install dependencies] Command: pip install ./target[test]'
+          pip install './target[test]'
+
+          # Install the optional-dependency group matching the vendor detected
+          # by flagos-gpu-check. A target repository may support only a subset
+          # of vendors, so a missing group is an intentional no-op.
+          if [ -z "${FLAGOS_GPU_VENDOR:-}" ]; then
+            echo "[Install dependencies] GPU vendor is unavailable; skipping vendor extra."
+          elif python3 - "target/pyproject.toml" "${FLAGOS_GPU_VENDOR}" <<'PY'
+          import sys
+
+          try:
+              import tomllib
+          except ModuleNotFoundError:
+              import tomli as tomllib
+
+          with open(sys.argv[1], "rb") as pyproject_file:
+              pyproject = tomllib.load(pyproject_file)
+          extras = pyproject.get("project", {}).get("optional-dependencies", {})
+          raise SystemExit(0 if sys.argv[2] in extras else 1)
+          PY
+          then
+            echo "[Install dependencies] Found '${FLAGOS_GPU_VENDOR}' optional-dependency group."
+            echo "[Install dependencies] Command: pip install ./target[${FLAGOS_GPU_VENDOR}]"
+            pip install "./target[${FLAGOS_GPU_VENDOR}]"
+          else
+            echo "[Install dependencies] Target does not define '${FLAGOS_GPU_VENDOR}' optional-dependency group; skipping vendor extra."
+          fi
 
       # Run ops tests.
       # OPS is provided by the prepare job: "all" (scheduled runs or an empty

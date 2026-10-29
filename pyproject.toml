@@ -35,6 +35,7 @@ classifiers = [
 # repo's own test environment (its `pip install .[test]`), not by this wheel.
 dependencies = [
     "distro",
+    "tomli; python_version < '3.11'",
     "PyYAML",
 ]
 

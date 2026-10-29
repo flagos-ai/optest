@@ -567,6 +567,16 @@ runtime packages in the corresponding vendor group. This lets developers use
 the same installation commands locally and in CI without adding heavyweight
 target dependencies to `flagos-optest` itself.
 
+The centralized workflow runs `flagos-gpu-check` before installing the target
+repository. It exports the detected metadata for later steps as
+`FLAGOS_GPU_VENDOR`, `FLAGOS_GPU_DEVICE`, `FLAGOS_GPU_DRIVER`,
+`FLAGOS_GPU_RUNTIME`, and `FLAGOS_GPU_RUNTIME_VERSION`. After installing the
+target's `test` extra, it checks `[project.optional-dependencies]` for an extra
+whose name exactly matches `FLAGOS_GPU_VENDOR`. When present, CI runs the
+equivalent of `python -m pip install '.[<vendor>]'`; when absent, it skips the
+vendor-extra install. Target-specific package names therefore stay in the
+target repository's `pyproject.toml` instead of `repos.yaml`.
+
 ## Repository Layout
 
 ```text
@@ -589,8 +599,8 @@ form the GitHub checkout target. Each repository entry can define:
 | `default_branch` | Target branch used when the workflow does not receive an explicit ref. |
 | `backends.<name>.enabled` | Enables or disables a shared hardware backend for that repository. |
 | `container_images.<backend>` | Repository-specific image override for a backend. |
-| `deps.default` | Extra packages installed for every enabled backend. |
-| `deps.<backend>` | Extra packages installed only for one backend. |
+| `deps.default` | Explicit fallback packages installed for every enabled backend. Prefer target `pyproject.toml` vendor extras. |
+| `deps.<backend>` | Explicit fallback packages installed only for one backend. Prefer target `pyproject.toml` vendor extras. |
 | `base_data` | Optional performance-baseline JSON path in the target checkout. |
 | `ops_test_timeout_minutes` | Per-repository timeout for the operator-test step. |
 
@@ -609,11 +619,16 @@ repos:
 
 `repos.<repo>.container_images.<backend>` takes precedence over the backend's
 `container_image`. If no repository override exists, the shared backend image
-is used. Dependency lists are additive rather than replacing one another:
+is used. Explicit dependency lists remain additive for exceptional backend
+requirements:
 
 ```text
 backend deps + repo deps.default + repo deps.<backend>
 ```
+
+Normal target-specific vendor dependencies should not use these lists. The
+workflow instead selects the target's optional-dependency group from the vendor
+key reported by `flagos-gpu-check`.
 
 ### Backend configuration
 

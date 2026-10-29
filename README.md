@@ -1,8 +1,8 @@
 # FlagOS Operator Test Tools
 
-`flagos-optest` is the shared operator accuracy and performance test scheduler
-used by FlagOS operator libraries. The package also provides report-generation,
-result-labeling, web-data conversion, and cross-vendor GPU availability tools.
+`flagos-optest` is the shared operator accuracy and performance test driver
+for the various FlagOS operator libraries. The package also provides report-generation,
+result-labeling, web-data conversion, and vendor-specific GPU checking toolsuite.
 
 ## Menu
 
@@ -25,40 +25,41 @@ result-labeling, web-data conversion, and cross-vendor GPU availability tools.
 
 ## Install
 
-Install optest into the same Python environment as the operator library under
+Install `optest` into the same Python environment as the operator library under
 test:
 
 ```bash
 python -m pip install /path/to/optest
 ```
 
-When developing optest itself, install the local checkout:
+You can install tool in editable mode as well:
 
 ```bash
-cd /path/to/optest
-python -m pip install .
+git clone https://github.com/flagos-ai/optest
+cd optest
+python -m pip install -e .
 ```
 
-The package installs these console commands:
+The package installs the following console commands:
 
 ```text
 flagos-optest       Run operator accuracy and performance tests
-flagos-add-labels   Add catalog labels to an existing summary.json
+flagos-add-labels   Add catalog labels to an existing summary.json file
 flagos-psum-text    Generate CSV or Markdown reports
 flagos-psum-html    Generate a self-contained HTML report
 flagos-psum-web     Convert summaries to web-site data JSON
 flagos-gpu-check    Detect the accelerator vendor and available devices
 ```
 
-The target operator repository supplies its own runtime and test dependencies,
-including PyTorch, the FlagOS operator library, pytest, and the plugins that
+The target operator repository is expected to provide its own runtime and test
+dependencies, including torch, the operator library, pytest, and the plugins that
 provide options such as `--record` and `--collect-marks`.
 
 ## Requirements
 
-The operator repository under test must provide these three resources. Follow
-the [FlagGems](https://github.com/flagos-ai/FlagGems) repository as the reference
-layout and schema:
+The operator library under test must provide the following files and directorys.
+following the [FlagGems](https://github.com/flagos-ai/FlagGems) repository layout
+as a reference:
 
 ```text
 conf/operators.yaml   Operator inventory used for selection, stages, and labels
@@ -67,13 +68,14 @@ benchmark/            Pytest performance benchmarks
 ```
 
 The exact names are significant: the scheduler reads `conf/operators.yaml` and
-runs pytest against `tests/` and `benchmark/`.
+runs `pytest` against `tests/` for accuracy testing and `benchmark/` for performance
+benchmarking.
 
 Each `operators.yaml` entry should follow the complete FlagGems schema and
 define fields such as `id`, `description`, `for`, `labels`, `kind`, and
 `stages`. In particular, `id` identifies the operator, `stages` controls
 selection by `--stages`, and `labels` is consumed by `flagos-add-labels`.
-Missing or malformed scheduling fields can prevent operators from being
+Missing or malformed operator metadata fields can prevent operators from being
 selected or reported correctly.
 
 ## Usage: `flagos-optest`
@@ -81,9 +83,9 @@ selected or reported correctly.
 ### Purpose
 
 `flagos-optest` discovers the target environment, selects operators from
-`conf/operators.yaml`, and schedules each operator's accuracy and benchmark
-tests across one or more devices. Like `pytest`, its optional positional
-`DIRECTORY` defaults to the current directory.
+`conf/operators.yaml`, and initiates the accuracy and benchmark tests for
+operators specified, across one or more devices. Like `pytest`, its optional
+positional `DIRECTORY` defaults to the current directory.
 
 Run from the operator repository:
 
@@ -92,7 +94,7 @@ cd /path/to/operator-library
 flagos-optest --gpus 0,1 --stages stable --dump-output
 ```
 
-Or pass the repository explicitly:
+You can also pass the repository explicitly:
 
 ```bash
 flagos-optest /path/to/operator-library \
@@ -322,8 +324,8 @@ flagos-psum-web --raw-dir /path/to/platform-results \
 
 ### Purpose and behavior
 
-`flagos-gpu-check` is one unified installed command for every supported
-accelerator vendor. It detects the host vendor, queries device memory, waits
+`flagos-gpu-check` is a unified installed command for all supported
+accelerator vendors. It detects the host vendor, queries device memory, waits
 when no device has enough free memory, and returns the available device IDs for
 test scheduling.
 
@@ -524,7 +526,7 @@ gpus:
 
 ## Target Repository Test Dependencies
 
-The operator library, rather than the optest wheel, owns heavyweight runtime
+The operator library, rather than the `optest` wheel, owns heavyweight runtime
 and vendor dependencies. Define optional dependency groups in the target
 repository's `pyproject.toml` so developers and CI can install a reproducible
 test environment directly from that repository.
@@ -568,12 +570,12 @@ target dependencies to `flagos-optest` itself.
 ## Repository Layout
 
 ```text
-src/flagos_optest/        Python package, scheduler, reports, and GPU checks
 .github/configs/repos.yaml
                           Repository-level workflow configuration
 .github/configs/backends/ Shared hardware and vendor defaults
 .github/workflows/        Centralized GitHub Actions workflow
 pyproject.toml            Package metadata and console-script definitions
+src/flagos_optest/        Python package, scheduler, reports, and GPU checks
 ```
 
 ### Repository configuration

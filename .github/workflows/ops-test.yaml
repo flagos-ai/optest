@@ -390,31 +390,21 @@ jobs:
             return "${exit_code}"
           }
 
-          PIP_INDEX_URL_VALUE=https://pypi.tuna.tsinghua.edu.cn/simple
-          PIP_EXTRA_INDEX_URL_VALUE="https://mirrors.aliyun.com/pypi/simple/ https://mirrors.cloud.tencent.com/pypi/simple/ https://mirrors.163.com/pypi/simple/"
-          PIP_TRUSTED_HOST_VALUE="pypi.tuna.tsinghua.edu.cn mirrors.aliyun.com mirrors.cloud.tencent.com mirrors.163.com"
-          UV_DEFAULT_INDEX_VALUE="${PIP_INDEX_URL_VALUE}"
-          UV_INDEX_VALUE="${PIP_EXTRA_INDEX_URL_VALUE}"
-          echo "[Package index] PIP_INDEX_URL=${PIP_INDEX_URL_VALUE}"
-          echo "[Package index] PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL_VALUE}"
-          echo "[Package index] PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST_VALUE}"
-          echo "[Package index] UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX_VALUE}"
-          echo "[Package index] UV_INDEX=${UV_INDEX_VALUE}"
-          export PIP_INDEX_URL="${PIP_INDEX_URL_VALUE}"
-          export PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL_VALUE}"
-          export PIP_TRUSTED_HOST="${PIP_TRUSTED_HOST_VALUE}"
-          export UV_DEFAULT_INDEX="${UV_DEFAULT_INDEX_VALUE}"
-          export UV_INDEX="${UV_INDEX_VALUE}"
-          {
-            echo "PIP_INDEX_URL=${PIP_INDEX_URL}"
-            echo "PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}"
-            echo "PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}"
-            echo "UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX}"
-            echo "UV_INDEX=${UV_INDEX}"
-          } >> "$GITHUB_ENV"
+          PACKAGE_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+          echo "[Package index] PACKAGE_INDEX_URL=${PACKAGE_INDEX_URL}"
+          export UV_DEFAULT_INDEX="${PACKAGE_INDEX_URL}"
+          echo "UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX}" >> "$GITHUB_ENV"
+
           ACTIVE_PYTHON=$(command -v python3)
-          echo "[Install dependencies] Purpose: install uv for target repository dependency resolution"
-          run_logged_command "uv installation" pip install uv
+          if command -v uv >/dev/null 2>&1; then
+            echo "[Install dependencies] uv is already available; skipping installation."
+          else
+            echo "[Install dependencies] Purpose: install uv for target repository dependency resolution"
+            run_logged_command \
+              "uv installation" \
+              env PIP_INDEX_URL="${PACKAGE_INDEX_URL}" \
+              "${ACTIVE_PYTHON}" -m pip install uv
+          fi
           echo "[Install dependencies] uv version: $(uv --version)"
           # Install this optest checkout so the workflow exercises the same
           # packaged GPU-check command before target dependencies are resolved.

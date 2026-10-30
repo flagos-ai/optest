@@ -189,21 +189,33 @@ class NotifyFeishuRefTest(unittest.TestCase):
         self.assertNotIn("matrix.vendor", install_optest["run"])
         self.assertNotIn("https://pypi.org/simple", install_optest["run"])
         self.assertIn(
-            "[Package index] PIP_INDEX_URL=${PIP_INDEX_URL_VALUE}",
+            "[Package index] PACKAGE_INDEX_URL=${PACKAGE_INDEX_URL}",
             install_optest["run"],
         )
         self.assertIn(
-            "PIP_INDEX_URL_VALUE=https://pypi.tuna.tsinghua.edu.cn/simple",
+            "PACKAGE_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple",
             install_optest["run"],
         )
-        self.assertIn("PIP_EXTRA_INDEX_URL_VALUE=", install_optest["run"])
-        self.assertIn("PIP_TRUSTED_HOST_VALUE=", install_optest["run"])
-        self.assertIn("UV_DEFAULT_INDEX_VALUE=", install_optest["run"])
-        self.assertIn("UV_INDEX_VALUE=", install_optest["run"])
         self.assertIn(
-            'run_logged_command "uv installation" pip install uv',
+            'echo "UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX}" >> "$GITHUB_ENV"',
             install_optest["run"],
         )
+        self.assertNotIn("PIP_EXTRA_INDEX_URL", install_optest["run"])
+        self.assertNotIn("PIP_TRUSTED_HOST", install_optest["run"])
+        self.assertNotIn("UV_INDEX", install_optest["run"])
+        self.assertIn(
+            "if command -v uv >/dev/null 2>&1; then",
+            install_optest["run"],
+        )
+        self.assertIn(
+            'env PIP_INDEX_URL="${PACKAGE_INDEX_URL}"',
+            install_optest["run"],
+        )
+        self.assertIn(
+            '"${ACTIVE_PYTHON}" -m pip install uv',
+            install_optest["run"],
+        )
+        self.assertNotIn("pip install --upgrade uv", install_optest["run"])
         self.assertIn("FLAGOS_GPU_VENDOR", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_DRIVER", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_RUNTIME", gpu_check["run"])

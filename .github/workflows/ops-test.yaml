@@ -581,7 +581,7 @@ jobs:
           }, indent=2))
           PY
 
-            echo "[uv experiment] Removing hjson and py-cpuinfo from the NVIDIA extra and adding tool.uv.exclude-dependencies."
+            echo "[uv experiment] Removing hjson and py-cpuinfo from the NVIDIA extra and excluding triton and torch from uv resolution."
             python3 - <<'PY'
           import re
           from pathlib import Path
@@ -613,7 +613,7 @@ jobs:
           text = "".join(output)
           if re.search(r"^\[tool\.uv\]\s*$", text, flags=re.MULTILINE):
               raise SystemExit("[uv experiment] ERROR: target already defines [tool.uv]")
-          text = text.rstrip() + '\n\n[tool.uv]\nexclude-dependencies = [\n    "triton",\n]\n'
+          text = text.rstrip() + '\n\n[tool.uv]\nexclude-dependencies = [\n    "triton",\n    "torch",\n]\n'
           path.write_text(text, encoding="utf-8")
           print(f"[uv experiment] Removed NVIDIA requirements: {', '.join(removed)}")
           PY
@@ -636,7 +636,7 @@ jobs:
           excluded = pyproject.get("tool", {}).get("uv", {}).get("exclude-dependencies")
           if any(requirement.lower().startswith(("hjson", "py-cpuinfo")) for requirement in nvidia):
               raise SystemExit("[uv experiment] ERROR: NVIDIA extra still contains hjson or py-cpuinfo")
-          if excluded != ["triton"]:
+          if excluded != ["triton", "torch"]:
               raise SystemExit(f"[uv experiment] ERROR: unexpected exclude-dependencies={excluded!r}")
           print(json.dumps({
               "test_exists": "test" in optional,
@@ -705,8 +705,9 @@ jobs:
           packages = set(re.findall(r'^name = "([^"]+)"$', lock, flags=re.MULTILINE))
           for package in ("deepspeed", "hjson", "py-cpuinfo", "torch", "triton"):
               print(f"[uv experiment] uv.lock contains {package}: {package in packages}")
-          if "triton" in packages:
-              raise SystemExit("[uv experiment] ERROR: triton is present in uv.lock")
+          for excluded in ("triton", "torch"):
+              if excluded in packages:
+                  raise SystemExit(f"[uv experiment] ERROR: excluded package {excluded} is present in uv.lock")
           for required in ("deepspeed", "hjson", "py-cpuinfo"):
               if required not in packages:
                   raise SystemExit(f"[uv experiment] ERROR: {required} is missing from uv.lock")
@@ -730,7 +731,7 @@ jobs:
               echo "[uv experiment] ERROR: DeepSpeed transitive dependencies were not installed."
               exit 1
             fi
-            echo "[uv experiment] SUCCESS: hjson and py-cpuinfo were resolved transitively, while torch and triton remained unchanged."
+            echo "[uv experiment] SUCCESS: hjson and py-cpuinfo were resolved transitively, while excluded torch and triton remained unchanged."
           else
             echo "[Install dependencies] Purpose: install the target repository under test with its test dependencies"
             echo "[Install dependencies] Target test extra source: ./target/pyproject.toml [project.optional-dependencies].test"

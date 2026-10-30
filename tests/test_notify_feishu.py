@@ -188,27 +188,31 @@ class NotifyFeishuRefTest(unittest.TestCase):
         )
         self.assertNotIn("matrix.vendor", install_optest["run"])
         self.assertNotIn("https://pypi.org/simple", install_optest["run"])
-        self.assertIn(
-            "[Package index] PACKAGE_INDEX_URL=${PACKAGE_INDEX_URL}",
-            install_optest["run"],
-        )
-        self.assertIn(
-            "PACKAGE_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple",
-            install_optest["run"],
-        )
+        for index_url in (
+            "https://pypi.tuna.tsinghua.edu.cn/simple",
+            "https://mirrors.aliyun.com/pypi/simple/",
+            "https://mirrors.cloud.tencent.com/pypi/simple/",
+            "https://mirrors.163.com/pypi/simple/",
+        ):
+            with self.subTest(index_url=index_url):
+                self.assertIn(index_url, install_optest["run"])
         self.assertIn(
             'echo "UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX}" >> "$GITHUB_ENV"',
             install_optest["run"],
         )
-        self.assertNotIn("PIP_EXTRA_INDEX_URL", install_optest["run"])
-        self.assertNotIn("PIP_TRUSTED_HOST", install_optest["run"])
-        self.assertNotIn("UV_INDEX", install_optest["run"])
+        self.assertIn("run_with_index_fallback", install_optest["run"])
+        self.assertIn(
+            "env -u PIP_EXTRA_INDEX_URL -u PIP_TRUSTED_HOST",
+            install_optest["run"],
+        )
+        self.assertIn("PIP_CONFIG_FILE=/dev/null", install_optest["run"])
+        self.assertIn("env -u UV_INDEX", install_optest["run"])
         self.assertIn(
             "if command -v uv >/dev/null 2>&1; then",
             install_optest["run"],
         )
         self.assertIn(
-            'env PIP_INDEX_URL="${PACKAGE_INDEX_URL}"',
+            'PIP_INDEX_URL="${index_url}"',
             install_optest["run"],
         )
         self.assertIn(
@@ -221,6 +225,8 @@ class NotifyFeishuRefTest(unittest.TestCase):
         self.assertIn("FLAGOS_GPU_RUNTIME", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_RUNTIME_VERSION", gpu_check["run"])
         self.assertIn("Detected explicit backend dependencies", install_target["run"])
+        self.assertIn("run_uv_with_index_fallback", install_target["run"])
+        self.assertIn("env -u UV_INDEX", install_target["run"])
         self.assertIn(
             'uv pip install --python "${ACTIVE_PYTHON}" "${EXTRA_DEPS_ARGS[@]}"',
             install_target["run"],

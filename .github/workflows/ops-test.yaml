@@ -390,19 +390,67 @@ jobs:
             return "${exit_code}"
           }
 
-          PACKAGE_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
-          echo "[Package index] PACKAGE_INDEX_URL=${PACKAGE_INDEX_URL}"
-          export UV_DEFAULT_INDEX="${PACKAGE_INDEX_URL}"
-          echo "UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX}" >> "$GITHUB_ENV"
+          PACKAGE_INDEX_URLS=(
+            https://pypi.tuna.tsinghua.edu.cn/simple
+            https://mirrors.aliyun.com/pypi/simple/
+            https://mirrors.cloud.tencent.com/pypi/simple/
+            https://mirrors.163.com/pypi/simple/
+          )
+
+          run_with_index_fallback() {
+            local installer="$1"
+            local description="$2"
+            shift 2
+            local index_url
+            local attempted=" "
+            local candidates=("${PACKAGE_INDEX_URLS[@]}")
+            if [ "${installer}" = "uv" ] && [ -n "${UV_DEFAULT_INDEX:-}" ]; then
+              candidates=("${UV_DEFAULT_INDEX}" "${candidates[@]}")
+            fi
+
+            for index_url in "${candidates[@]}"; do
+              if [[ "${attempted}" == *" ${index_url} "* ]]; then
+                continue
+              fi
+              attempted="${attempted}${index_url} "
+              echo "[Package index] ${description}: trying ${index_url}"
+              if [ "${installer}" = "pip" ]; then
+                if run_logged_command \
+                  "${description} via ${index_url}" \
+                  env -u PIP_EXTRA_INDEX_URL -u PIP_TRUSTED_HOST \
+                  PIP_CONFIG_FILE=/dev/null \
+                  PIP_INDEX_URL="${index_url}" \
+                  "$@"; then
+                  echo "[Package index] ${description}: selected ${index_url}"
+                  return 0
+                fi
+              elif run_logged_command \
+                "${description} via ${index_url}" \
+                env -u UV_INDEX UV_DEFAULT_INDEX="${index_url}" \
+                "$@"; then
+                export UV_DEFAULT_INDEX="${index_url}"
+                echo "UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX}" >> "$GITHUB_ENV"
+                echo "[Package index] ${description}: selected ${index_url}"
+                return 0
+              fi
+              echo "[Package index] ${description}: failed with ${index_url}"
+            done
+
+            echo "[Package index] ${description}: all configured indexes failed"
+            return 1
+          }
+
+          echo "[Package index] Configured indexes, in fallback order:"
+          printf '[Package index] - %s\n' "${PACKAGE_INDEX_URLS[@]}"
 
           ACTIVE_PYTHON=$(command -v python3)
           if command -v uv >/dev/null 2>&1; then
             echo "[Install dependencies] uv is already available; skipping installation."
           else
             echo "[Install dependencies] Purpose: install uv for target repository dependency resolution"
-            run_logged_command \
+            run_with_index_fallback \
+              pip \
               "uv installation" \
-              env PIP_INDEX_URL="${PACKAGE_INDEX_URL}" \
               "${ACTIVE_PYTHON}" -m pip install uv
           fi
           echo "[Install dependencies] uv version: $(uv --version)"
@@ -410,7 +458,8 @@ jobs:
           # packaged GPU-check command before target dependencies are resolved.
           echo "[Install dependencies] Purpose: install the optest source that provides the test and report commands"
           echo "[Install dependencies] Source: optest checkout pyproject.toml"
-          run_logged_command \
+          run_with_index_fallback \
+            uv \
             "optest source installation" \
             uv pip install --python "${ACTIVE_PYTHON}" .
 
@@ -525,6 +574,46 @@ jobs:
             return "${exit_code}"
           }
 
+          PACKAGE_INDEX_URLS=(
+            https://pypi.tuna.tsinghua.edu.cn/simple
+            https://mirrors.aliyun.com/pypi/simple/
+            https://mirrors.cloud.tencent.com/pypi/simple/
+            https://mirrors.163.com/pypi/simple/
+          )
+
+          run_uv_with_index_fallback() {
+            local description="$1"
+            shift
+            local index_url
+            local attempted=" "
+            local candidates=()
+            if [ -n "${UV_DEFAULT_INDEX:-}" ]; then
+              candidates+=("${UV_DEFAULT_INDEX}")
+            fi
+            candidates+=("${PACKAGE_INDEX_URLS[@]}")
+
+            for index_url in "${candidates[@]}"; do
+              if [[ "${attempted}" == *" ${index_url} "* ]]; then
+                continue
+              fi
+              attempted="${attempted}${index_url} "
+              echo "[Package index] ${description}: trying ${index_url}"
+              if run_logged_command \
+                "${description} via ${index_url}" \
+                env -u UV_INDEX UV_DEFAULT_INDEX="${index_url}" \
+                "$@"; then
+                export UV_DEFAULT_INDEX="${index_url}"
+                echo "UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX}" >> "$GITHUB_ENV"
+                echo "[Package index] ${description}: selected ${index_url}"
+                return 0
+              fi
+              echo "[Package index] ${description}: failed with ${index_url}"
+            done
+
+            echo "[Package index] ${description}: all configured indexes failed"
+            return 1
+          }
+
           ACTIVE_PYTHON=$(command -v python3)
           echo "[Install dependencies] Active Python: ${ACTIVE_PYTHON}"
           echo "[Install dependencies] uv version: $(uv --version)"
@@ -537,7 +626,7 @@ jobs:
           if [ -n "${EXTRA_DEPS}" ]; then
             read -r -a EXTRA_DEPS_ARGS <<< "${EXTRA_DEPS}"
             echo "[Install dependencies] Purpose: install configured backend dependencies"
-            run_logged_command \
+            run_uv_with_index_fallback \
               "explicit backend dependency installation" \
               uv pip install --python "${ACTIVE_PYTHON}" "${EXTRA_DEPS_ARGS[@]}"
           else
@@ -602,7 +691,7 @@ jobs:
           echo "[Install dependencies] Purpose: incrementally install the target repository without upgrading already-satisfied packages"
           (
             cd target
-            run_logged_command \
+            run_uv_with_index_fallback \
               "target repository uv installation" \
               uv pip install --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"
           )

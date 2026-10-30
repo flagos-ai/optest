@@ -18,8 +18,8 @@
 # repo defined in .github/configs/repos.yaml; the workflow checks out that repo
 # into ./target, installs it, and runs this repo's shared optest package against it.
 #
-# Per-repo config: .github/configs/repos.yaml  (org, default_branch, container_images,
-#                  backends, deps, base_data, timeout)
+# Per-repo config: .github/configs/repos.yaml  (org, default_branch,
+#                  container_images, backends, deps, base_data, timeout)
 # Shared backend hardware config: .github/configs/backends/<NAME>.yaml
 # vendors: Nvidia,MThreads,KunLunXin,Iluvatar,Ascend,Hygon,Metax,THead,Cambricon,AMD,TsingMicro,Enflame
 name: ops-test
@@ -43,6 +43,7 @@ on:
           - FlagGems
           - FlagGems-vllm
           - FlagGems-sglang
+          - FlagTrain
           - FlagAttention
       branch:
         description: 'optest branch supplying the workflow, package, and configs. Leave empty to use the branch this run was dispatched from (--ref).'
@@ -172,7 +173,7 @@ jobs:
                   backend['container_image'] = images[name]
 
               # deps: hardware default (backend yaml) + repo-wide (deps.default)
-              # + backend-specific (deps.<backend>), joined into one pip list.
+              # + backend-specific (deps.<backend>), joined into one requirement list.
               merged_deps = []
               merged_deps += backend.get('deps', []) or []
               merged_deps += deps_cfg.get('default', []) or []
@@ -368,35 +369,50 @@ jobs:
             ' || true
           fi
 
-      - name: Install target repository and optest
+      - name: Configure package index and install optest
         env: ${{ fromJSON(matrix.test_env) }}
         shell: bash --login -e -o pipefail {0}
         run: |
-          if [ "${{ matrix.vendor }}" == "Nvidia" ]; then
-            pip config set global.index-url https://pypi.org/simple
+          run_logged_command() {
+            local description="$1"
+            shift
+            local exit_code
+            echo "[Install dependencies] Starting: ${description}"
+            printf '[Install dependencies] Command:'
+            printf ' %q' "$@"
+            printf '\n'
+            if "$@"; then
+              exit_code=0
+            else
+              exit_code=$?
+            fi
+            echo "[Install dependencies] Finished: ${description} (exit_code=${exit_code})"
+            return "${exit_code}"
+          }
+
+          PACKAGE_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+          echo "[Package index] PACKAGE_INDEX_URL=${PACKAGE_INDEX_URL}"
+          export UV_DEFAULT_INDEX="${PACKAGE_INDEX_URL}"
+          echo "UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX}" >> "$GITHUB_ENV"
+
+          ACTIVE_PYTHON=$(command -v python3)
+          if command -v uv >/dev/null 2>&1; then
+            echo "[Install dependencies] uv is already available; skipping installation."
           else
-            pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-            pip config set global.extra-index-url "https://mirrors.aliyun.com/pypi/simple/ https://mirrors.cloud.tencent.com/pypi/simple/ https://mirrors.163.com/pypi/simple/"
-            pip config set global.trusted-host "pypi.tuna.tsinghua.edu.cn mirrors.aliyun.com mirrors.cloud.tencent.com mirrors.163.com"
+            echo "[Install dependencies] Purpose: install uv for target repository dependency resolution"
+            run_logged_command \
+              "uv installation" \
+              env PIP_INDEX_URL="${PACKAGE_INDEX_URL}" \
+              "${ACTIVE_PYTHON}" -m pip install uv
           fi
-          # Optional per-repo extra deps (from repos.yaml deps.*); empty = skip.
-          EXTRA_DEPS="${{ matrix.deps }}"
-          if [ -n "${EXTRA_DEPS}" ]; then
-            echo "[Install dependencies] Purpose: install configured backend and target-repository dependencies"
-            echo "[Install dependencies] Command: pip install ${EXTRA_DEPS}"
-            pip install ${EXTRA_DEPS}
-          else
-            echo "[Install dependencies] No extra dependencies configured; skipping optional pip install."
-          fi
-          # Install the target library (checked out into ./target).
-          echo "[Install dependencies] Purpose: install the target repository under test with its test dependencies"
-          echo '[Install dependencies] Command: pip install ./target[test]'
-          pip install ./target[test]
+          echo "[Install dependencies] uv version: $(uv --version)"
           # Install this optest checkout so the workflow exercises the same
-          # packaged console scripts that downstream users install.
+          # packaged GPU-check command before target dependencies are resolved.
           echo "[Install dependencies] Purpose: install the optest source that provides the test and report commands"
-          echo "[Install dependencies] Command: pip install ."
-          pip install .
+          echo "[Install dependencies] Source: optest checkout pyproject.toml"
+          run_logged_command \
+            "optest source installation" \
+            uv pip install --python "${ACTIVE_PYTHON}" .
 
       - name: Check GPU availability
         shell: bash --login -e -o pipefail {0}
@@ -407,25 +423,26 @@ jobs:
           # JSON document to stdout (progress tables and the vendor line go to
           # stderr, still visible in the step log), so parsing is exact and
           # robust against formatting changes.
+          set +e
+          GPU_JSON=$(${{ matrix.gpu_check_script }} --format json)
+          GPU_RC=$?
+          set -e
+          if [ -n "${GPU_JSON}" ]; then
+            echo "[GPU check] GPU availability check JSON:"
+            echo "${GPU_JSON}"
+          fi
           if [ "${{ matrix.force_test_gpus }}" = "true" ]; then
             # This backend deliberately pins the GPUs under test to the
             # configured test_gpus list (e.g. TsingMicro exposes more cards than
             # we want to use). The check is run for logging/inspection only, so
             # a non-zero exit here must NOT fail the job; test_gpus is
             # authoritative below.
-            ${{ matrix.gpu_check_script }} --format json || true
             AVAILABLE_GPUS="${{ matrix.test_gpus }}"
             echo "[GPU check] force_test_gpus=true -> using configured test_gpus"
           else
             # Capture the exit code explicitly (instead of relying on set -e)
             # so a failure is reported clearly before we stop. A failed GPU
             # check means we have no reliable GPU list, so the job must exit 1.
-            set +e
-            GPU_JSON=$(${{ matrix.gpu_check_script }} --format json)
-            GPU_RC=$?
-            set -e
-            echo "[GPU check] GPU availability check JSON:"
-            echo "${GPU_JSON}"
             if [ "${GPU_RC}" -ne 0 ]; then
               echo "[GPU check] ERROR: '${{ matrix.gpu_check_script }}' failed with exit code ${GPU_RC}."
               exit 1
@@ -459,7 +476,136 @@ jobs:
             ')
             echo "[GPU check] KunLunXin skips GPU 0; using GPUs: ${AVAILABLE_GPUS}"
           fi
-          echo "AVAILABLE_GPUS=${AVAILABLE_GPUS}" >> $GITHUB_ENV
+          echo "AVAILABLE_GPUS=${AVAILABLE_GPUS}" >> "$GITHUB_ENV"
+          if [ "${GPU_RC}" -eq 0 ]; then
+            printf '%s' "${GPU_JSON}" | python3 -c '
+          import json
+          import os
+          import sys
+
+          data = json.load(sys.stdin)
+          fields = {
+              "FLAGOS_GPU_VENDOR": data.get("vendor"),
+              "FLAGOS_GPU_DEVICE": data.get("device"),
+              "FLAGOS_GPU_DRIVER": data.get("driver"),
+              "FLAGOS_GPU_RUNTIME": data.get("runtime"),
+              "FLAGOS_GPU_RUNTIME_VERSION": data.get("runtime_version"),
+          }
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+              for name, value in fields.items():
+                  value = "" if value is None else str(value)
+                  if "\n" in value or "\r" in value:
+                      raise SystemExit(f"[GPU check] ERROR: invalid newline in {name}")
+                  env_file.write(f"{name}={value}\n")
+                  display_value = value or "<unknown>"
+                  print(f"[GPU check] Exported {name}={display_value}")
+          '
+          else
+            echo "[GPU check] Metadata unavailable; GPU environment variables were not exported."
+          fi
+
+      - name: Install target repository and dependencies
+        env: ${{ fromJSON(matrix.test_env) }}
+        shell: bash --login -e -o pipefail {0}
+        run: |
+          run_logged_command() {
+            local description="$1"
+            shift
+            local exit_code
+            echo "[Install dependencies] Starting: ${description}"
+            printf '[Install dependencies] Command:'
+            printf ' %q' "$@"
+            printf '\n'
+            if "$@"; then
+              exit_code=0
+            else
+              exit_code=$?
+            fi
+            echo "[Install dependencies] Finished: ${description} (exit_code=${exit_code})"
+            return "${exit_code}"
+          }
+
+          ACTIVE_PYTHON=$(command -v python3)
+          echo "[Install dependencies] Active Python: ${ACTIVE_PYTHON}"
+          echo "[Install dependencies] uv version: $(uv --version)"
+
+          # Optional explicit deps remain supported for exceptional backend
+          # configuration. Normal target dependencies belong in pyproject.toml.
+          EXTRA_DEPS="${{ matrix.deps }}"
+          echo "[Install dependencies] Explicit backend dependency source: .github/configs/repos.yaml repos.${REPOSITORY_NAME}.deps.default + repos.${REPOSITORY_NAME}.deps.${{ matrix.name }}"
+          echo "[Install dependencies] Detected explicit backend dependencies: ${EXTRA_DEPS:-<empty>}"
+          if [ -n "${EXTRA_DEPS}" ]; then
+            read -r -a EXTRA_DEPS_ARGS <<< "${EXTRA_DEPS}"
+            echo "[Install dependencies] Purpose: install configured backend dependencies"
+            run_logged_command \
+              "explicit backend dependency installation" \
+              uv pip install --python "${ACTIVE_PYTHON}" "${EXTRA_DEPS_ARGS[@]}"
+          else
+            echo "[Install dependencies] No explicit backend dependencies configured; skipping."
+          fi
+
+          TARGET_METADATA=$("${ACTIVE_PYTHON}" - "${FLAGOS_GPU_VENDOR:-}" <<'PY'
+          import json
+          import sys
+
+          try:
+              import tomllib
+          except ModuleNotFoundError:
+              import tomli as tomllib
+
+          with open("target/pyproject.toml", "rb") as pyproject_file:
+              pyproject = tomllib.load(pyproject_file)
+          vendor = sys.argv[1]
+          extras = pyproject.get("project", {}).get("optional-dependencies", {})
+          print(json.dumps({
+              "test_exists": "test" in extras,
+              "vendor": vendor,
+              "vendor_exists": bool(vendor) and vendor in extras,
+              "available_extras": sorted(extras),
+              "excluded_dependencies": pyproject.get("tool", {})
+                  .get("uv", {}).get("exclude-dependencies", []),
+          }))
+          PY
+          )
+          echo "[Install dependencies] Target dependency metadata:"
+          printf '%s\n' "${TARGET_METADATA}" | "${ACTIVE_PYTHON}" -m json.tool
+          HAS_TEST=$(printf '%s' "${TARGET_METADATA}" | "${ACTIVE_PYTHON}" -c 'import json, sys; print("true" if json.load(sys.stdin)["test_exists"] else "false")')
+          HAS_VENDOR=$(printf '%s' "${TARGET_METADATA}" | "${ACTIVE_PYTHON}" -c 'import json, sys; print("true" if json.load(sys.stdin)["vendor_exists"] else "false")')
+          EXCLUDED_DEPENDENCIES=$(printf '%s' "${TARGET_METADATA}" | "${ACTIVE_PYTHON}" -c 'import json, sys; print(", ".join(json.load(sys.stdin)["excluded_dependencies"]) or "<none>")')
+
+          echo "[Install dependencies] Target project source: ./target/pyproject.toml"
+          echo "[Install dependencies] Test extra source: [project.optional-dependencies].test"
+          echo "[Install dependencies] Detected test extra: ${HAS_TEST}"
+          echo "[Install dependencies] Detected GPU vendor from flagos-gpu-check: ${FLAGOS_GPU_VENDOR:-<unavailable>}"
+          echo "[Install dependencies] Vendor extra source: [project.optional-dependencies].${FLAGOS_GPU_VENDOR:-<unavailable>}"
+          echo "[Install dependencies] Detected vendor extra: ${HAS_VENDOR}"
+          echo "[Install dependencies] Exclusion policy source: [tool.uv].exclude-dependencies"
+          echo "[Install dependencies] Detected excluded dependencies: ${EXCLUDED_DEPENDENCIES}"
+
+          TARGET_EXTRAS=()
+          if [ "${HAS_TEST}" = "true" ]; then
+            TARGET_EXTRAS+=(test)
+          fi
+          if [ "${HAS_VENDOR}" = "true" ]; then
+            TARGET_EXTRAS+=("${FLAGOS_GPU_VENDOR}")
+          fi
+          TARGET_PROJECT_SPEC="."
+          SELECTED_EXTRAS="<none>"
+          if [ "${#TARGET_EXTRAS[@]}" -gt 0 ]; then
+            SELECTED_EXTRAS=$(IFS=,; echo "${TARGET_EXTRAS[*]}")
+            TARGET_PROJECT_SPEC=".[${SELECTED_EXTRAS}]"
+          else
+            echo "[Install dependencies] No test or detected-vendor extra exists; installing the base project only."
+          fi
+          echo "[Install dependencies] Selected target extras: ${SELECTED_EXTRAS}"
+          echo "[Install dependencies] Target install specification: ${TARGET_PROJECT_SPEC}"
+          echo "[Install dependencies] Purpose: incrementally install the target repository without upgrading already-satisfied packages"
+          (
+            cd target
+            run_logged_command \
+              "target repository uv installation" \
+              uv pip install --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"
+          )
 
       # Run ops tests.
       # OPS is provided by the prepare job: "all" (scheduled runs or an empty

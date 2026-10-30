@@ -538,7 +538,7 @@ def _probe_gems():
         perror(
             "No FlagOS library detected "
             "(flag_gems / flaggems_vllm / flaggems_sglang / flag_attn). "
-            "Please run `pip install -e .` in the project repo."
+            "Please run `uv pip install -e .` in the project repo."
         )
         sys.exit(-1)
 

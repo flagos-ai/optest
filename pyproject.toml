@@ -20,7 +20,7 @@ build-backend = "setuptools.build_meta"
 name = "flagos-optest"
 version = "0.1.0"
 description = "Shared ops-test CI tooling for FlagOS operator libraries"
-readme = { text = "Shared operator accuracy & performance test scheduler and result report tooling, distributed as a wheel so any FlagOS repo can install it via `pip install` instead of checking out this repo.", content-type = "text/markdown" }
+readme = { text = "Shared operator accuracy & performance test scheduler and result report tooling for FlagOS repositories.", content-type = "text/markdown" }
 requires-python = ">=3.9"
 license = "Apache-2.0"
 authors = [{ name = "FlagOS Contributors" }]
@@ -32,9 +32,10 @@ classifiers = [
 # Only the small, well-known report/parsing dependencies are declared here.
 # The heavyweight runtime stack (torch, triton, the flagos library under test,
 # pytest and its --record/--collect-marks plugins) is provided by each target
-# repo's own test environment (its `pip install .[test]`), not by this wheel.
+# repo's own test environment (installed with `uv pip install`), not by this wheel.
 dependencies = [
     "distro",
+    "tomli; python_version < '3.11'",
     "PyYAML",
 ]
 

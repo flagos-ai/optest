@@ -169,14 +169,71 @@ class NotifyFeishuRefTest(unittest.TestCase):
         for attempt in range(1, 4):
             self.assertIn(f"Checkout target repository (attempt {attempt})", names)
 
-        install = next(
+        install_optest = next(
             step
             for step in steps
-            if step.get("name") == "Install target repository and optest"
+            if step.get("name") == "Configure package index and install optest"
         )
-        self.assertIn("Command: pip install ${EXTRA_DEPS}", install["run"])
-        self.assertIn("Command: pip install ./target[test]", install["run"])
-        self.assertIn("Command: pip install .", install["run"])
+        install_target = next(
+            step
+            for step in steps
+            if step.get("name") == "Install target repository and dependencies"
+        )
+        gpu_check = next(
+            step for step in steps if step.get("name") == "Check GPU availability"
+        )
+        self.assertIn(
+            'uv pip install --python "${ACTIVE_PYTHON}" .',
+            install_optest["run"],
+        )
+        self.assertNotIn("matrix.vendor", install_optest["run"])
+        self.assertNotIn("https://pypi.org/simple", install_optest["run"])
+        self.assertIn(
+            "[Package index] PACKAGE_INDEX_URL=${PACKAGE_INDEX_URL}",
+            install_optest["run"],
+        )
+        self.assertIn(
+            "PACKAGE_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple",
+            install_optest["run"],
+        )
+        self.assertIn(
+            'echo "UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX}" >> "$GITHUB_ENV"',
+            install_optest["run"],
+        )
+        self.assertNotIn("PIP_EXTRA_INDEX_URL", install_optest["run"])
+        self.assertNotIn("PIP_TRUSTED_HOST", install_optest["run"])
+        self.assertNotIn("UV_INDEX", install_optest["run"])
+        self.assertIn(
+            "if command -v uv >/dev/null 2>&1; then",
+            install_optest["run"],
+        )
+        self.assertIn(
+            'env PIP_INDEX_URL="${PACKAGE_INDEX_URL}"',
+            install_optest["run"],
+        )
+        self.assertIn(
+            '"${ACTIVE_PYTHON}" -m pip install uv',
+            install_optest["run"],
+        )
+        self.assertNotIn("pip install --upgrade uv", install_optest["run"])
+        self.assertIn("FLAGOS_GPU_VENDOR", gpu_check["run"])
+        self.assertIn("FLAGOS_GPU_DRIVER", gpu_check["run"])
+        self.assertIn("FLAGOS_GPU_RUNTIME", gpu_check["run"])
+        self.assertIn("FLAGOS_GPU_RUNTIME_VERSION", gpu_check["run"])
+        self.assertIn("Detected explicit backend dependencies", install_target["run"])
+        self.assertIn(
+            'uv pip install --python "${ACTIVE_PYTHON}" "${EXTRA_DEPS_ARGS[@]}"',
+            install_target["run"],
+        )
+        self.assertIn("Detected test extra", install_target["run"])
+        self.assertIn("Detected vendor extra", install_target["run"])
+        self.assertIn("[tool.uv].exclude-dependencies", install_target["run"])
+        self.assertIn(
+            'uv pip install --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"',
+            install_target["run"],
+        )
+        self.assertNotIn("flagos-install-target-deps", install_target["run"])
+        self.assertNotIn("vendor_pip_args", install_target["run"])
 
     def test_workflow_retries_result_uploads(self):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))

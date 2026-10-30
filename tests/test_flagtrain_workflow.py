@@ -126,6 +126,56 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             for backend in matrix["include"]:
                 self.assertNotIn("vendor_pip_args", backend)
 
+    def test_optest_install_retries_package_indexes(self):
+        steps = self.workflow["jobs"]["test-container"]["steps"]
+        script = next(
+            step["run"]
+            for step in steps
+            if step.get("name") == "Configure package index and install optest"
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            uv = root / "uv"
+            uv.write_text(
+                "#!/bin/sh\n"
+                'if [ "$1" = "--version" ]; then echo "uv 0.13.6"; exit 0; fi\n'
+                'printf "[fake uv index=%s] %s\\n" "$UV_DEFAULT_INDEX" "$*"\n'
+                'case "$UV_DEFAULT_INDEX" in *tuna*) exit 23 ;; esac\n',
+                encoding="utf-8",
+            )
+            uv.chmod(0o755)
+            github_env = root / "github-env"
+            completed = subprocess.run(
+                ["bash", "-e", "-o", "pipefail", "-c", script],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "GITHUB_ENV": str(github_env),
+                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                    "UV_DEFAULT_INDEX": "",
+                },
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn(
+                "optest source installation: failed with "
+                "https://pypi.tuna.tsinghua.edu.cn/simple",
+                completed.stdout,
+            )
+            self.assertIn(
+                "optest source installation: selected "
+                "https://mirrors.aliyun.com/pypi/simple/",
+                completed.stdout,
+            )
+            self.assertIn(
+                "UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/",
+                github_env.read_text(encoding="utf-8"),
+            )
+
     def test_target_install_logs_dependency_sources_commands_and_results(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]
         script = next(
@@ -160,6 +210,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 "uv": (
                     "#!/bin/sh\n"
                     'if [ "$1" = "--version" ]; then echo "uv 0.13.6"; exit 0; fi\n'
+                    'case "$UV_DEFAULT_INDEX" in *tuna*) exit 23 ;; esac\n'
                     "printf '[fake uv cwd=%s] %s\\n' \"$PWD\" \"$*\"\n"
                 ),
             }
@@ -168,15 +219,21 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 command.write_text(content, encoding="utf-8")
                 command.chmod(0o755)
 
+            github_env = root / "github-env"
+            common_environment = {
+                **os.environ,
+                "FLAGOS_GPU_VENDOR": "nvidia",
+                "GITHUB_ENV": str(github_env),
+                "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                "UV_DEFAULT_INDEX": "",
+            }
             completed = subprocess.run(
                 ["bash", "-e", "-o", "pipefail", "-c", script],
                 cwd=root,
                 check=False,
                 capture_output=True,
                 env={
-                    **os.environ,
-                    "FLAGOS_GPU_VENDOR": "nvidia",
-                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                    **common_environment,
                     "REPOSITORY_NAME": "FlagTrain",
                 },
                 text=True,
@@ -196,13 +253,12 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 check=False,
                 capture_output=True,
                 env={
-                    **os.environ,
-                    "FLAGOS_GPU_VENDOR": "nvidia",
-                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                    **common_environment,
                     "REPOSITORY_NAME": "FlagGems",
                 },
                 text=True,
             )
+            github_env_contents = github_env.read_text(encoding="utf-8")
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         output = completed.stdout
@@ -219,10 +275,12 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             "Detected excluded dependencies: torch, triton",
             "Selected target extras: test,nvidia",
             "Target install specification: .[test,nvidia]",
-            "Starting: target repository uv installation",
+            "target repository uv installation: failed with https://pypi.tuna.tsinghua.edu.cn/simple",
+            "target repository uv installation: selected https://mirrors.aliyun.com/pypi/simple/",
+            "Starting: target repository uv installation via https://mirrors.aliyun.com/pypi/simple/",
             "pip install --python",
             "--editable .[test,nvidia]",
-            "Finished: target repository uv installation (exit_code=0)",
+            "Finished: target repository uv installation via https://mirrors.aliyun.com/pypi/simple/ (exit_code=0)",
         ]
         for entry in expected:
             with self.subTest(entry=entry):
@@ -239,6 +297,10 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         )
         self.assertIn(
             "--editable .[test]", test_only_completed.stdout
+        )
+        self.assertIn(
+            "UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/",
+            github_env_contents,
         )
 
     def test_gpu_check_script_exports_metadata_with_unknown_values(self):

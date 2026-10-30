@@ -48,30 +48,64 @@ def _load_vendor_requirements(target: Path, vendor: str):
 
 def _run_pip(arguments):
     command = [sys.executable, "-m", "pip", "install", *arguments]
-    print(f"[Install dependencies] Command: {shlex.join(command)}")
-    subprocess.run(command, check=True)
+    print("[Install dependencies] Starting: resolved vendor requirement installation", flush=True)
+    print(f"[Install dependencies] Command: {shlex.join(command)}", flush=True)
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as error:
+        print(
+            "[Install dependencies] Finished: resolved vendor requirement "
+            f"installation (exit_code={error.returncode})",
+            flush=True,
+        )
+        raise
+    print(
+        "[Install dependencies] Finished: resolved vendor requirement "
+        "installation (exit_code=0)",
+        flush=True,
+    )
 
 
 def install_vendor_dependencies(target: Path, vendor: str, *, no_deps=False):
+    pyproject_path = target / "pyproject.toml"
+    print(
+        f"[Install dependencies] Vendor extra source: {pyproject_path} "
+        f"[project.optional-dependencies].{vendor}",
+        flush=True,
+    )
     requirements = _load_vendor_requirements(target, vendor)
     if requirements is None:
         print(
             f"[Install dependencies] Target does not define {vendor!r} "
-            "optional-dependency group; skipping vendor dependencies."
+            "optional-dependency group; skipping vendor dependencies.",
+            flush=True,
         )
         return False
     if not requirements:
         print(
             f"[Install dependencies] Target defines an empty {vendor!r} "
-            "optional-dependency group; skipping vendor dependencies."
+            "optional-dependency group; skipping vendor dependencies.",
+            flush=True,
         )
         return False
+
+    print(
+        f"[Install dependencies] Detected vendor extra requirements "
+        f"({len(requirements)}): {shlex.join(requirements)}",
+        flush=True,
+    )
+    pip_arguments = ["--no-deps"] if no_deps else []
+    print(
+        "[Install dependencies] Effective vendor pip arguments: "
+        + (shlex.join(pip_arguments) if pip_arguments else "<empty>"),
+        flush=True,
+    )
 
     if no_deps:
         # Installing target[vendor] with --no-deps would skip the extra itself.
         # Install the extra's requirements directly so only their transitive
         # dependency resolution is disabled.
-        _run_pip(["--no-deps", *requirements])
+        _run_pip([*pip_arguments, *requirements])
     else:
         _run_pip([f"{target}[{vendor}]"])
     return True

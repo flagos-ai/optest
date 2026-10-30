@@ -402,6 +402,23 @@ jobs:
         env: ${{ fromJSON(matrix.test_env) }}
         shell: bash --login -e -o pipefail {0}
         run: |
+          run_logged_command() {
+            local description="$1"
+            shift
+            local exit_code
+            echo "[Install dependencies] Starting: ${description}"
+            printf '[Install dependencies] Command:'
+            printf ' %q' "$@"
+            printf '\n'
+            if "$@"; then
+              exit_code=0
+            else
+              exit_code=$?
+            fi
+            echo "[Install dependencies] Finished: ${description} (exit_code=${exit_code})"
+            return "${exit_code}"
+          }
+
           PIP_INDEX_URL_VALUE=https://pypi.tuna.tsinghua.edu.cn/simple
           PIP_EXTRA_INDEX_URL_VALUE="https://mirrors.aliyun.com/pypi/simple/ https://mirrors.cloud.tencent.com/pypi/simple/ https://mirrors.163.com/pypi/simple/"
           PIP_TRUSTED_HOST_VALUE="pypi.tuna.tsinghua.edu.cn mirrors.aliyun.com mirrors.cloud.tencent.com mirrors.163.com"
@@ -419,8 +436,8 @@ jobs:
           # Install this optest checkout so the workflow exercises the same
           # packaged GPU-check command before target dependencies are resolved.
           echo "[Install dependencies] Purpose: install the optest source that provides the test and report commands"
-          echo "[Install dependencies] Command: pip install ."
-          pip install .
+          echo "[Install dependencies] Source: optest checkout pyproject.toml"
+          run_logged_command "optest source installation" pip install .
 
       - name: Check GPU availability
         shell: bash --login -e -o pipefail {0}
@@ -516,19 +533,37 @@ jobs:
         env: ${{ fromJSON(matrix.test_env) }}
         shell: bash --login -e -o pipefail {0}
         run: |
+          run_logged_command() {
+            local description="$1"
+            shift
+            local exit_code
+            echo "[Install dependencies] Starting: ${description}"
+            printf '[Install dependencies] Command:'
+            printf ' %q' "$@"
+            printf '\n'
+            if "$@"; then
+              exit_code=0
+            else
+              exit_code=$?
+            fi
+            echo "[Install dependencies] Finished: ${description} (exit_code=${exit_code})"
+            return "${exit_code}"
+          }
+
           # Optional explicit deps remain supported for backend configuration;
           # target-specific vendor packages belong in pyproject.toml extras.
           EXTRA_DEPS="${{ matrix.deps }}"
+          echo "[Install dependencies] Explicit backend dependency source: .github/configs/repos.yaml repos.${REPOSITORY_NAME}.deps.default + repos.${REPOSITORY_NAME}.deps.${{ matrix.name }}"
+          echo "[Install dependencies] Detected explicit backend dependencies: ${EXTRA_DEPS:-<empty>}"
           if [ -n "${EXTRA_DEPS}" ]; then
             echo "[Install dependencies] Purpose: install configured backend dependencies"
-            echo "[Install dependencies] Command: pip install ${EXTRA_DEPS}"
-            pip install ${EXTRA_DEPS}
+            run_logged_command "explicit backend dependency installation" pip install ${EXTRA_DEPS}
           else
             echo "[Install dependencies] No explicit backend dependencies configured; skipping."
           fi
           echo "[Install dependencies] Purpose: install the target repository under test with its test dependencies"
-          echo '[Install dependencies] Command: pip install ./target[test]'
-          pip install './target[test]'
+          echo "[Install dependencies] Target test extra source: ./target/pyproject.toml [project.optional-dependencies].test"
+          run_logged_command "target test-extra installation" pip install './target[test]'
 
           # Install the optional-dependency group matching the vendor detected
           # by flagos-gpu-check. A target repository may support only a subset
@@ -537,7 +572,21 @@ jobs:
             echo "[Install dependencies] GPU vendor is unavailable; skipping vendor extra."
           else
             VENDOR_PIP_ARGS="${{ matrix.vendor_pip_args }}"
-            flagos-install-target-deps ./target "${FLAGOS_GPU_VENDOR}" ${VENDOR_PIP_ARGS}
+            echo "[Install dependencies] Detected GPU vendor from flagos-gpu-check: ${FLAGOS_GPU_VENDOR}"
+            echo "[Install dependencies] Vendor extra source: ./target/pyproject.toml [project.optional-dependencies].${FLAGOS_GPU_VENDOR}"
+            echo "[Install dependencies] Vendor pip argument source: .github/configs/repos.yaml repos.${REPOSITORY_NAME}.vendor_pip_args.default + repos.${REPOSITORY_NAME}.vendor_pip_args.${FLAGOS_GPU_VENDOR}"
+            echo "[Install dependencies] Detected vendor pip arguments: ${VENDOR_PIP_ARGS:-<empty>}"
+            printf "[Install dependencies] Vendor install specification: pip install './target[%s]'" "${FLAGOS_GPU_VENDOR}"
+            if [ -n "${VENDOR_PIP_ARGS}" ]; then
+              printf ' %s' ${VENDOR_PIP_ARGS}
+            fi
+            printf '\n'
+            if [ "${VENDOR_PIP_ARGS}" = "--no-deps" ]; then
+              echo "[Install dependencies] Resolution mode: install requirements declared by the vendor extra directly with --no-deps; pip would otherwise skip those requirements."
+            fi
+            run_logged_command \
+              "vendor extra dependency installation (${FLAGOS_GPU_VENDOR})" \
+              flagos-install-target-deps ./target "${FLAGOS_GPU_VENDOR}" ${VENDOR_PIP_ARGS}
           fi
 
       # Run ops tests.

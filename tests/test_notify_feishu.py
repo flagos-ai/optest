@@ -182,7 +182,10 @@ class NotifyFeishuRefTest(unittest.TestCase):
         gpu_check = next(
             step for step in steps if step.get("name") == "Check GPU availability"
         )
-        self.assertIn("Command: pip install .", install_optest["run"])
+        self.assertIn(
+            'run_logged_command "optest source installation" pip install .',
+            install_optest["run"],
+        )
         self.assertNotIn("matrix.vendor", install_optest["run"])
         self.assertNotIn("https://pypi.org/simple", install_optest["run"])
         self.assertIn(
@@ -199,8 +202,17 @@ class NotifyFeishuRefTest(unittest.TestCase):
         self.assertIn("FLAGOS_GPU_DRIVER", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_RUNTIME", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_RUNTIME_VERSION", gpu_check["run"])
-        self.assertIn("Command: pip install ${EXTRA_DEPS}", install_target["run"])
-        self.assertIn("Command: pip install ./target[test]", install_target["run"])
+        self.assertIn("Detected explicit backend dependencies", install_target["run"])
+        self.assertIn(
+            'run_logged_command "explicit backend dependency installation" pip install ${EXTRA_DEPS}',
+            install_target["run"],
+        )
+        self.assertIn(
+            'run_logged_command "target test-extra installation" pip install',
+            install_target["run"],
+        )
+        self.assertIn("Vendor pip argument source", install_target["run"])
+        self.assertIn("Vendor install specification", install_target["run"])
         self.assertIn(
             'flagos-install-target-deps ./target "${FLAGOS_GPU_VENDOR}" ${VENDOR_PIP_ARGS}',
             install_target["run"],

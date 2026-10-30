@@ -164,6 +164,72 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 )
             )
 
+    def test_target_install_logs_dependency_sources_commands_and_results(self):
+        steps = self.workflow["jobs"]["test-container"]["steps"]
+        script = next(
+            step["run"]
+            for step in steps
+            if step.get("name") == "Install target repository and dependencies"
+        )
+        replacements = {
+            "${{ matrix.deps }}": "",
+            "${{ matrix.name }}": "H800",
+            "${{ matrix.vendor_pip_args }}": "--no-deps",
+        }
+        for expression, value in replacements.items():
+            script = script.replace(expression, value)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            commands = {
+                "pip": "#!/bin/sh\nprintf '[fake pip] %s\\n' \"$*\"\n",
+                "flagos-install-target-deps": (
+                    "#!/bin/sh\n"
+                    "printf '[fake vendor installer] %s\\n' \"$*\"\n"
+                ),
+            }
+            for name, content in commands.items():
+                command = root / name
+                command.write_text(content, encoding="utf-8")
+                command.chmod(0o755)
+
+            completed = subprocess.run(
+                ["bash", "-e", "-o", "pipefail", "-c", script],
+                check=False,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "FLAGOS_GPU_VENDOR": "nvidia",
+                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                    "REPOSITORY_NAME": "FlagTrain",
+                },
+                text=True,
+            )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        output = completed.stdout
+        expected = [
+            "repos.FlagTrain.deps.default + repos.FlagTrain.deps.H800",
+            "Detected explicit backend dependencies: <empty>",
+            "No explicit backend dependencies configured; skipping.",
+            "Starting: target test-extra installation",
+            "Target test extra source: ./target/pyproject.toml",
+            "Finished: target test-extra installation (exit_code=0)",
+            "Detected GPU vendor from flagos-gpu-check: nvidia",
+            "[project.optional-dependencies].nvidia",
+            (
+                "repos.FlagTrain.vendor_pip_args.default + "
+                "repos.FlagTrain.vendor_pip_args.nvidia"
+            ),
+            "Detected vendor pip arguments: --no-deps",
+            "Vendor install specification: pip install './target[nvidia]' --no-deps",
+            "[fake vendor installer] ./target nvidia --no-deps",
+            "Finished: vendor extra dependency installation (nvidia) (exit_code=0)",
+        ]
+        for entry in expected:
+            with self.subTest(entry=entry):
+                self.assertIn(entry, output)
+
     def test_gpu_check_script_exports_metadata_with_unknown_values(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]
         script = next(

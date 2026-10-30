@@ -56,7 +56,7 @@ def test_vendor_extra_uses_normal_target_install(target):
     )
 
 
-def test_no_deps_installs_extra_requirements_directly(target):
+def test_no_deps_installs_extra_requirements_directly(target, capsys):
     root = target(
         'nvidia = ["deepspeed==0.19.8", "deepspeed-kernels", '
         '"hjson==3.1.0", "py-cpuinfo==9.0.0"]'
@@ -81,3 +81,25 @@ def test_no_deps_installs_extra_requirements_directly(target):
         ],
         check=True,
     )
+    output = capsys.readouterr().out
+    assert f"Vendor extra source: {root / 'pyproject.toml'}" in output
+    assert "[project.optional-dependencies].nvidia" in output
+    assert "Detected vendor extra requirements (4):" in output
+    assert "Effective vendor pip arguments: --no-deps" in output
+    assert "Command:" in output
+    assert "deepspeed==0.19.8" in output
+    assert "Finished: resolved vendor requirement installation (exit_code=0)" in output
+
+
+def test_vendor_install_failure_logs_exit_code(target, capsys):
+    root = target('nvidia = ["deepspeed==0.19.8"]')
+    error = target_dependencies.subprocess.CalledProcessError(7, "pip")
+    with mock.patch.object(
+        target_dependencies.subprocess, "run", side_effect=error
+    ), pytest.raises(target_dependencies.subprocess.CalledProcessError):
+        target_dependencies.install_vendor_dependencies(
+            root, "nvidia", no_deps=True
+        )
+
+    output = capsys.readouterr().out
+    assert "Finished: resolved vendor requirement installation (exit_code=7)" in output

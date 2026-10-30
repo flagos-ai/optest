@@ -183,7 +183,7 @@ class NotifyFeishuRefTest(unittest.TestCase):
             step for step in steps if step.get("name") == "Check GPU availability"
         )
         self.assertIn(
-            'run_logged_command "optest source installation" pip install .',
+            'uv pip install --python "${ACTIVE_PYTHON}" .',
             install_optest["run"],
         )
         self.assertNotIn("matrix.vendor", install_optest["run"])
@@ -198,25 +198,30 @@ class NotifyFeishuRefTest(unittest.TestCase):
         )
         self.assertIn("PIP_EXTRA_INDEX_URL_VALUE=", install_optest["run"])
         self.assertIn("PIP_TRUSTED_HOST_VALUE=", install_optest["run"])
+        self.assertIn("UV_DEFAULT_INDEX_VALUE=", install_optest["run"])
+        self.assertIn("UV_INDEX_VALUE=", install_optest["run"])
+        self.assertIn(
+            'run_logged_command "uv installation" pip install uv',
+            install_optest["run"],
+        )
         self.assertIn("FLAGOS_GPU_VENDOR", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_DRIVER", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_RUNTIME", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_RUNTIME_VERSION", gpu_check["run"])
         self.assertIn("Detected explicit backend dependencies", install_target["run"])
         self.assertIn(
-            'run_logged_command "explicit backend dependency installation" pip install ${EXTRA_DEPS}',
+            'uv pip install --python "${ACTIVE_PYTHON}" "${EXTRA_DEPS_ARGS[@]}"',
             install_target["run"],
         )
+        self.assertIn("Detected test extra", install_target["run"])
+        self.assertIn("Detected vendor extra", install_target["run"])
+        self.assertIn("[tool.uv].exclude-dependencies", install_target["run"])
         self.assertIn(
-            'run_logged_command "target test-extra installation" pip install',
+            'uv pip install --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"',
             install_target["run"],
         )
-        self.assertIn("Vendor pip argument source", install_target["run"])
-        self.assertIn("Vendor install specification", install_target["run"])
-        self.assertIn(
-            'flagos-install-target-deps ./target "${FLAGOS_GPU_VENDOR}" ${VENDOR_PIP_ARGS}',
-            install_target["run"],
-        )
+        self.assertNotIn("flagos-install-target-deps", install_target["run"])
+        self.assertNotIn("vendor_pip_args", install_target["run"])
 
     def test_workflow_retries_result_uploads(self):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))

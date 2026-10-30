@@ -18,7 +18,9 @@ result-labeling, web-data conversion, and vendor-specific GPU checking toolsuite
   - [Options](#options)
   - [Device and runtime metadata](#device-and-runtime-metadata)
   - [Examples](#examples)
-- [Target repository test dependencies](#target-repository-test-dependencies)
+- [Target repository dependencies with uv](#target-repository-dependencies-with-uv)
+  - [Configure test and vendor extras](#configure-test-and-vendor-extras)
+  - [Centralized workflow behavior](#centralized-workflow-behavior)
 - [Repository layout](#repository-layout)
   - [Repository configuration](#repository-configuration)
   - [Backend configuration](#backend-configuration)
@@ -29,7 +31,7 @@ Install `optest` into the same Python environment as the operator library under
 test:
 
 ```bash
-python -m pip install /path/to/optest
+uv pip install /path/to/optest
 ```
 
 You can install tool in editable mode as well:
@@ -37,7 +39,7 @@ You can install tool in editable mode as well:
 ```bash
 git clone https://github.com/flagos-ai/optest
 cd optest
-python -m pip install -e .
+uv pip install -e .
 ```
 
 The package installs the following console commands:
@@ -524,40 +526,63 @@ gpus:
   free: 32700
 ```
 
-## Target Repository Test Dependencies
+## Target Repository Dependencies with uv
 
 The operator library, rather than the `optest` wheel, owns heavyweight runtime
 and vendor dependencies. Define optional dependency groups in the target
 repository's `pyproject.toml` so developers and CI can install a reproducible
 test environment directly from that repository.
 
-For example:
+> **Important:** Use `uv pip install`, not `pip install`, for target repository
+> extras that rely on `[tool.uv].exclude-dependencies`. Hardware images often
+> provide vendor-specific builds of packages such as torch and Triton, while a
+> framework may declare generic versions as transitive dependencies. uv can
+> exclude those selected distributions from resolution and still install the
+> framework's other transitive dependencies. pip does not read `[tool.uv]` and
+> currently has no equivalent project setting for this selective exclusion.
+
+### Configure test and vendor extras
+
+Use the normalized vendor name reported by `flagos-gpu-check` as the extra
+name. For example:
 
 ```toml
 [project.optional-dependencies]
 test = [
-  "pytest",
-  "pytest-xdist",
-  # Add the plugins that provide --record and --collect-marks.
+    "pytest",
+    "pytest-xdist",
+    # Add the plugins that provide --record and --collect-marks.
 ]
 nvidia = [
-  # NVIDIA-specific runtime packages.
+    "deepspeed==0.19.8",
+    "deepspeed-kernels",
 ]
 ascend = [
-  # Ascend-specific runtime packages.
+    # Ascend-specific runtime packages.
 ]
 kunlunxin = [
-  # KunlunXin-specific runtime packages.
+    # KunlunXin-specific runtime packages.
+]
+
+[tool.uv]
+# These hardware-specific packages are already supplied by the runtime image.
+exclude-dependencies = [
+    "torch",
+    "triton",
 ]
 ```
 
-Install the shared test dependencies, a vendor environment, or both:
+Only exclude a dependency when every test image already provides a compatible
+replacement. Excluding a package that is not present leaves the target runtime
+incomplete.
+
+Install the shared test dependencies, a vendor environment, or both with uv:
 
 ```bash
-python -m pip install '.[test]'
-python -m pip install '.[nvidia]'
-python -m pip install '.[test,nvidia]'
-python -m pip install '.[test,kunlunxin]'
+uv pip install -e '.[test]'
+uv pip install -e '.[nvidia]'
+uv pip install -e '.[test,nvidia]'
+uv pip install -e '.[test,kunlunxin]'
 ```
 
 The extra names are owned by the target repository. A project may define
@@ -567,35 +592,30 @@ runtime packages in the corresponding vendor group. This lets developers use
 the same installation commands locally and in CI without adding heavyweight
 target dependencies to `flagos-optest` itself.
 
+### Centralized workflow behavior
+
 The centralized workflow runs `flagos-gpu-check` before installing the target
 repository. It exports the detected metadata for later steps as
 `FLAGOS_GPU_VENDOR`, `FLAGOS_GPU_DEVICE`, `FLAGOS_GPU_DRIVER`,
-`FLAGOS_GPU_RUNTIME`, and `FLAGOS_GPU_RUNTIME_VERSION`. After installing the
-target's `test` extra, it checks `[project.optional-dependencies]` for an extra
-whose name exactly matches `FLAGOS_GPU_VENDOR`. When present, CI runs the
-equivalent of `python -m pip install '.[<vendor>]'`; when absent, it skips the
-vendor-extra install. Target-specific package names therefore stay in the
-target repository's `pyproject.toml` instead of `repos.yaml`.
+`FLAGOS_GPU_RUNTIME`, and `FLAGOS_GPU_RUNTIME_VERSION`.
 
-A repository may add pip arguments only to vendor-extra installs through
-`vendor_pip_args`. `default` applies to every vendor and a normalized vendor
-key such as `nvidia` applies only to that vendor; the two lists are additive.
-Currently `--no-deps` is the only supported argument. The base target and
-`test` extra are still installed normally in a separate command:
+The dependency step then reads the target `pyproject.toml`. It selects `test`
+when present and independently selects the extra whose name exactly matches
+`FLAGOS_GPU_VENDOR` when present. It combines the selected extras into one
+incremental command, for example:
 
-```yaml
-repos:
-  FlagTrain:
-    vendor_pip_args:
-      nvidia: ["--no-deps"]
+```bash
+uv pip install --python /path/to/active/python -e '.[test,nvidia]'
 ```
 
-This first runs `pip install './target[test]'` normally. If `--no-deps` is
-configured, the workflow reads the selected vendor requirements from
-`pyproject.toml` and installs those requirements directly with
-`pip install --no-deps ...`. Passing `--no-deps` to the target extra itself
-would skip installing the extra's packages. To disable transitive dependency
-resolution for every vendor extra, put `["--no-deps"]` under `default` instead.
+If only `test` exists, the command uses `.[test]`; if only the vendor extra
+exists, it uses that group. When neither group exists, it installs the base
+project with `-e .`. Using `uv pip install` instead of `uv sync` is intentional:
+install preserves already satisfied packages in the prebuilt image, whereas
+sync reconciles the entire environment to uv's resolved versions and may
+replace packages such as numpy. Target-specific package names and exclusion
+policy therefore stay in the target repository's `pyproject.toml`, not in
+`repos.yaml` or the workflow.
 
 ## Repository Layout
 
@@ -619,8 +639,6 @@ form the GitHub checkout target. Each repository entry can define:
 | `default_branch` | Target branch used when the workflow does not receive an explicit ref. |
 | `backends.<name>.enabled` | Enables or disables a shared hardware backend for that repository. |
 | `container_images.<backend>` | Repository-specific image override for a backend. |
-| `vendor_pip_args.default` | Pip arguments appended to every vendor-extra install. |
-| `vendor_pip_args.<vendor>` | Additional pip arguments for one normalized vendor key. |
 | `deps.default` | Explicit fallback packages installed for every enabled backend. Prefer target `pyproject.toml` vendor extras. |
 | `deps.<backend>` | Explicit fallback packages installed only for one backend. Prefer target `pyproject.toml` vendor extras. |
 | `base_data` | Optional performance-baseline JSON path in the target checkout. |

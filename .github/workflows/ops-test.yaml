@@ -18,8 +18,8 @@
 # repo defined in .github/configs/repos.yaml; the workflow checks out that repo
 # into ./target, installs it, and runs this repo's shared optest package against it.
 #
-# Per-repo config: .github/configs/repos.yaml  (org, default_branch, container_images,
-#                  backends, deps, base_data, timeout)
+# Per-repo config: .github/configs/repos.yaml  (org, default_branch,
+#                  container_images, backends, deps, base_data, timeout)
 # Shared backend hardware config: .github/configs/backends/<NAME>.yaml
 # vendors: Nvidia,MThreads,KunLunXin,Iluvatar,Ascend,Hygon,Metax,THead,Cambricon,AMD,TsingMicro,Enflame
 name: ops-test
@@ -147,25 +147,7 @@ jobs:
 
           images = rc.get('container_images', {})
           deps_cfg = rc.get('deps', {}) or {}
-          vendor_pip_args_cfg = rc.get('vendor_pip_args', {}) or {}
           base_data = (rc.get('base_data') or '').strip()
-
-          if not isinstance(vendor_pip_args_cfg, dict):
-              raise SystemExit(f"repos.{repo}.vendor_pip_args must be a mapping")
-
-          def vendor_pip_args(key):
-              args = vendor_pip_args_cfg.get(key, []) or []
-              if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
-                  raise SystemExit(
-                      f"repos.{repo}.vendor_pip_args.{key} must be a list of strings"
-                  )
-              unsupported = [arg for arg in args if arg not in {'--no-deps'}]
-              if unsupported:
-                  raise SystemExit(
-                      f"repos.{repo}.vendor_pip_args.{key} contains unsupported "
-                      f"arguments: {', '.join(unsupported)}"
-                  )
-              return args
 
           # Parse optional vendor filter (case-insensitive). Empty -> all.
           vendors_filter = {
@@ -191,23 +173,12 @@ jobs:
                   backend['container_image'] = images[name]
 
               # deps: hardware default (backend yaml) + repo-wide (deps.default)
-              # + backend-specific (deps.<backend>), joined into one pip list.
+              # + backend-specific (deps.<backend>), joined into one requirement list.
               merged_deps = []
               merged_deps += backend.get('deps', []) or []
               merged_deps += deps_cfg.get('default', []) or []
               merged_deps += deps_cfg.get(name, []) or []
               backend['deps'] = ' '.join(merged_deps)
-
-              # Vendor-extra pip arguments are repo policy. `default` applies
-              # to every vendor, while a normalized vendor key is selective.
-              vendor = (backend.get('vendor') or '').strip().lower()
-              merged_vendor_pip_args = [
-                  *vendor_pip_args('default'),
-                  *vendor_pip_args(vendor),
-              ]
-              backend['vendor_pip_args'] = ' '.join(
-                  dict.fromkeys(merged_vendor_pip_args)
-              )
 
               backend['base_data'] = base_data
               backend['ops_test_timeout'] = repo_timeout
@@ -422,22 +393,36 @@ jobs:
           PIP_INDEX_URL_VALUE=https://pypi.tuna.tsinghua.edu.cn/simple
           PIP_EXTRA_INDEX_URL_VALUE="https://mirrors.aliyun.com/pypi/simple/ https://mirrors.cloud.tencent.com/pypi/simple/ https://mirrors.163.com/pypi/simple/"
           PIP_TRUSTED_HOST_VALUE="pypi.tuna.tsinghua.edu.cn mirrors.aliyun.com mirrors.cloud.tencent.com mirrors.163.com"
+          UV_DEFAULT_INDEX_VALUE="${PIP_INDEX_URL_VALUE}"
+          UV_INDEX_VALUE="${PIP_EXTRA_INDEX_URL_VALUE}"
           echo "[Package index] PIP_INDEX_URL=${PIP_INDEX_URL_VALUE}"
           echo "[Package index] PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL_VALUE}"
           echo "[Package index] PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST_VALUE}"
+          echo "[Package index] UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX_VALUE}"
+          echo "[Package index] UV_INDEX=${UV_INDEX_VALUE}"
           export PIP_INDEX_URL="${PIP_INDEX_URL_VALUE}"
           export PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL_VALUE}"
           export PIP_TRUSTED_HOST="${PIP_TRUSTED_HOST_VALUE}"
+          export UV_DEFAULT_INDEX="${UV_DEFAULT_INDEX_VALUE}"
+          export UV_INDEX="${UV_INDEX_VALUE}"
           {
             echo "PIP_INDEX_URL=${PIP_INDEX_URL}"
             echo "PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}"
             echo "PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}"
+            echo "UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX}"
+            echo "UV_INDEX=${UV_INDEX}"
           } >> "$GITHUB_ENV"
+          ACTIVE_PYTHON=$(command -v python3)
+          echo "[Install dependencies] Purpose: install uv for target repository dependency resolution"
+          run_logged_command "uv installation" pip install uv
+          echo "[Install dependencies] uv version: $(uv --version)"
           # Install this optest checkout so the workflow exercises the same
           # packaged GPU-check command before target dependencies are resolved.
           echo "[Install dependencies] Purpose: install the optest source that provides the test and report commands"
           echo "[Install dependencies] Source: optest checkout pyproject.toml"
-          run_logged_command "optest source installation" pip install .
+          run_logged_command \
+            "optest source installation" \
+            uv pip install --python "${ACTIVE_PYTHON}" .
 
       - name: Check GPU availability
         shell: bash --login -e -o pipefail {0}
@@ -550,22 +535,28 @@ jobs:
             return "${exit_code}"
           }
 
-          # Optional explicit deps remain supported for backend configuration;
-          # target-specific vendor packages belong in pyproject.toml extras.
+          ACTIVE_PYTHON=$(command -v python3)
+          echo "[Install dependencies] Active Python: ${ACTIVE_PYTHON}"
+          echo "[Install dependencies] uv version: $(uv --version)"
+
+          # Optional explicit deps remain supported for exceptional backend
+          # configuration. Normal target dependencies belong in pyproject.toml.
           EXTRA_DEPS="${{ matrix.deps }}"
           echo "[Install dependencies] Explicit backend dependency source: .github/configs/repos.yaml repos.${REPOSITORY_NAME}.deps.default + repos.${REPOSITORY_NAME}.deps.${{ matrix.name }}"
           echo "[Install dependencies] Detected explicit backend dependencies: ${EXTRA_DEPS:-<empty>}"
           if [ -n "${EXTRA_DEPS}" ]; then
+            read -r -a EXTRA_DEPS_ARGS <<< "${EXTRA_DEPS}"
             echo "[Install dependencies] Purpose: install configured backend dependencies"
-            run_logged_command "explicit backend dependency installation" pip install ${EXTRA_DEPS}
+            run_logged_command \
+              "explicit backend dependency installation" \
+              uv pip install --python "${ACTIVE_PYTHON}" "${EXTRA_DEPS_ARGS[@]}"
           else
             echo "[Install dependencies] No explicit backend dependencies configured; skipping."
           fi
-          if [ "${GITHUB_ACTIONS:-}" = "true" ] && [ "${REPOSITORY_NAME}" = "FlagTrain" ] && [ "${FLAGOS_GPU_VENDOR:-}" = "nvidia" ]; then
-            echo "[uv experiment] Starting FlagTrain NVIDIA exclude-dependencies validation."
-            echo "[uv experiment] Original optional dependencies and tool.uv configuration:"
-            python3 - <<'PY'
+
+          TARGET_METADATA=$("${ACTIVE_PYTHON}" - "${FLAGOS_GPU_VENDOR:-}" <<'PY'
           import json
+          import sys
 
           try:
               import tomllib
@@ -574,232 +565,57 @@ jobs:
 
           with open("target/pyproject.toml", "rb") as pyproject_file:
               pyproject = tomllib.load(pyproject_file)
+          vendor = sys.argv[1]
+          extras = pyproject.get("project", {}).get("optional-dependencies", {})
           print(json.dumps({
-              "test": pyproject.get("project", {}).get("optional-dependencies", {}).get("test"),
-              "nvidia": pyproject.get("project", {}).get("optional-dependencies", {}).get("nvidia"),
-              "tool.uv": pyproject.get("tool", {}).get("uv"),
-          }, indent=2))
+              "test_exists": "test" in extras,
+              "vendor": vendor,
+              "vendor_exists": bool(vendor) and vendor in extras,
+              "available_extras": sorted(extras),
+              "excluded_dependencies": pyproject.get("tool", {})
+                  .get("uv", {}).get("exclude-dependencies", []),
+          }))
           PY
-
-            echo "[uv experiment] Removing hjson and py-cpuinfo from the NVIDIA extra and excluding triton and torch from uv resolution."
-            python3 - <<'PY'
-          import re
-          from pathlib import Path
-
-          path = Path("target/pyproject.toml")
-          lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-          output = []
-          in_nvidia = False
-          removed = []
-          for line in lines:
-              if re.match(r"^\s*nvidia\s*=\s*\[\s*$", line):
-                  in_nvidia = True
-              elif in_nvidia and re.match(r"^\s*\]\s*$", line):
-                  in_nvidia = False
-              if in_nvidia:
-                  requirement = re.match(
-                      r'''^\s*["'](hjson|py-cpuinfo)(?:[^"']*)["']\s*,?(?:\s*#.*)?$''',
-                      line,
-                  )
-                  if requirement:
-                      removed.append(requirement.group(1))
-                      continue
-              output.append(line)
-
-          if sorted(removed) != ["hjson", "py-cpuinfo"]:
-              raise SystemExit(
-                  f"[uv experiment] ERROR: expected to remove hjson and py-cpuinfo; removed={removed}"
-              )
-          text = "".join(output)
-          if re.search(r"^\[tool\.uv\]\s*$", text, flags=re.MULTILINE):
-              raise SystemExit("[uv experiment] ERROR: target already defines [tool.uv]")
-          text = text.rstrip() + '\n\n[tool.uv]\nexclude-dependencies = [\n    "triton",\n    "torch",\n]\n'
-          path.write_text(text, encoding="utf-8")
-          print(f"[uv experiment] Removed NVIDIA requirements: {', '.join(removed)}")
-          PY
-
-            echo "[uv experiment] Modified target/pyproject.toml:"
-            cat target/pyproject.toml
-            echo "[uv experiment] Parsed modified configuration:"
-            python3 - <<'PY'
-          import json
-
-          try:
-              import tomllib
-          except ModuleNotFoundError:
-              import tomli as tomllib
-
-          with open("target/pyproject.toml", "rb") as pyproject_file:
-              pyproject = tomllib.load(pyproject_file)
-          optional = pyproject.get("project", {}).get("optional-dependencies", {})
-          nvidia = optional.get("nvidia", [])
-          excluded = pyproject.get("tool", {}).get("uv", {}).get("exclude-dependencies")
-          if any(requirement.lower().startswith(("hjson", "py-cpuinfo")) for requirement in nvidia):
-              raise SystemExit("[uv experiment] ERROR: NVIDIA extra still contains hjson or py-cpuinfo")
-          if excluded != ["triton", "torch"]:
-              raise SystemExit(f"[uv experiment] ERROR: unexpected exclude-dependencies={excluded!r}")
-          print(json.dumps({
-              "test_exists": "test" in optional,
-              "nvidia_exists": "nvidia" in optional,
-              "nvidia": nvidia,
-              "exclude-dependencies": excluded,
-          }, indent=2))
-          PY
-
-            run_logged_command "uv installation or upgrade" pip install --upgrade uv
-            echo "[uv experiment] uv version: $(uv --version)"
-            export UV_DEFAULT_INDEX="${PIP_INDEX_URL}"
-            export UV_INDEX="${PIP_EXTRA_INDEX_URL}"
-            echo "[uv experiment] UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX}"
-            echo "[uv experiment] UV_INDEX=${UV_INDEX}"
-            ACTIVE_PYTHON=$(command -v python3)
-            ACTIVE_PREFIX=$(${ACTIVE_PYTHON} -c 'import sys; print(sys.prefix)')
-            export VIRTUAL_ENV="${VIRTUAL_ENV:-${ACTIVE_PREFIX}}"
-            echo "[uv experiment] Active Python: ${ACTIVE_PYTHON}"
-            echo "[uv experiment] Active Python prefix: ${ACTIVE_PREFIX}"
-            echo "[uv experiment] VIRTUAL_ENV=${VIRTUAL_ENV}"
-
-            package_version() {
-              ${ACTIVE_PYTHON} -c 'import importlib.metadata, sys; print(importlib.metadata.version(sys.argv[1]))' "$1" 2>/dev/null || printf '<not-installed>\n'
-            }
-            TORCH_BEFORE=$(package_version torch)
-            TRITON_BEFORE=$(package_version triton)
-            echo "[uv experiment] Before install: torch=${TORCH_BEFORE} triton=${TRITON_BEFORE} hjson=$(package_version hjson) py-cpuinfo=$(package_version py-cpuinfo) deepspeed=$(package_version deepspeed)"
-            ${ACTIVE_PYTHON} - <<'PY'
-          import importlib.metadata
-          import json
-          import re
-          from pathlib import Path
-
-          canonicalize = lambda name: re.sub(r"[-_.]+", "-", name).lower()
-          packages = {
-              canonicalize(distribution.metadata["Name"]): distribution.version
-              for distribution in importlib.metadata.distributions()
-              if distribution.metadata["Name"]
-          }
-          Path("/tmp/uv-packages-before.json").write_text(
-              json.dumps(packages, indent=2, sort_keys=True), encoding="utf-8"
           )
-          print(f"[uv experiment] Captured {len(packages)} installed distributions before uv pip install.")
-          PY
+          echo "[Install dependencies] Target dependency metadata:"
+          printf '%s\n' "${TARGET_METADATA}" | "${ACTIVE_PYTHON}" -m json.tool
+          HAS_TEST=$(printf '%s' "${TARGET_METADATA}" | "${ACTIVE_PYTHON}" -c 'import json, sys; print("true" if json.load(sys.stdin)["test_exists"] else "false")')
+          HAS_VENDOR=$(printf '%s' "${TARGET_METADATA}" | "${ACTIVE_PYTHON}" -c 'import json, sys; print("true" if json.load(sys.stdin)["vendor_exists"] else "false")')
+          EXCLUDED_DEPENDENCIES=$(printf '%s' "${TARGET_METADATA}" | "${ACTIVE_PYTHON}" -c 'import json, sys; print(", ".join(json.load(sys.stdin)["excluded_dependencies"]) or "<none>")')
 
-            HAS_TEST=$(${ACTIVE_PYTHON} -c '
-          try:
-              import tomllib
-          except ModuleNotFoundError:
-              import tomli as tomllib
-          with open("target/pyproject.toml", "rb") as f:
-              extras = tomllib.load(f).get("project", {}).get("optional-dependencies", {})
-          print("true" if "test" in extras else "false")
-          ')
-            HAS_VENDOR=$(${ACTIVE_PYTHON} -c '
-          import os
-          try:
-              import tomllib
-          except ModuleNotFoundError:
-              import tomli as tomllib
-          with open("target/pyproject.toml", "rb") as f:
-              extras = tomllib.load(f).get("project", {}).get("optional-dependencies", {})
-          print("true" if os.environ["FLAGOS_GPU_VENDOR"] in extras else "false")
-          ')
-            echo "[uv experiment] Detected test extra: ${HAS_TEST}"
-            echo "[uv experiment] Detected ${FLAGOS_GPU_VENDOR} extra: ${HAS_VENDOR}"
-            UV_PROJECT_SPEC="."
-            if [ "${HAS_TEST}" = "true" ] && [ "${HAS_VENDOR}" = "true" ]; then
-              UV_PROJECT_SPEC=".[test,${FLAGOS_GPU_VENDOR}]"
-            else
-              echo "[uv experiment] At least one requested extra is missing; installing the base project without extras."
-            fi
-            UV_PIP_ARGS=(--python "${ACTIVE_PYTHON}" --editable "${UV_PROJECT_SPEC}")
-            (
-              cd target
-              run_logged_command "FlagTrain incremental uv pip installation" uv pip install "${UV_PIP_ARGS[@]}"
-            )
-            if [ -e target/uv.lock ]; then
-              echo "[uv experiment] ERROR: incremental uv pip install unexpectedly created target/uv.lock."
-              exit 1
-            fi
+          echo "[Install dependencies] Target project source: ./target/pyproject.toml"
+          echo "[Install dependencies] Test extra source: [project.optional-dependencies].test"
+          echo "[Install dependencies] Detected test extra: ${HAS_TEST}"
+          echo "[Install dependencies] Detected GPU vendor from flagos-gpu-check: ${FLAGOS_GPU_VENDOR:-<unavailable>}"
+          echo "[Install dependencies] Vendor extra source: [project.optional-dependencies].${FLAGOS_GPU_VENDOR:-<unavailable>}"
+          echo "[Install dependencies] Detected vendor extra: ${HAS_VENDOR}"
+          echo "[Install dependencies] Exclusion policy source: [tool.uv].exclude-dependencies"
+          echo "[Install dependencies] Detected excluded dependencies: ${EXCLUDED_DEPENDENCIES}"
 
-            ${ACTIVE_PYTHON} - <<'PY'
-          import importlib.metadata
-          import json
-          import re
-          from pathlib import Path
-
-          canonicalize = lambda name: re.sub(r"[-_.]+", "-", name).lower()
-          before = json.loads(Path("/tmp/uv-packages-before.json").read_text(encoding="utf-8"))
-          after = {
-              canonicalize(distribution.metadata["Name"]): distribution.version
-              for distribution in importlib.metadata.distributions()
-              if distribution.metadata["Name"]
-          }
-          changed = {
-              name: {"before": before[name], "after": after[name]}
-              for name in sorted(before.keys() & after.keys())
-              if before[name] != after[name]
-          }
-          removed = {name: before[name] for name in sorted(before.keys() - after.keys())}
-          added = {name: after[name] for name in sorted(after.keys() - before.keys())}
-          print("[uv experiment] Existing distribution version changes:")
-          print(json.dumps(changed, indent=2, sort_keys=True))
-          print("[uv experiment] Removed distributions:")
-          print(json.dumps(removed, indent=2, sort_keys=True))
-          print("[uv experiment] Newly installed distributions:")
-          print(json.dumps(added, indent=2, sort_keys=True))
-          if changed or removed:
-              raise SystemExit(
-                  "[uv experiment] ERROR: incremental uv pip install modified existing distributions"
-              )
-          PY
-
-            TORCH_AFTER=$(package_version torch)
-            TRITON_AFTER=$(package_version triton)
-            HJSON_AFTER=$(package_version hjson)
-            CPUINFO_AFTER=$(package_version py-cpuinfo)
-            DEEPSPEED_AFTER=$(package_version deepspeed)
-            echo "[uv experiment] After install: torch=${TORCH_AFTER} triton=${TRITON_AFTER} hjson=${HJSON_AFTER} py-cpuinfo=${CPUINFO_AFTER} deepspeed=${DEEPSPEED_AFTER}"
-            if [ "${TORCH_AFTER}" != "${TORCH_BEFORE}" ]; then
-              echo "[uv experiment] ERROR: uv pip install replaced torch (${TORCH_BEFORE} -> ${TORCH_AFTER})."
-              exit 1
-            fi
-            if [ "${TRITON_AFTER}" != "${TRITON_BEFORE}" ]; then
-              echo "[uv experiment] ERROR: uv pip install installed or replaced triton (${TRITON_BEFORE} -> ${TRITON_AFTER})."
-              exit 1
-            fi
-            if [ "${HJSON_AFTER}" = "<not-installed>" ] || [ "${CPUINFO_AFTER}" = "<not-installed>" ]; then
-              echo "[uv experiment] ERROR: DeepSpeed transitive dependencies were not installed."
-              exit 1
-            fi
-            echo "[uv experiment] SUCCESS: hjson and py-cpuinfo were resolved transitively, while excluded torch and triton remained unchanged."
-          else
-            echo "[Install dependencies] Purpose: install the target repository under test with its test dependencies"
-            echo "[Install dependencies] Target test extra source: ./target/pyproject.toml [project.optional-dependencies].test"
-            run_logged_command "target test-extra installation" pip install './target[test]'
-
-            # Install the optional-dependency group matching the vendor detected
-            # by flagos-gpu-check. A target repository may support only a subset
-            # of vendors, so a missing group is an intentional no-op.
-            if [ -z "${FLAGOS_GPU_VENDOR:-}" ]; then
-              echo "[Install dependencies] GPU vendor is unavailable; skipping vendor extra."
-            else
-              VENDOR_PIP_ARGS="${{ matrix.vendor_pip_args }}"
-              echo "[Install dependencies] Detected GPU vendor from flagos-gpu-check: ${FLAGOS_GPU_VENDOR}"
-              echo "[Install dependencies] Vendor extra source: ./target/pyproject.toml [project.optional-dependencies].${FLAGOS_GPU_VENDOR}"
-              echo "[Install dependencies] Vendor pip argument source: .github/configs/repos.yaml repos.${REPOSITORY_NAME}.vendor_pip_args.default + repos.${REPOSITORY_NAME}.vendor_pip_args.${FLAGOS_GPU_VENDOR}"
-              echo "[Install dependencies] Detected vendor pip arguments: ${VENDOR_PIP_ARGS:-<empty>}"
-              printf "[Install dependencies] Vendor install specification: pip install './target[%s]'" "${FLAGOS_GPU_VENDOR}"
-              if [ -n "${VENDOR_PIP_ARGS}" ]; then
-                printf ' %s' ${VENDOR_PIP_ARGS}
-              fi
-              printf '\n'
-              if [ "${VENDOR_PIP_ARGS}" = "--no-deps" ]; then
-                echo "[Install dependencies] Resolution mode: install requirements declared by the vendor extra directly with --no-deps; pip would otherwise skip those requirements."
-              fi
-              run_logged_command \
-                "vendor extra dependency installation (${FLAGOS_GPU_VENDOR})" \
-                flagos-install-target-deps ./target "${FLAGOS_GPU_VENDOR}" ${VENDOR_PIP_ARGS}
-            fi
+          TARGET_EXTRAS=()
+          if [ "${HAS_TEST}" = "true" ]; then
+            TARGET_EXTRAS+=(test)
           fi
+          if [ "${HAS_VENDOR}" = "true" ]; then
+            TARGET_EXTRAS+=("${FLAGOS_GPU_VENDOR}")
+          fi
+          TARGET_PROJECT_SPEC="."
+          SELECTED_EXTRAS="<none>"
+          if [ "${#TARGET_EXTRAS[@]}" -gt 0 ]; then
+            SELECTED_EXTRAS=$(IFS=,; echo "${TARGET_EXTRAS[*]}")
+            TARGET_PROJECT_SPEC=".[${SELECTED_EXTRAS}]"
+          else
+            echo "[Install dependencies] No test or detected-vendor extra exists; installing the base project only."
+          fi
+          echo "[Install dependencies] Selected target extras: ${SELECTED_EXTRAS}"
+          echo "[Install dependencies] Target install specification: ${TARGET_PROJECT_SPEC}"
+          echo "[Install dependencies] Purpose: incrementally install the target repository without upgrading already-satisfied packages"
+          (
+            cd target
+            run_logged_command \
+              "target repository uv installation" \
+              uv pip install --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"
+          )
 
       # Run ops tests.
       # OPS is provided by the prepare job: "all" (scheduled runs or an empty

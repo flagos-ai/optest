@@ -38,7 +38,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
     def test_flagtrain_images_and_enabled_backends(self):
         config = self.repos["repos"]["FlagTrain"]
         self.assertEqual(config["default_branch"], "main")
-        self.assertEqual(config["vendor_pip_args"], {"nvidia": ["--no-deps"]})
+        self.assertNotIn("vendor_pip_args", config)
         self.assertEqual(
             config["container_images"],
             {
@@ -84,11 +84,11 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             if step.get("name") == "Install target repository and dependencies"
         )["run"]
         self.assertIn(
-            'flagos-install-target-deps ./target "${FLAGOS_GPU_VENDOR}" ${VENDOR_PIP_ARGS}',
+            'uv pip install --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"',
             install,
         )
 
-    def test_matrix_applies_no_deps_only_to_nvidia(self):
+    def test_matrix_does_not_encode_target_dependency_policy(self):
         prepare_steps = self.workflow["jobs"]["prepare"]["steps"]
         script = next(
             step["run"] for step in prepare_steps if step.get("id") == "build-matrix"
@@ -122,47 +122,9 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 if line.startswith("matrix_container=")
             )
             matrix = json.loads(matrix_line.removeprefix("matrix_container="))
-            args_by_backend = {
-                backend["name"]: backend["vendor_pip_args"]
-                for backend in matrix["include"]
-            }
-            self.assertEqual(args_by_backend["H800"], "--no-deps")
-            self.assertTrue(
-                all(
-                    not args
-                    for backend, args in args_by_backend.items()
-                    if backend != "H800"
-                )
-            )
-
-            # A repo-wide default applies to every vendor extra.
-            default_script = script.replace(
-                "rc = main['repos'][repo]\n",
-                "main['repos']['FlagTrain']['vendor_pip_args'] = "
-                "{'default': ['--no-deps']}\nrc = main['repos'][repo]\n",
-            )
-            output.write_text("", encoding="utf-8")
-            completed = subprocess.run(
-                [sys.executable, "-c", default_script],
-                cwd=ROOT,
-                check=False,
-                capture_output=True,
-                env=environment,
-                text=True,
-            )
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            matrix_line = next(
-                line
-                for line in output.read_text(encoding="utf-8").splitlines()
-                if line.startswith("matrix_container=")
-            )
-            matrix = json.loads(matrix_line.removeprefix("matrix_container="))
-            self.assertTrue(
-                all(
-                    backend["vendor_pip_args"] == "--no-deps"
-                    for backend in matrix["include"]
-                )
-            )
+            self.assertTrue(matrix["include"])
+            for backend in matrix["include"]:
+                self.assertNotIn("vendor_pip_args", backend)
 
     def test_target_install_logs_dependency_sources_commands_and_results(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]
@@ -174,18 +136,31 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         replacements = {
             "${{ matrix.deps }}": "",
             "${{ matrix.name }}": "H800",
-            "${{ matrix.vendor_pip_args }}": "--no-deps",
         }
         for expression, value in replacements.items():
             script = script.replace(expression, value)
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            target = root / "target"
+            target.mkdir()
+            (target / "pyproject.toml").write_text(
+                "[project]\n"
+                'name = "target"\n'
+                'version = "0.0.0"\n'
+                "[project.optional-dependencies]\n"
+                'test = ["pytest"]\n'
+                'nvidia = ["deepspeed==0.19.8"]\n'
+                "[tool.uv]\n"
+                'exclude-dependencies = ["torch", "triton"]\n',
+                encoding="utf-8",
+            )
             commands = {
-                "pip": "#!/bin/sh\nprintf '[fake pip] %s\\n' \"$*\"\n",
-                "flagos-install-target-deps": (
+                "python3": f'#!/bin/sh\nexec "{sys.executable}" "$@"\n',
+                "uv": (
                     "#!/bin/sh\n"
-                    "printf '[fake vendor installer] %s\\n' \"$*\"\n"
+                    'if [ "$1" = "--version" ]; then echo "uv 0.13.6"; exit 0; fi\n'
+                    "printf '[fake uv cwd=%s] %s\\n' \"$PWD\" \"$*\"\n"
                 ),
             }
             for name, content in commands.items():
@@ -195,6 +170,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
 
             completed = subprocess.run(
                 ["bash", "-e", "-o", "pipefail", "-c", script],
+                cwd=root,
                 check=False,
                 capture_output=True,
                 env={
@@ -206,29 +182,64 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 text=True,
             )
 
+            (target / "pyproject.toml").write_text(
+                "[project]\n"
+                'name = "target"\n'
+                'version = "0.0.0"\n'
+                "[project.optional-dependencies]\n"
+                'test = ["pytest"]\n',
+                encoding="utf-8",
+            )
+            test_only_completed = subprocess.run(
+                ["bash", "-e", "-o", "pipefail", "-c", script],
+                cwd=root,
+                check=False,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "FLAGOS_GPU_VENDOR": "nvidia",
+                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                    "REPOSITORY_NAME": "FlagGems",
+                },
+                text=True,
+            )
+
         self.assertEqual(completed.returncode, 0, completed.stderr)
         output = completed.stdout
         expected = [
             "repos.FlagTrain.deps.default + repos.FlagTrain.deps.H800",
             "Detected explicit backend dependencies: <empty>",
             "No explicit backend dependencies configured; skipping.",
-            "Starting: target test-extra installation",
-            "Target test extra source: ./target/pyproject.toml",
-            "Finished: target test-extra installation (exit_code=0)",
+            "Target project source: ./target/pyproject.toml",
+            "Detected test extra: true",
             "Detected GPU vendor from flagos-gpu-check: nvidia",
             "[project.optional-dependencies].nvidia",
-            (
-                "repos.FlagTrain.vendor_pip_args.default + "
-                "repos.FlagTrain.vendor_pip_args.nvidia"
-            ),
-            "Detected vendor pip arguments: --no-deps",
-            "Vendor install specification: pip install './target[nvidia]' --no-deps",
-            "[fake vendor installer] ./target nvidia --no-deps",
-            "Finished: vendor extra dependency installation (nvidia) (exit_code=0)",
+            "Detected vendor extra: true",
+            "Exclusion policy source: [tool.uv].exclude-dependencies",
+            "Detected excluded dependencies: torch, triton",
+            "Selected target extras: test,nvidia",
+            "Target install specification: .[test,nvidia]",
+            "Starting: target repository uv installation",
+            "pip install --python",
+            "--editable .[test,nvidia]",
+            "Finished: target repository uv installation (exit_code=0)",
         ]
         for entry in expected:
             with self.subTest(entry=entry):
                 self.assertIn(entry, output)
+
+        self.assertEqual(
+            test_only_completed.returncode, 0, test_only_completed.stderr
+        )
+        self.assertIn(
+            "Detected vendor extra: false", test_only_completed.stdout
+        )
+        self.assertIn(
+            "Selected target extras: test", test_only_completed.stdout
+        )
+        self.assertIn(
+            "--editable .[test]", test_only_completed.stdout
+        )
 
     def test_gpu_check_script_exports_metadata_with_unknown_values(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]

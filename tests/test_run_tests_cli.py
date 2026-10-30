@@ -93,6 +93,8 @@ class ProjectDirectoryTest(unittest.TestCase):
                 ), mock.patch.object(run_tests.signal, "signal"), mock.patch.object(
                     run_tests, "probe_env"
                 ), mock.patch.object(
+                    run_tests, "check_shared_memory"
+                ), mock.patch.object(
                     run_tests, "collect_marks", side_effect=RuntimeError("stop")
                 ) as collect_marks:
                     with self.assertRaisesRegex(RuntimeError, "stop"):
@@ -126,6 +128,8 @@ class ProjectDirectoryTest(unittest.TestCase):
                 ), mock.patch.object(
                     run_tests, "get_ops_to_test", return_value=["add"]
                 ), mock.patch.object(
+                    run_tests, "check_shared_memory"
+                ), mock.patch.object(
                     run_tests, "collect_marks", return_value=({"add"}, {"add"})
                 ), mock.patch.object(
                     run_tests, "Process", return_value=mock.MagicMock()
@@ -154,6 +158,39 @@ class ProjectDirectoryTest(unittest.TestCase):
                 run_tests.project_directory(Path(directory) / "missing")
             with self.assertRaises(argparse.ArgumentTypeError):
                 run_tests.project_directory(regular_file)
+
+    def test_shared_memory_failure_stops_before_mark_collection(self):
+        original_directory = Path.cwd()
+        original_root = run_tests.ROOT
+        try:
+            with tempfile.TemporaryDirectory() as target:
+                ops = ",".join(f"op_{index}" for index in range(16))
+                gpus = ",".join(str(index) for index in range(16))
+                failure = run_tests.InfrastructureError("insufficient /dev/shm")
+                with mock.patch.object(
+                    sys,
+                    "argv",
+                    ["flagos-optest", target, "--ops", ops, "--gpus", gpus],
+                ), mock.patch.object(run_tests.signal, "signal"), mock.patch.object(
+                    run_tests, "probe_env"
+                ), mock.patch.object(
+                    run_tests, "check_shared_memory", side_effect=failure
+                ) as check_shared_memory, mock.patch.object(
+                    run_tests, "collect_marks"
+                ) as collect_marks, redirect_stdout(
+                    io.StringIO()
+                ):
+                    with self.assertRaises(SystemExit) as raised:
+                        run_tests.main()
+
+                self.assertEqual(
+                    raised.exception.code, run_tests.INFRASTRUCTURE_EXIT_CODE
+                )
+                check_shared_memory.assert_called_once_with(16)
+                collect_marks.assert_not_called()
+        finally:
+            os.chdir(original_directory)
+            run_tests.ROOT = original_root
 
     def test_test_processes_run_from_selected_project_directory(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -190,6 +227,84 @@ class ProjectDirectoryTest(unittest.TestCase):
                         str(root / "benchmark" / "benchmark_add.json"),
                         benchmark_command,
                     )
+
+
+class SharedMemoryPreflightTest(unittest.TestCase):
+    def setUp(self):
+        self.shm_path = mock.Mock()
+        self.shm_path.is_dir.return_value = True
+
+    def test_allows_three_workers_with_default_docker_capacity(self):
+        usage = types.SimpleNamespace(
+            total=64 * 1024 * 1024,
+            used=0,
+            free=64 * 1024 * 1024,
+        )
+        output = io.StringIO()
+        with mock.patch.object(
+            run_tests, "SHM_PATH", self.shm_path
+        ), mock.patch.object(
+            run_tests.shutil, "disk_usage", return_value=usage
+        ), redirect_stdout(
+            output
+        ):
+            run_tests.check_shared_memory(3)
+
+        self.assertIn("workers=3, required=48 MiB", output.getvalue())
+
+    def test_rejects_default_docker_capacity_for_sixteen_workers(self):
+        usage = types.SimpleNamespace(
+            total=64 * 1024 * 1024,
+            used=0,
+            free=64 * 1024 * 1024,
+        )
+        with mock.patch.object(
+            run_tests, "SHM_PATH", self.shm_path
+        ), mock.patch.object(
+            run_tests.shutil, "disk_usage", return_value=usage
+        ), redirect_stdout(
+            io.StringIO()
+        ):
+            with self.assertRaises(run_tests.InfrastructureError) as raised:
+                run_tests.check_shared_memory(16)
+
+        message = str(raised.exception)
+        self.assertIn("minimum required=256 MiB", message)
+        self.assertIn("at least 512 MiB is recommended", message)
+        self.assertIn("--shm-size", message)
+
+    def test_rejects_low_available_capacity(self):
+        usage = types.SimpleNamespace(
+            total=1024 * 1024 * 1024,
+            used=1000 * 1024 * 1024,
+            free=24 * 1024 * 1024,
+        )
+        with mock.patch.object(
+            run_tests, "SHM_PATH", self.shm_path
+        ), mock.patch.object(
+            run_tests.shutil, "disk_usage", return_value=usage
+        ), redirect_stdout(
+            io.StringIO()
+        ):
+            with self.assertRaises(run_tests.InfrastructureError) as raised:
+                run_tests.check_shared_memory(2)
+
+        self.assertIn("available=24 MiB", str(raised.exception))
+        self.assertIn("required=32 MiB", str(raised.exception))
+
+    def test_rejects_missing_shared_memory_mount(self):
+        self.shm_path.is_dir.return_value = False
+        with mock.patch.object(run_tests, "SHM_PATH", self.shm_path):
+            with self.assertRaisesRegex(
+                run_tests.InfrastructureError, "POSIX shared memory is required"
+            ):
+                run_tests.check_shared_memory(1)
+
+    def test_rejects_zero_workers(self):
+        with self.assertRaisesRegex(
+            run_tests.InfrastructureError, "at least one test worker"
+        ):
+            run_tests.check_shared_memory(0)
 
 
 class ProbeGemsImportTest(unittest.TestCase):

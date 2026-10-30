@@ -180,6 +180,11 @@ GEMS_MODULE = None
 GEMS_ENV = {}
 
 TIMEOUT = -100
+INFRASTRUCTURE_EXIT_CODE = 2
+SHM_PATH = Path("/dev/shm")
+# This is a coarse startup guard, not a peak-memory estimate. It deliberately
+# rejects Docker's 64 MiB default for highly parallel test runs on every vendor.
+MIN_SHM_BYTES_PER_WORKER = 16 * 1024 * 1024
 WORKER_PROCESSES = []
 INTERRUPTED = False
 
@@ -206,6 +211,49 @@ def ensure_dir(p):
     p.mkdir(parents=True, exist_ok=True)
     # set directory permissions to 755/0o755 (drwxr-xr-x)
     p.chmod(0o755)
+
+
+class InfrastructureError(RuntimeError):
+    """Raised when the host cannot safely start the requested test workers."""
+
+
+def check_shared_memory(worker_count):
+    """Require enough /dev/shm capacity before starting parallel pytest workers."""
+    if worker_count <= 0:
+        raise InfrastructureError("at least one test worker is required")
+
+    try:
+        if not SHM_PATH.is_dir():
+            raise InfrastructureError(
+                f"{SHM_PATH} is unavailable; POSIX shared memory is required"
+            )
+        usage = shutil.disk_usage(SHM_PATH)
+    except InfrastructureError:
+        raise
+    except OSError as error:
+        raise InfrastructureError(
+            f"failed to inspect {SHM_PATH}: {error}"
+        ) from error
+
+    required = worker_count * MIN_SHM_BYTES_PER_WORKER
+    recommended = required * 2
+    mib = 1024 * 1024
+    pinfo(
+        "Shared memory preflight ... "
+        f"total={usage.total / mib:.0f} MiB, "
+        f"available={usage.free / mib:.0f} MiB, "
+        f"workers={worker_count}, required={required / mib:.0f} MiB"
+    )
+
+    if usage.total < required or usage.free < required:
+        raise InfrastructureError(
+            f"insufficient {SHM_PATH} for {worker_count} workers: "
+            f"total={usage.total / mib:.0f} MiB, "
+            f"available={usage.free / mib:.0f} MiB, "
+            f"minimum required={required / mib:.0f} MiB. "
+            f"Configure --shm-size above this minimum; at least "
+            f"{recommended / mib:.0f} MiB is recommended, or reduce --gpus."
+        )
 
 
 def project_directory(value):
@@ -1458,6 +1506,31 @@ def main():
         sys.exit(1)
     pinfo(f"Testing {op_count} operators ...")
 
+    if OPTS.gpus.strip().lower() == "all":
+        dev_count = ENV_INFO.get("torch", {}).get("device_count", 0)
+        if dev_count == 0:
+            perror("--gpus all specified but no devices detected.")
+            sys.exit(1)
+        gpu_ids = list(range(dev_count))
+    else:
+        gpu_list = OPTS.gpus.strip().split(",")
+        gpu_ids = [int(x) for x in gpu_list if x.strip()]
+        if not gpu_ids:
+            perror("No GPU IDs specified.")
+            sys.exit(1)
+    gpu_count = len(gpu_ids)
+
+    # Don't spawn more workers than there are ops to test
+    if gpu_count > op_count:
+        gpu_ids = gpu_ids[:op_count]
+        gpu_count = op_count
+
+    try:
+        check_shared_memory(gpu_count)
+    except InfrastructureError as error:
+        perror(f"Infrastructure preflight failed: {error}")
+        sys.exit(INFRASTRUCTURE_EXIT_CODE)
+
     CFG.accuracy_marks, CFG.benchmark_marks = collect_marks(ops)
 
     CFG.ops = ops
@@ -1470,25 +1543,6 @@ def main():
         output_dir = Path(OPTS.output_dir)
     ensure_dir(output_dir)
     CFG.output_dir = output_dir
-
-    if OPTS.gpus.strip().lower() == "all":
-        dev_count = ENV_INFO.get("torch", {}).get("device_count", 0)
-        if dev_count == 0:
-            perror("--gpus all specified but no devices detected.")
-            sys.exit(1)
-        gpu_ids = list(range(dev_count))
-    else:
-        gpu_list = OPTS.gpus.strip().split(",")
-        if len(gpu_list) == 0:
-            pwarn("Empty GPU list specified.")
-            sys.exit(1)
-        gpu_ids = [int(x) for x in gpu_list if x.strip()]
-    gpu_count = len(gpu_ids)
-
-    # Don't spawn more workers than there are ops to test
-    if gpu_count > op_count:
-        gpu_ids = gpu_ids[:op_count]
-        gpu_count = op_count
 
     op_width = min(max(len(op) for op in ops), 40) if ops else 20
 

@@ -704,12 +704,13 @@ jobs:
           ')
             echo "[uv experiment] Detected test extra: ${HAS_TEST}"
             echo "[uv experiment] Detected ${FLAGOS_GPU_VENDOR} extra: ${HAS_VENDOR}"
-            UV_PIP_ARGS=(--python "${ACTIVE_PYTHON}" --editable .)
+            UV_PROJECT_SPEC="."
             if [ "${HAS_TEST}" = "true" ] && [ "${HAS_VENDOR}" = "true" ]; then
-              UV_PIP_ARGS+=(--extra test --extra "${FLAGOS_GPU_VENDOR}")
+              UV_PROJECT_SPEC=".[test,${FLAGOS_GPU_VENDOR}]"
             else
               echo "[uv experiment] At least one requested extra is missing; installing the base project without extras."
             fi
+            UV_PIP_ARGS=(--python "${ACTIVE_PYTHON}" --editable "${UV_PROJECT_SPEC}")
             (
               cd target
               run_logged_command "FlagTrain incremental uv pip installation" uv pip install "${UV_PIP_ARGS[@]}"

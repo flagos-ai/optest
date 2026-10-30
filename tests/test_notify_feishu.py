@@ -183,6 +183,18 @@ class NotifyFeishuRefTest(unittest.TestCase):
             step for step in steps if step.get("name") == "Check GPU availability"
         )
         self.assertIn("Command: pip install .", install_optest["run"])
+        self.assertNotIn("matrix.vendor", install_optest["run"])
+        self.assertNotIn("https://pypi.org/simple", install_optest["run"])
+        self.assertIn(
+            "[Package index] PIP_INDEX_URL=${PIP_INDEX_URL_VALUE}",
+            install_optest["run"],
+        )
+        self.assertIn(
+            "PIP_INDEX_URL_VALUE=https://pypi.tuna.tsinghua.edu.cn/simple",
+            install_optest["run"],
+        )
+        self.assertIn("PIP_EXTRA_INDEX_URL_VALUE=", install_optest["run"])
+        self.assertIn("PIP_TRUSTED_HOST_VALUE=", install_optest["run"])
         self.assertIn("FLAGOS_GPU_VENDOR", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_DRIVER", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_RUNTIME", gpu_check["run"])

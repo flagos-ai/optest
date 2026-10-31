@@ -38,6 +38,7 @@ container_volumes:
 # Container options for this backends
 container_options: >-
   --privileged
+  --shm-size=16g
   --workdir=/root
 
 # GPUs to test for this backends

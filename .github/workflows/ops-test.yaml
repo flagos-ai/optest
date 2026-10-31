@@ -209,8 +209,11 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix_container) }}
     concurrency:
-      group: ops-test-${{ matrix.name }}
-      cancel-in-progress: true
+      # Serialize overlapping jobs per library and backend. GitHub retains at
+      # most one pending job per group; longer FIFO queues must dispatch
+      # sequentially.
+      group: ${{ needs.prepare.outputs.library_name }}-${{ matrix.name }}
+      cancel-in-progress: false
     runs-on: ${{ matrix.runner_labels }}
     # Job-level hard cap only. GitHub Actions evaluates a job-level
     # timeout-minutes before the matrix is available, so it cannot read a

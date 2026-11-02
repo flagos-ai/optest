@@ -140,6 +140,12 @@ class NotifyFeishuRefTest(unittest.TestCase):
 
     def test_workflow_passes_resolved_target_checkout_ref(self):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+        dispatch_inputs = workflow[True]["workflow_dispatch"]["inputs"]
+        self.assertIn("exclude_ops", dispatch_inputs)
+        self.assertEqual(dispatch_inputs["exclude_ops"]["default"], "")
+        self.assertIn(
+            "Empty = exclude none", dispatch_inputs["exclude_ops"]["description"]
+        )
         prepare_steps = workflow["jobs"]["prepare"]["steps"]
         build_matrix = next(
             step for step in prepare_steps if step.get("id") == "build-matrix"

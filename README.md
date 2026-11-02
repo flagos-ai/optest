@@ -1,5 +1,8 @@
 # FlagOS Operator Test Tools
 
+[![Python checks](https://github.com/flagos-ai/optest/actions/workflows/python-checks.yaml/badge.svg?branch=main)](https://github.com/flagos-ai/optest/actions/workflows/python-checks.yaml)
+[![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](https://github.com/flagos-ai/optest/actions/workflows/python-checks.yaml)
+
 `flagos-optest` is the shared operator accuracy and performance test driver
 for the various FlagOS operator libraries. The package also provides report-generation,
 result-labeling, web-data conversion, and vendor-specific GPU checking toolsuite.

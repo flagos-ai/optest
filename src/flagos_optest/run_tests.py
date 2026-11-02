@@ -1716,8 +1716,8 @@ def main():
         "timestamp": test_end_time.strftime("%Y-%m-%d %H:%M:%S"),
         "total_duration": total_duration_str,
         "total_ops": len(op_data),
-        "accuracy_status_counts": count_op_statuses(op_data, "accuracy"),
-        "performance_status_counts": count_op_statuses(op_data, "performance"),
+        "accuracy_counts": count_op_statuses(op_data, "accuracy"),
+        "performance_counts": count_op_statuses(op_data, "performance"),
         "env": ENV_INFO,
         "result": op_data,
     }
@@ -1728,10 +1728,10 @@ def main():
 
     cleanup_intermediate_files()
     pinfo(f"Total operators ... {final_data['total_ops']}")
-    accuracy_summary = format_status_counts(final_data["accuracy_status_counts"])
+    accuracy_summary = format_status_counts(final_data["accuracy_counts"])
     if accuracy_summary:
         pinfo(f"Accuracy operators ... {accuracy_summary}")
-    performance_summary = format_status_counts(final_data["performance_status_counts"])
+    performance_summary = format_status_counts(final_data["performance_counts"])
     if performance_summary:
         pinfo(f"Performance operators ... {performance_summary}")
     pinfo(f"Total elapsed time ... {total_duration_str} ({total_duration}s)")

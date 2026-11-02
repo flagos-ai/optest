@@ -180,7 +180,7 @@ logs_results_YYYYMMDD_HHMM/
 
 `summary.json` contains the run timestamp and duration, `total_ops` (the number
 of operators successfully aggregated into `result`), operator-level
-`accuracy_status_counts` and `performance_status_counts`, an `env` object, and
+`accuracy_counts` and `performance_counts`, an `env` object, and
 the per-operator accuracy and performance results. Status counts include zero
 values for `passed`, `failed`, `skipped`, `not_found`, `error`, and `timeout`.
 The `env` object centralizes the test-critical environment and dependency
@@ -205,7 +205,7 @@ selected image):
   "timestamp": "2026-10-23 18:50:37",
   "total_duration": "0:01:47",
   "total_ops": 3,
-  "accuracy_status_counts": {
+  "accuracy_counts": {
     "passed": 3,
     "failed": 0,
     "skipped": 0,
@@ -213,7 +213,7 @@ selected image):
     "error": 0,
     "timeout": 0
   },
-  "performance_status_counts": {
+  "performance_counts": {
     "passed": 3,
     "failed": 0,
     "skipped": 0,

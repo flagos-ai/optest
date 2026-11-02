@@ -911,8 +911,8 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys)
         run_tests.main()
     summary = json.loads((default_output / "summary.json").read_text(encoding="utf-8"))
     assert summary["total_ops"] == 1
-    assert summary["accuracy_status_counts"]["passed"] == 1
-    assert summary["performance_status_counts"]["not_found"] == 1
+    assert summary["accuracy_counts"]["passed"] == 1
+    assert summary["performance_counts"]["not_found"] == 1
     assert "add" in summary["result"]
     output_text = capsys.readouterr().out
     assert "[INFO] Total operators ... 1" in output_text

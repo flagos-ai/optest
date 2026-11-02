@@ -35,7 +35,7 @@ on:
   workflow_dispatch:
     inputs:
       repo:
-        description: 'Target repo to test (a key under repos: in repos.yaml).'
+        description: 'Target repository configured in repos.yaml.'
         required: true
         type: choice
         default: FlagGems
@@ -46,35 +46,35 @@ on:
           - FlagTrain
           - FlagAttention
       branch:
-        description: 'optest branch supplying the workflow, package, and configs. Leave empty to use the branch this run was dispatched from (--ref).'
+        description: 'optest source branch. Empty = dispatched branch.'
         required: false
         default: ''
       ref:
-        description: 'Checkout ref of the TARGET repo code under test (branch name, commit SHA, or tag). Leave empty to use the repo default_branch from repos.yaml.'
+        description: 'Target repository ref. Empty = configured default branch.'
         required: false
         default: ''
       vendors:
-        description: 'Comma-separated vendor names to run on (case-insensitive, e.g. ascend,Nvidia,THEAD). Empty = all enabled vendors.'
+        description: 'Vendors to run, comma-separated. Empty = all enabled vendors.'
         required: false
         default: ''
       ops:
-        description: 'Comma-separated operators to test (e.g. abs,sum,add). Empty = all operator stages.'
+        description: 'Operators to include, comma-separated. Empty = all stages.'
         required: false
         default: ''
       exclude_ops:
-        description: 'Comma-separated operators to exclude from the selected operators (e.g. add,sum).'
+        description: 'Operators to exclude, comma-separated. Empty = exclude none.'
         required: false
         default: ''
       upload_log:
-        description: 'Leave empty to publish results to op-monitor. Enter any value to skip the Publish results to op-monitor step.'
+        description: 'Result upload control. Empty = upload; any value = skip.'
         required: false
         default: ''
       send_feishu:
-        description: 'Leave empty to send Feishu notifications. Enter any value to skip the Send Feishu notification step.'
+        description: 'Feishu control. Empty = send; any value = skip.'
         required: false
         default: ''
       test_date:
-        description: 'Test date (YYYY-MM-DD) used for result paths, archive names and the upload test_date. Leave empty to use the current date.'
+        description: 'Result date (YYYY-MM-DD). Empty = today.'
         required: false
         default: ''
 

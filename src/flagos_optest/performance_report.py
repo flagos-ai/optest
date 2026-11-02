@@ -148,7 +148,8 @@ def parse_perf_data(op, result_file):
         "data": bench_res,
         "test_case": data.get("test_case", "Unknown"),
     }
-    if native_baseline_skip_reasons:
+    # Entering this parser branch requires at least one truthy skip reason.
+    if native_baseline_skip_reasons:  # pragma: no branch
         parsed_result["native_baseline_skip_reason"] = "; ".join(
             native_baseline_skip_reasons
         )

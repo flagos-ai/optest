@@ -178,10 +178,13 @@ logs_results_YYYYMMDD_HHMM/
     └── performance_stderr.log    # with --dump-output
 ```
 
-`summary.json` contains the run timestamp and duration, an `env` object, and
-the per-operator accuracy and performance results. The `env` object centralizes
-the test-critical environment and dependency versions detected by the
-scheduler:
+`summary.json` contains the run timestamp and duration, `total_ops` (the number
+of operators successfully aggregated into `result`), operator-level
+`accuracy_status_counts` and `performance_status_counts`, an `env` object, and
+the per-operator accuracy and performance results. Status counts include zero
+values for `passed`, `failed`, `skipped`, `not_found`, `error`, and `timeout`.
+The `env` object centralizes the test-critical environment and dependency
+versions detected by the scheduler:
 
 - CPU architecture, operating system, and Python version;
 - PyTorch version, accelerator availability, device model, and device count;
@@ -199,6 +202,25 @@ selected image):
 
 ```json
 {
+  "timestamp": "2026-10-23 18:50:37",
+  "total_duration": "0:01:47",
+  "total_ops": 3,
+  "accuracy_status_counts": {
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0,
+    "not_found": 0,
+    "error": 0,
+    "timeout": 0
+  },
+  "performance_status_counts": {
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0,
+    "not_found": 0,
+    "error": 0,
+    "timeout": 0
+  },
   "env": {
     "architecture": "x86_64",
     "os_name": "ubuntu",
@@ -271,9 +293,16 @@ time, and test completion.
 [INFO] [18:50:09][GPU  2] benchmark sum [OK         33.6s]  ( 66% 2/3 ops)
 [INFO] [18:50:16][GPU  0] benchmark abs [OK         41.0s]  ( 66% 2/3 ops)
 [INFO] [18:50:37][GPU  1] benchmark add [OK         52.3s]  (100% 3/3 ops)
+[INFO] Total operators ... 3
+[INFO] Accuracy operators ... passed=3
+[INFO] Performance operators ... passed=3
 [INFO] Total elapsed time ... 0:01:47 (107.62s)
 [INFO] Test completed.
 ```
+
+The final console summary uses the same operator counts written to
+`summary.json`. Statuses with a zero count are omitted from the accuracy and
+performance lines.
 
 ### Result helper commands
 

@@ -500,6 +500,22 @@ def test_worker_success_skips_customized_and_error(tmp_path, monkeypatch):
     assert sum(message[0] == "done" for message in display.sent) == 2
 
 
+def test_count_op_statuses_includes_known_and_unexpected_statuses():
+    op_data = {
+        status.lower(): {"accuracy": {"status": status}}
+        for status in run_tests.OP_RESULT_STATUS_KEYS
+    }
+    op_data["future"] = {"accuracy": {"status": "FutureStatus"}}
+    op_data["missing"] = {}
+
+    counts = run_tests.count_op_statuses(op_data, "accuracy")
+
+    for status_key in run_tests.OP_RESULT_STATUS_KEYS.values():
+        assert counts[status_key] == 1
+    assert counts["futurestatus"] == 1
+    assert counts["unknown"] == 1
+
+
 class _Worker:
     def __init__(self, gpu_id, alive=True):
         self._gpu_id = gpu_id
@@ -768,7 +784,7 @@ def test_marks_parsing_and_collection(tmp_path, monkeypatch):
     assert "bench" in benchmark
 
 
-def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch):
+def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     with (
         mock.patch.object(run_tests.signal, "signal"),
@@ -847,7 +863,10 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch):
         ),
     ):
         run_tests.main()
-    assert (output / "summary.json").exists()
+    incomplete_summary = json.loads(
+        (output / "summary.json").read_text(encoding="utf-8")
+    )
+    assert incomplete_summary["total_ops"] == 0
 
     default_output = tmp_path / "logs_results_20260101_0000"
 
@@ -863,7 +882,15 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch):
         def start(self):
             default_output.mkdir(exist_ok=True)
             (default_output / "summary0.json").write_text(
-                '{"add": {"status": "ok"}}', encoding="utf-8"
+                json.dumps(
+                    {
+                        "add": {
+                            "accuracy": {"status": "Passed"},
+                            "performance": {"status": "NotFound"},
+                        }
+                    }
+                ),
+                encoding="utf-8",
             )
 
     monkeypatch.setattr(run_tests.datetime, "datetime", FixedDateTime)
@@ -883,4 +910,13 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch):
     ):
         run_tests.main()
     summary = json.loads((default_output / "summary.json").read_text(encoding="utf-8"))
+    assert summary["total_ops"] == 1
+    assert summary["accuracy_status_counts"]["passed"] == 1
+    assert summary["performance_status_counts"]["not_found"] == 1
     assert "add" in summary["result"]
+    output_text = capsys.readouterr().out
+    assert "[INFO] Total operators ... 1" in output_text
+    assert "[INFO] Accuracy operators ... passed=1" in output_text
+    assert "[INFO] Performance operators ... not_found=1" in output_text
+    assert "failed=0" not in output_text
+    assert "[INFO] Total elapsed time ... 0:00:00 (0.0s)" in output_text

@@ -193,6 +193,14 @@ GEMS_ENV: dict[str, Any] = {}
 TIMEOUT = -100
 INFRASTRUCTURE_EXIT_CODE = 2
 SHM_PATH = Path("/dev/shm")
+OP_RESULT_STATUS_KEYS = {
+    "Passed": "passed",
+    "Failed": "failed",
+    "Skipped": "skipped",
+    "NotFound": "not_found",
+    "Error": "error",
+    "Timeout": "timeout",
+}
 # This is a coarse startup guard, not a peak-memory estimate. It deliberately
 # rejects Docker's 64 MiB default for highly parallel test runs on every vendor.
 MIN_SHM_BYTES_PER_WORKER = 16 * 1024 * 1024
@@ -222,6 +230,21 @@ def ensure_dir(p):
     p.mkdir(parents=True, exist_ok=True)
     # set directory permissions to 755/0o755 (drwxr-xr-x)
     p.chmod(0o755)
+
+
+def count_op_statuses(op_data, result_type):
+    """Count operator-level statuses for accuracy or performance results."""
+    counts = dict.fromkeys(OP_RESULT_STATUS_KEYS.values(), 0)
+    for item in op_data.values():
+        status = item.get(result_type, {}).get("status", "Unknown")
+        status_key = OP_RESULT_STATUS_KEYS.get(status, status.lower())
+        counts[status_key] = counts.get(status_key, 0) + 1
+    return counts
+
+
+def format_status_counts(counts):
+    """Format nonzero status counts for the final console summary."""
+    return ", ".join(f"{status}={count}" for status, count in counts.items() if count)
 
 
 class InfrastructureError(RuntimeError):
@@ -1692,6 +1715,9 @@ def main():
     final_data = {
         "timestamp": test_end_time.strftime("%Y-%m-%d %H:%M:%S"),
         "total_duration": total_duration_str,
+        "total_ops": len(op_data),
+        "accuracy_status_counts": count_op_statuses(op_data, "accuracy"),
+        "performance_status_counts": count_op_statuses(op_data, "performance"),
         "env": ENV_INFO,
         "result": op_data,
     }
@@ -1701,6 +1727,13 @@ def main():
         json.dump(final_data, f, indent=2)
 
     cleanup_intermediate_files()
+    pinfo(f"Total operators ... {final_data['total_ops']}")
+    accuracy_summary = format_status_counts(final_data["accuracy_status_counts"])
+    if accuracy_summary:
+        pinfo(f"Accuracy operators ... {accuracy_summary}")
+    performance_summary = format_status_counts(final_data["performance_status_counts"])
+    if performance_summary:
+        pinfo(f"Performance operators ... {performance_summary}")
     pinfo(f"Total elapsed time ... {total_duration_str} ({total_duration}s)")
     pinfo("Test completed.")
 

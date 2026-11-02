@@ -151,10 +151,12 @@ Explicit include and exclude lists are deduplicated while preserving their
 original order. Exclusions use exact, case-sensitive operator ID matching. When
 any list option is supplied, the startup log reports the parsed include and
 exclude counts, the number of exclusions that matched, and the final number of
-operators scheduled:
+operators scheduled. It also records every parsed exclusion, including names
+that did not match the selected operators:
 
 ```text
 [INFO] Operator selection ... include=3 (--ops), exclude=2 (--exclude-ops), matched=1
+[INFO] Operator exclusions ... mul, unsupported_op
 [INFO] Testing 2 operators ...
 ```
 

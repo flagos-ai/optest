@@ -120,6 +120,7 @@ class ProjectDirectoryTest(unittest.TestCase):
                     "exclude=1 (--exclude-op-list-file), matched=1",
                     output.getvalue(),
                 )
+                self.assertIn("Operator exclusions ... mul", output.getvalue())
                 self.assertIn("Testing 1 operators", output.getvalue())
         finally:
             os.chdir(original_directory)

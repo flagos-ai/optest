@@ -1329,6 +1329,7 @@ def get_ops_to_test():
         include_source=include_source,
         exclude_count=len(excluded_ops),
         exclude_source=exclude_source,
+        excluded_ops=excluded_ops,
         matched_count=matched_count,
     )
     return selected_ops
@@ -1586,6 +1587,8 @@ def main():
             f"exclude={selection.exclude_count} ({selection.exclude_source}), "
             f"matched={selection.matched_count}"
         )
+        if selection.exclude_count:
+            pinfo(f"Operator exclusions ... {', '.join(selection.excluded_ops)}")
     op_count = len(ops)
     if op_count == 0:
         pwarn("No operators to test. Please specify at least one operator.")

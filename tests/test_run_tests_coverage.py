@@ -678,6 +678,7 @@ def test_cleanup_workers_interrupt_and_selection(tmp_path, monkeypatch):
     assert selection.include_source == "--ops"
     assert selection.exclude_count == 2
     assert selection.exclude_source == "--exclude-ops"
+    assert selection.excluded_ops == ["y", "missing"]
     assert selection.matched_count == 1
     assert selection.explicit is True
 

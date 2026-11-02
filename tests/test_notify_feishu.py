@@ -144,11 +144,24 @@ class NotifyFeishuRefTest(unittest.TestCase):
         build_matrix = next(
             step for step in prepare_steps if step.get("id") == "build-matrix"
         )
+        self.assertEqual(
+            workflow["jobs"]["prepare"]["outputs"]["exclude_ops"],
+            "${{ steps.build-matrix.outputs.exclude_ops }}",
+        )
+        self.assertEqual(
+            build_matrix["env"]["EXCLUDE_OPS_INPUT"],
+            "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.exclude_ops || '' }}",
+        )
         self.assertIn(
             "checkout_ref = os.environ.get('REF_INPUT', '').strip() "
             "or rc['default_branch']",
             build_matrix["run"],
         )
+        self.assertIn(
+            "exclude_ops = os.environ.get('EXCLUDE_OPS_INPUT', '').strip()",
+            build_matrix["run"],
+        )
+        self.assertIn('out.write(f"exclude_ops={exclude_ops}\\n")', build_matrix["run"])
 
         steps = workflow["jobs"]["test-container"]["steps"]
         notification = next(
@@ -193,6 +206,10 @@ class NotifyFeishuRefTest(unittest.TestCase):
             "${{ needs.prepare.outputs.checkout_ref }}",
         )
         self.assertEqual(job["env"]["TEST_OPS"], "${{ needs.prepare.outputs.ops }}")
+        self.assertEqual(
+            job["env"]["TEST_EXCLUDE_OPS"],
+            "${{ needs.prepare.outputs.exclude_ops }}",
+        )
 
         steps = job["steps"]
         run_tests = next(step for step in steps if step.get("name") == "Run ops tests")
@@ -203,6 +220,8 @@ class NotifyFeishuRefTest(unittest.TestCase):
             "Target ref: ${TARGET_REF}",
             "Target commit: ${TARGET_COMMIT}",
             "Operator arguments: ${OP_ARGS}",
+            "Excluded ops: ${TEST_EXCLUDE_OPS:-<none>}",
+            "Exclusion arguments: ${EXCLUDE_OPS_ARG:-<none>}",
             "Base-data arguments: ${BASE_DATA_ARG:-<none>}",
             "Command: flagos-optest",
             "Command: flagos-add-labels",
@@ -212,6 +231,8 @@ class NotifyFeishuRefTest(unittest.TestCase):
         for entry in expected_log_entries:
             with self.subTest(entry=entry):
                 self.assertIn(entry, script)
+        self.assertIn('EXCLUDE_OPS_ARG="--exclude-ops ${TEST_EXCLUDE_OPS}"', script)
+        self.assertIn("${OP_ARGS} ${EXCLUDE_OPS_ARG} ${BASE_DATA_ARG}", script)
 
     def test_workflow_names_checkouts_and_install_commands(self):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))

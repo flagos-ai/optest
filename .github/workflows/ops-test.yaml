@@ -61,6 +61,10 @@ on:
         description: 'Comma-separated operators to test (e.g. abs,sum,add). Empty = all operator stages.'
         required: false
         default: ''
+      exclude_ops:
+        description: 'Comma-separated operators to exclude from the selected operators (e.g. add,sum).'
+        required: false
+        default: ''
       upload_log:
         description: 'Leave empty to publish results to op-monitor. Enter any value to skip the Publish results to op-monitor step.'
         required: false
@@ -90,6 +94,7 @@ jobs:
       matrix_container: ${{ steps.build-matrix.outputs.matrix_container }}
       api: ${{ steps.build-matrix.outputs.api }}
       ops: ${{ steps.build-matrix.outputs.ops }}
+      exclude_ops: ${{ steps.build-matrix.outputs.exclude_ops }}
       publish_results: ${{ steps.build-matrix.outputs.publish_results }}
       send_feishu: ${{ steps.build-matrix.outputs.send_feishu }}
     steps:
@@ -115,6 +120,7 @@ jobs:
           REF_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
           VENDORS_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.vendors || '' }}
           OPS_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ops || '' }}
+          EXCLUDE_OPS_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.exclude_ops || '' }}
           UPLOAD_LOG_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload_log || '' }}
           SEND_FEISHU_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.send_feishu || '' }}
         run: |
@@ -187,6 +193,7 @@ jobs:
 
           # ops: empty input -> "all" operator stages; otherwise the given ops.
           ops = os.environ.get('OPS_INPUT', '').strip() or 'all'
+          exclude_ops = os.environ.get('EXCLUDE_OPS_INPUT', '').strip()
           publish_results = 'true' if not os.environ.get('UPLOAD_LOG_INPUT', '').strip() else 'false'
           send_feishu = 'true' if not os.environ.get('SEND_FEISHU_INPUT', '').strip() else 'false'
 
@@ -197,6 +204,7 @@ jobs:
               out.write(f"matrix_container={json.dumps({'include': container_include})}\n")
               out.write(f"api={main['server']['api']}\n")
               out.write(f"ops={ops}\n")
+              out.write(f"exclude_ops={exclude_ops}\n")
               out.write(f"publish_results={publish_results}\n")
               out.write(f"send_feishu={send_feishu}\n")
 
@@ -233,6 +241,7 @@ jobs:
       TARGET_REPOSITORY: ${{ needs.prepare.outputs.target_repo }}
       TARGET_REF: ${{ needs.prepare.outputs.checkout_ref }}
       TEST_OPS: ${{ needs.prepare.outputs.ops }}
+      TEST_EXCLUDE_OPS: ${{ needs.prepare.outputs.exclude_ops }}
       OUTPUT_DIR: ${{ matrix.output_base_dir }}/${{ needs.prepare.outputs.library_name }}/${{ needs.prepare.outputs.date }}/logs_results_${{ needs.prepare.outputs.date }}
     steps:
       # Checkout optest itself (this repo) at workspace root: provides src/
@@ -724,6 +733,7 @@ jobs:
           echo "[Run ops tests] Test GPUs: ${AVAILABLE_GPUS}"
           echo "[Run ops tests] Test date: ${DATE}"
           echo "[Run ops tests] Test ops: ${TEST_OPS}"
+          echo "[Run ops tests] Excluded ops: ${TEST_EXCLUDE_OPS:-<none>}"
           mkdir -p "${OUTPUT_DIR}"
           # remove cache to avoid potential issues with stale files
           rm -rf ~/.triton/cache && rm -rf ~/.flaggems
@@ -747,6 +757,10 @@ jobs:
           else
             OP_ARGS="--ops ${OPS}"
           fi
+          EXCLUDE_OPS_ARG=""
+          if [ -n "${TEST_EXCLUDE_OPS}" ]; then
+            EXCLUDE_OPS_ARG="--exclude-ops ${TEST_EXCLUDE_OPS}"
+          fi
           # Optional per-repo ops baseline (repos.yaml base_data); path is
           # relative to the target checkout. Empty = not passed.
           BASE_DATA="${{ matrix.base_data }}"
@@ -755,14 +769,16 @@ jobs:
             BASE_DATA_ARG="--base-data ${BASE_DATA}"
           fi
           echo "[Run ops tests] Operator arguments: ${OP_ARGS}"
+          echo "[Run ops tests] Exclusion arguments: ${EXCLUDE_OPS_ARG:-<none>}"
           echo "[Run ops tests] Base data: ${BASE_DATA:-<none>}"
           echo "[Run ops tests] Base-data arguments: ${BASE_DATA_ARG:-<none>}"
           # Run from the target checkout so the installed scheduler discovers
           # its conf/operators.yaml, tests/ and benchmark/ from the cwd.
-          echo "[Run ops tests] Command: flagos-optest --gpus \"${AVAILABLE_GPUS}\" ${OP_ARGS} ${BASE_DATA_ARG} --dump-output --output-dir \"${OUTPUT_DIR}\""
+          echo "[Run ops tests] Command: flagos-optest --gpus \"${AVAILABLE_GPUS}\" ${OP_ARGS} ${EXCLUDE_OPS_ARG} ${BASE_DATA_ARG} --dump-output --output-dir \"${OUTPUT_DIR}\""
           flagos-optest \
             --gpus "${AVAILABLE_GPUS}" \
             ${OP_ARGS} \
+            ${EXCLUDE_OPS_ARG} \
             ${BASE_DATA_ARG} \
             --dump-output \
             --output-dir "${OUTPUT_DIR}"

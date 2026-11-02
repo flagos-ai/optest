@@ -774,6 +774,39 @@ jobs:
           echo "[Run ops tests] Command: flagos-psum-html -o \"${OUTPUT_DIR}/result.html\" \"${OUTPUT_DIR}\""
           flagos-psum-html -o "${OUTPUT_DIR}/result.html" "${OUTPUT_DIR}"
 
+      - name: Collect test summary
+        id: test-summary
+        if: always()
+        shell: python3 {0}
+        run: |
+          import json
+          import os
+          from pathlib import Path
+
+          summary_path = Path(os.environ["OUTPUT_DIR"]) / "summary.json"
+          total_ops = ""
+          total_duration = ""
+          try:
+              summary = json.loads(summary_path.read_text(encoding="utf-8"))
+              if not isinstance(summary, dict):
+                  raise ValueError("summary root must be a JSON object")
+              total_ops_value = summary.get("total_ops")
+              total_duration_value = summary.get("total_duration")
+              if total_ops_value is not None:
+                  total_ops = str(total_ops_value).strip()
+              if total_duration_value is not None:
+                  total_duration = str(total_duration_value).strip()
+          except (OSError, TypeError, ValueError) as error:
+              print(f"::warning::Failed to read test summary from {summary_path}: {error}")
+
+          print(f"[Test summary] Total ops: {total_ops or '<empty>'}")
+          print(f"[Test summary] Total duration: {total_duration or '<empty>'}")
+
+          if total_ops and total_duration:
+              with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+                  output.write(f"total_ops={total_ops}\n")
+                  output.write(f"total_duration={total_duration}\n")
+
       - name: Package results
         run: |
           ARCHIVE="${{ matrix.output_base_dir }}/${REPOSITORY_NAME}/${REPOSITORY_NAME}-${{ matrix.name }}-${DATE}.tar.gz"
@@ -829,6 +862,8 @@ jobs:
           # otherwise the target repo's configured default_branch.
           TARGET_REF: ${{ needs.prepare.outputs.checkout_ref }}
           OVERRIDE_SHA: ${{ steps.target-info.outputs.sha }}
+          TOTAL_OPS: ${{ steps.test-summary.outputs.total_ops }}
+          TOTAL_DURATION: ${{ steps.test-summary.outputs.total_duration }}
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
           FEISHU_CHAT_ID: ${{ secrets.FEISHU_CHAT_ID }}

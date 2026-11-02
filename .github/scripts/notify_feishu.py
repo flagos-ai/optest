@@ -125,6 +125,8 @@ def main():
     event_name = os.environ["GITHUB_EVENT_NAME"]
     pr_number = os.environ.get("PR_NUMBER", "")
     pr_title = os.environ.get("PR_TITLE", "")
+    total_ops = os.environ.get("TOTAL_OPS", "").strip()
+    total_duration = os.environ.get("TOTAL_DURATION", "").strip()
 
     short_sha = sha[:7]
     run_url = (
@@ -160,6 +162,85 @@ def main():
     if platform:
         title = f"Test {text} [{platform}] \u2014 {display_name}"
 
+    fields = [
+        {
+            "is_short": True,
+            "text": {
+                "tag": "lark_md",
+                "content": f"**Workflow:** {workflow}",
+            },
+        },
+        {
+            "is_short": True,
+            "text": {
+                "tag": "lark_md",
+                "content": f"**Status:** {emoji} {text}",
+            },
+        },
+        {
+            "is_short": True,
+            "text": {
+                "tag": "lark_md",
+                "content": f"**Ref:** {ref}",
+            },
+        },
+        {
+            "is_short": True,
+            "text": {
+                "tag": "lark_md",
+                "content": f"**Commit:** {short_sha}",
+            },
+        },
+    ]
+    if total_ops and total_duration:
+        fields.extend(
+            [
+                {
+                    "is_short": True,
+                    "text": {
+                        "tag": "lark_md",
+                        "content": f"**Total ops:** {total_ops}",
+                    },
+                },
+                {
+                    "is_short": True,
+                    "text": {
+                        "tag": "lark_md",
+                        "content": f"**Total Duration:** {total_duration}",
+                    },
+                },
+            ]
+        )
+    if pr_number:
+        fields.append(
+            {
+                "is_short": False,
+                "text": {
+                    "tag": "lark_md",
+                    "content": f"**PR:** [{repo}#{pr_number}]({server_url}/{repo}/pull/{pr_number})",
+                },
+            }
+        )
+    if pr_title:
+        fields.append(
+            {
+                "is_short": False,
+                "text": {
+                    "tag": "lark_md",
+                    "content": f"**Title:** {pr_title}",
+                },
+            }
+        )
+    fields.append(
+        {
+            "is_short": False,
+            "text": {
+                "tag": "lark_md",
+                "content": f"**Trigger:** {event_name} by {actor}",
+            },
+        }
+    )
+
     card_content = {
         "config": {"wide_screen_mode": True},
         "header": {
@@ -169,69 +250,7 @@ def main():
         "elements": [
             {
                 "tag": "div",
-                "fields": [
-                    {
-                        "is_short": True,
-                        "text": {
-                            "tag": "lark_md",
-                            "content": f"**Workflow:** {workflow}",
-                        },
-                    },
-                    {
-                        "is_short": True,
-                        "text": {
-                            "tag": "lark_md",
-                            "content": f"**Status:** {emoji} {text}",
-                        },
-                    },
-                    {
-                        "is_short": True,
-                        "text": {
-                            "tag": "lark_md",
-                            "content": f"**Ref:** {ref}",
-                        },
-                    },
-                    {
-                        "is_short": True,
-                        "text": {
-                            "tag": "lark_md",
-                            "content": f"**Trigger:** {event_name} by {actor}",
-                        },
-                    },
-                    {
-                        "is_short": False,
-                        "text": {
-                            "tag": "lark_md",
-                            "content": f"**Commit:** {short_sha}",
-                        },
-                    },
-                ]
-                + (
-                    [
-                        {
-                            "is_short": False,
-                            "text": {
-                                "tag": "lark_md",
-                                "content": f"**PR:** [{repo}#{pr_number}]({server_url}/{repo}/pull/{pr_number})",
-                            },
-                        },
-                    ]
-                    if pr_number
-                    else []
-                )
-                + (
-                    [
-                        {
-                            "is_short": False,
-                            "text": {
-                                "tag": "lark_md",
-                                "content": f"**Title:** {pr_title}",
-                            },
-                        },
-                    ]
-                    if pr_title
-                    else []
-                ),
+                "fields": fields,
             },
             {"tag": "hr"},
             {

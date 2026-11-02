@@ -47,6 +47,7 @@ dependencies = [
 [dependency-groups]
 test = [
     "pytest>=9.0,<10",
+    "pytest-cov>=7.0,<8",
 ]
 dev = [
     { include-group = "test" },
@@ -106,3 +107,26 @@ strict_equality = true
 warn_redundant_casts = true
 warn_unused_configs = true
 warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+addopts = [
+    "--cov=flagos_optest",
+    "--cov=.github/scripts",
+    "--cov-branch",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+    "--cov-fail-under=100",
+]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["src/flagos_optest", ".github/scripts"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]

@@ -15,11 +15,12 @@
 """Pure benchmark report parsing, shared by the scheduler and host tests."""
 
 import json
+from typing import Any
 
 if __package__:
     from .consts import DTYPE_MAP
 else:
-    from consts import DTYPE_MAP
+    from consts import DTYPE_MAP  # type: ignore[no-redef]
 
 
 def _case_record(result, default=None):
@@ -69,12 +70,12 @@ def parse_perf_data(op, result_file):
             "test_case": data.get("test_case", "Unknown"),
         }
 
-    bench_res = {}
+    bench_res: dict[str, dict[str, Any]] = {}
     records = data.get("details", [])
     if not any(item.get("native_baseline_skip_reason") for item in records):
         for item in records:
             dtype = DTYPE_MAP.get(item["dtype"], item["dtype"])
-            details = {}
+            details: dict[str, dict[str, Any]] = {}
             total = 0.0
             count = 0
             for res in item.get("result", []):
@@ -105,9 +106,9 @@ def parse_perf_data(op, result_file):
             "test_case": data.get("test_case", "Unknown"),
         }
 
-    native_baseline_skip_reasons = []
-    speedup_totals = {}
-    speedup_counts = {}
+    native_baseline_skip_reasons: list[str] = []
+    speedup_totals: dict[str, float] = {}
+    speedup_counts: dict[str, int] = {}
 
     for item in records:
         dtype = DTYPE_MAP.get(item["dtype"], item["dtype"])

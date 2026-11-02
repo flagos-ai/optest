@@ -19,10 +19,18 @@ import re
 from pathlib import Path
 
 VENDOR_NAMES = {
-    "nvidia": "NVIDIA", "ascend": "Ascend", "cambricon": "Cambricon",
-    "amd": "AMD", "enflame": "Enflame", "hygon": "Hygon",
-    "iluvatar": "Iluvatar", "kunlunxin": "KunlunXin", "metax": "MetaX",
-    "mthreads": "Moore Threads", "sunrise": "Sunrise", "thead": "T-Head",
+    "nvidia": "NVIDIA",
+    "ascend": "Ascend",
+    "cambricon": "Cambricon",
+    "amd": "AMD",
+    "enflame": "Enflame",
+    "hygon": "Hygon",
+    "iluvatar": "Iluvatar",
+    "kunlunxin": "KunlunXin",
+    "metax": "MetaX",
+    "mthreads": "Moore Threads",
+    "sunrise": "Sunrise",
+    "thead": "T-Head",
     "tsingmicro": "TsingMicro",
 }
 
@@ -31,28 +39,49 @@ VENDOR_NAMES = {
 # Paths are checked in order, with explicit installation roots taking priority.
 RUNTIMES = {
     "nvidia": ("cuda", ("CUDA_HOME", "CUDA_PATH"), ("/usr/local/cuda",)),
-    "ascend": ("cann", ("ASCEND_HOME_PATH", "ASCEND_TOOLKIT_HOME"),
-               ("/usr/local/Ascend/ascend-toolkit/latest", "/usr/local/Ascend/latest")),
+    "ascend": (
+        "cann",
+        ("ASCEND_HOME_PATH", "ASCEND_TOOLKIT_HOME"),
+        ("/usr/local/Ascend/ascend-toolkit/latest", "/usr/local/Ascend/latest"),
+    ),
     "cambricon": ("neuware", ("NEUWARE_HOME",), ("/usr/local/neuware",)),
     "amd": ("rocm", ("ROCM_PATH", "ROCM_HOME"), ("/opt/rocm",)),
     "enflame": ("tops", ("TOPS_HOME", "TOPS_PATH"), ("/opt/tops", "/usr/local/tops")),
     "hygon": ("dtk", ("DTK_HOME", "DTK_PATH", "DTKROOT"), ("/opt/dtk",)),
-    "iluvatar": ("corex", ("COREX_HOME", "COREX_PATH", "COREX_ROOT"), ("/usr/local/corex",)),
+    "iluvatar": (
+        "corex",
+        ("COREX_HOME", "COREX_PATH", "COREX_ROOT"),
+        ("/usr/local/corex",),
+    ),
     "kunlunxin": ("xre", ("XRE_HOME", "XPU_HOME"), ("/usr/local/xpu",)),
     "metax": ("maca", ("MACA_PATH", "MACA_HOME"), ("/opt/maca", "/usr/local/maca")),
     "mthreads": ("musa", ("MUSA_HOME", "MUSA_INSTALL_PATH"), ("/usr/local/musa",)),
     "sunrise": ("tangrt", ("TANGRT_HOME",), ("/usr/local/tangrt", "/opt/tangrt")),
-    "thead": ("ppu", ("PPU_HOME", "PPU_SDK_HOME"),
-              ("/usr/local/PPU_SDK", "/usr/local/ppu")),
-    "tsingmicro": ("tsm", ("TSM_HOME", "KUIPER_PATH", "KUIPER_HOME"),
-                   ("/usr/local/kuiper", "/home/secure/runtime/kuiper", "/usr/local/tsm")),
+    "thead": (
+        "ppu",
+        ("PPU_HOME", "PPU_SDK_HOME"),
+        ("/usr/local/PPU_SDK", "/usr/local/ppu"),
+    ),
+    "tsingmicro": (
+        "tsm",
+        ("TSM_HOME", "KUIPER_PATH", "KUIPER_HOME"),
+        ("/usr/local/kuiper", "/home/secure/runtime/kuiper", "/usr/local/tsm"),
+    ),
 }
 
 COMMANDS = {
-    "nvidia": "nvidia-smi", "ascend": "npu-smi", "cambricon": "cnmon",
-    "amd": "rocm-smi", "enflame": "efsmi", "hygon": "hy-smi",
-    "iluvatar": "ixsmi", "kunlunxin": "xpu-smi", "metax": "mx-smi",
-    "mthreads": "mthreads-gmi", "sunrise": "pt_smi", "thead": "ppu-smi",
+    "nvidia": "nvidia-smi",
+    "ascend": "npu-smi",
+    "cambricon": "cnmon",
+    "amd": "rocm-smi",
+    "enflame": "efsmi",
+    "hygon": "hy-smi",
+    "iluvatar": "ixsmi",
+    "kunlunxin": "xpu-smi",
+    "metax": "mx-smi",
+    "mthreads": "mthreads-gmi",
+    "sunrise": "pt_smi",
+    "thead": "ppu-smi",
     "tsingmicro": "tsm_smi",
 }
 
@@ -106,19 +135,50 @@ def _amd_model_from_sysfs():
     for vendor_path in devices:
         device_path = vendor_path.parent
         try:
-            vendor = vendor_path.read_text(encoding="ascii").strip().lower().removeprefix("0x")
-            device = (device_path / "device").read_text(encoding="ascii").strip().lower().removeprefix("0x")
-            device_class = (device_path / "class").read_text(encoding="ascii").strip().lower().removeprefix("0x")
+            vendor = (
+                vendor_path.read_text(encoding="ascii")
+                .strip()
+                .lower()
+                .removeprefix("0x")
+            )
+            device = (
+                (device_path / "device")
+                .read_text(encoding="ascii")
+                .strip()
+                .lower()
+                .removeprefix("0x")
+            )
+            device_class = (
+                (device_path / "class")
+                .read_text(encoding="ascii")
+                .strip()
+                .lower()
+                .removeprefix("0x")
+            )
             if vendor != "1002" or not device_class.startswith(("03", "12")):
                 continue
-            subsystem_vendor = (device_path / "subsystem_vendor").read_text(
-                encoding="ascii").strip().lower().removeprefix("0x")
-            subsystem_device = (device_path / "subsystem_device").read_text(
-                encoding="ascii").strip().lower().removeprefix("0x")
+            subsystem_vendor = (
+                (device_path / "subsystem_vendor")
+                .read_text(encoding="ascii")
+                .strip()
+                .lower()
+                .removeprefix("0x")
+            )
+            subsystem_device = (
+                (device_path / "subsystem_device")
+                .read_text(encoding="ascii")
+                .strip()
+                .lower()
+                .removeprefix("0x")
+            )
         except (OSError, UnicodeError):
             continue
         identities.add((vendor, device, subsystem_vendor, subsystem_device))
-    models = [AMD_PCI_MODELS[identity] for identity in identities if identity in AMD_PCI_MODELS]
+    models = [
+        AMD_PCI_MODELS[identity]
+        for identity in identities
+        if identity in AMD_PCI_MODELS
+    ]
     if identities and len(models) == len(identities):
         return _unique(models)
     return None
@@ -127,7 +187,8 @@ def _amd_model_from_sysfs():
 def _label_version(text, label, version_pattern=VERSION):
     match = re.search(
         rf"\b(?:{label})\s*(?:version|ver|release)?\s*[:=|]?\s*[vV]?({version_pattern})",
-        text, re.IGNORECASE,
+        text,
+        re.IGNORECASE,
     )
     return match.group(1) if match else None
 
@@ -139,8 +200,9 @@ def _file_version(path, runtime):
     except (OSError, UnicodeError):
         return None
     if runtime == "xre" and path.name == "version.h":
-        match = re.search(rf'^\s*#\s*define\s+XPURT_VERSION_STR\s+"({VERSION})"',
-                          text, re.MULTILINE)
+        match = re.search(
+            rf'^\s*#\s*define\s+XPURT_VERSION_STR\s+"({VERSION})"', text, re.MULTILINE
+        )
         return match.group(1) if match else None
     if runtime == "dtk" and path.name == ".dtk_version":
         match = re.search(rf"^DTK-({VERSION})\s*$", text, re.MULTILINE)
@@ -181,15 +243,27 @@ def _file_version(path, runtime):
 
 def _runtime_version(key, env, run, smi_text):
     runtime, env_vars, defaults = RUNTIMES[key]
-    roots = list(dict.fromkeys([env[v] for v in env_vars if env.get(v)] + list(defaults)))
+    roots = list(
+        dict.fromkeys([env[v] for v in env_vars if env.get(v)] + list(defaults))
+    )
     filenames = ["version.json", "version.txt", "version", "VERSION", ".info/version"]
     if key == "ascend":
-        filenames += ["ascend_toolkit_install.info", "*/ascend_toolkit_install.info",
-                      "version.cfg", "*/version.cfg", "share/info/runtime/version.info"]
-    elif key == "kunlunxin":
-        filenames = ["include/xpu/version.h", "xre/include/xpu/version.h"] + filenames + [
-            "xre/version.txt", "xre/version",
+        filenames += [
+            "ascend_toolkit_install.info",
+            "*/ascend_toolkit_install.info",
+            "version.cfg",
+            "*/version.cfg",
+            "share/info/runtime/version.info",
         ]
+    elif key == "kunlunxin":
+        filenames = (
+            ["include/xpu/version.h", "xre/include/xpu/version.h"]
+            + filenames
+            + [
+                "xre/version.txt",
+                "xre/version",
+            ]
+        )
     elif key == "hygon":
         filenames = [".dtk_version"] + filenames
     elif key == "thead":
@@ -225,10 +299,14 @@ def _runtime_version(key, env, run, smi_text):
             return value
         # Runtime-only CUDA images omit nvcc and version.json. The libraries
         # metapackage records the distribution release, unlike cudart's build.
-        rc, out, _ = run(["dpkg-query", "-W", "-f=${Package}\\t${Version}\\n",
-                          "cuda-libraries-*"], env=env)
+        rc, out, _ = run(
+            ["dpkg-query", "-W", "-f=${Package}\\t${Version}\\n", "cuda-libraries-*"],
+            env=env,
+        )
         if rc == 0:
-            releases = re.findall(r"(?m)^cuda-libraries-\d+-\d+\s+(\d+\.\d+\.\d+)(?:-\S+)?$", out)
+            releases = re.findall(
+                r"(?m)^cuda-libraries-\d+-\d+\s+(\d+\.\d+\.\d+)(?:-\S+)?$", out
+            )
             if len(set(releases)) == 1:
                 return releases[0]
         return None
@@ -237,8 +315,7 @@ def _runtime_version(key, env, run, smi_text):
         if rc == 0 and re.fullmatch(VERSION, out.strip()):
             return out.strip()
     label = r"tsm|runtime" if key == "tsingmicro" else re.escape(runtime)
-    return _label_version(smi_text, label,
-                          TSM_VERSION if runtime == "tsm" else VERSION)
+    return _label_version(smi_text, label, TSM_VERSION if runtime == "tsm" else VERSION)
 
 
 def _cuda_version(command, env, run):
@@ -258,24 +335,33 @@ def collect_metadata(key, env, run):
         if rc == 0:
             table += "\n" + out
     name = _model_names(key, table)
-    driver = _label_version(table, r"driver(?:\s+version)?",
-                            TSM_VERSION if key == "tsingmicro" else VERSION)
+    driver = _label_version(
+        table, r"driver(?:\s+version)?", TSM_VERSION if key == "tsingmicro" else VERSION
+    )
     if key in ("nvidia", "iluvatar"):
         # Separate fields: older SMI releases may support name but not driver.
         for field in ("name", "driver_version"):
             rc, out, _ = run(
-                [command, f"--query-gpu={field}", "--format=csv,noheader"], env=env,
+                [command, f"--query-gpu={field}", "--format=csv,noheader"],
+                env=env,
             )
             if rc != 0:
                 continue
             values = [line.strip() for line in out.splitlines() if line.strip()]
             if field == "name":
-                name = _model_names(key, out) or _unique(
-                    re.sub(r"^(?:NVIDIA|Iluvatar)\s+", "", v, flags=re.IGNORECASE)
-                    for v in values if v.upper() not in ("N/A", "[N/A]", "NOT SUPPORTED")
-                ) or name
+                name = (
+                    _model_names(key, out)
+                    or _unique(
+                        re.sub(r"^(?:NVIDIA|Iluvatar)\s+", "", v, flags=re.IGNORECASE)
+                        for v in values
+                        if v.upper() not in ("N/A", "[N/A]", "NOT SUPPORTED")
+                    )
+                    or name
+                )
             else:
-                driver = _unique(v for v in values if re.fullmatch(VERSION, v)) or driver
+                driver = (
+                    _unique(v for v in values if re.fullmatch(VERSION, v)) or driver
+                )
     elif key in ("amd", "hygon"):
         rc, out, _ = run([command, "--showproductname", "--showdriverversion"], env=env)
         if rc == 0:
@@ -290,7 +376,8 @@ def collect_metadata(key, env, run):
     if not name:
         match = re.search(
             r"(?:Product|Device|Board|Card)\s+Name\s*:\s*([^|\n]+)",
-            table, re.IGNORECASE,
+            table,
+            re.IGNORECASE,
         )
         name = match.group(1).strip() if match else None
     # Ascend records the installed host driver separately from CANN.

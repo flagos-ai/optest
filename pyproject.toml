@@ -21,12 +21,17 @@ name = "flagos-optest"
 version = "0.1.0"
 description = "Shared ops-test CI tooling for FlagOS operator libraries"
 readme = { text = "Shared operator accuracy & performance test scheduler and result report tooling for FlagOS repositories.", content-type = "text/markdown" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "Apache-2.0"
 authors = [{ name = "FlagOS Contributors" }]
 keywords = ["flagos", "flaggems", "operator", "test", "benchmark", "ci"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: POSIX :: Linux",
 ]
 # Only the small, well-known report/parsing dependencies are declared here.
@@ -37,6 +42,19 @@ dependencies = [
     "distro",
     "tomli; python_version < '3.11'",
     "PyYAML",
+]
+
+[dependency-groups]
+test = [
+    "pytest>=9.0,<10",
+]
+dev = [
+    { include-group = "test" },
+    "build>=1.2",
+    "mypy>=2.4,<3",
+    "pre-commit>=4.0,<5",
+    "ruff==0.17.3",
+    "types-PyYAML",
 ]
 
 [project.scripts]
@@ -57,3 +75,34 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 flagos_optest = ["html_assets/*.css", "html_assets/*.js", "psum_html", "psum_text", "psum_web"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+extend-include = [
+    "src/flagos_optest/psum_html",
+    "src/flagos_optest/psum_text",
+    "src/flagos_optest/psum_web",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.10"
+files = [
+    "src/flagos_optest",
+    "src/flagos_optest/psum_html",
+    "src/flagos_optest/psum_text",
+    "src/flagos_optest/psum_web",
+    ".github/scripts/notify_feishu.py",
+]
+show_error_codes = true
+check_untyped_defs = true
+ignore_missing_imports = true
+no_implicit_optional = true
+scripts_are_modules = true
+strict_equality = true
+warn_redundant_casts = true
+warn_unused_configs = true
+warn_unused_ignores = true

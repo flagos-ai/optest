@@ -45,18 +45,19 @@ import subprocess
 import sys
 import time
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
+from typing import Any
 
 import yaml
 
 if __package__:
     from .gpu_metadata import VENDOR_NAMES, collect_metadata
 else:
-    from gpu_metadata import VENDOR_NAMES, collect_metadata
+    from gpu_metadata import VENDOR_NAMES, collect_metadata  # type: ignore[no-redef]
 
 # Configuration parameters (identical to the original shell scripts).
 MEM_THRESHOLD = 30000  # Minimum free memory required (MiB)
-SLEEP_TIME = 120       # Wait time between retries (seconds)
-MAX_WAIT = 600         # Maximum total wait time (seconds)
+SLEEP_TIME = 120  # Wait time between retries (seconds)
+MAX_WAIT = 600  # Maximum total wait time (seconds)
 
 
 class VendorCheckError(Exception):
@@ -71,8 +72,9 @@ def eprint(msg=""):
 def _run(cmd, env=None, timeout=None):
     """Run a command, returning (returncode, stdout, stderr)."""
     try:
-        proc = subprocess.run(cmd, check=False, capture_output=True, text=True,
-                              env=env, timeout=timeout)
+        proc = subprocess.run(
+            cmd, check=False, capture_output=True, text=True, env=env, timeout=timeout
+        )
     except subprocess.TimeoutExpired:
         return 124, "", f"Command timed out: {cmd[0]}"
     except OSError as exc:
@@ -133,6 +135,7 @@ def _vendor_env(key):
 #                       list of indices with free >= MEM_THRESHOLD.
 # --------------------------------------------------------------------------- #
 
+
 # ---- nvidia --------------------------------------------------------------- #
 def detect_nvidia(env):
     if shutil.which("nvidia-smi", path=env.get("PATH")) is None:
@@ -167,7 +170,10 @@ def _sample_mib_pair(cmd, env, count, unit, warn_query, warn_parse):
 
 def sample_nvidia(env, count):
     return _sample_mib_pair(
-        ["nvidia-smi", "-i"], env, count, "GPU",
+        ["nvidia-smi", "-i"],
+        env,
+        count,
+        "GPU",
         "Warning: Failed to query memory on GPU {i}.",
         None,
     )
@@ -178,11 +184,15 @@ def detect_ascend(env):
     rc, out, err = _run(["npu-smi", "info"], env=env)
     combined = out + err  # original runs `npu-smi info 2>&1`
     if rc != 0:
-        eprint("Failed to run npu-smi. Please check if npu-smi is installed and working correctly.")
+        eprint(
+            "Failed to run npu-smi. Please check if npu-smi is installed and working correctly."
+        )
         raise VendorCheckError()
     count = sum(1 for line in combined.splitlines() if "OK" in line)
     if count == 0:
-        eprint("No Ascend NPUs detected. Please ensure you have Ascend NPUs installed and properly configured.")
+        eprint(
+            "No Ascend NPUs detected. Please ensure you have Ascend NPUs installed and properly configured."
+        )
         raise VendorCheckError()
     return count
 
@@ -222,7 +232,9 @@ def sample_ascend(env, count):
 def detect_cambricon(env):
     rc, out, _ = _run(["cnmon"], env=env)
     if rc == 127:
-        eprint("Failed to run cnmon. Please check if cnmon is installed and working correctly.")
+        eprint(
+            "Failed to run cnmon. Please check if cnmon is installed and working correctly."
+        )
         raise VendorCheckError()
     count = len(re.findall(r"\d+ MiB/ \d+ MiB", out))
     # NOTE: the original shell used `$?` of `cnmon | grep -c`, so a zero match
@@ -230,7 +242,9 @@ def detect_cambricon(env):
     # distinguish the two cases: a missing/erroring cnmon vs. a healthy cnmon
     # that simply reports no cards, which is clearer and keeps both messages.
     if count == 0:
-        eprint("No Cambricon MLUs detected. Please ensure you have MLU cards installed and properly configured.")
+        eprint(
+            "No Cambricon MLUs detected. Please ensure you have MLU cards installed and properly configured."
+        )
         raise VendorCheckError()
     return count
 
@@ -273,10 +287,10 @@ def sample_amd(env, count):
     _, out, _ = _run(["rocm-smi", "--showmeminfo", "vram", "--json"], env=env)
     try:
         data = json.loads(out)
-    except ValueError:
+    except ValueError as error:
         eprint("Failed to parse rocm-smi JSON output.")
         eprint("Failed to query GPU memory information via rocm-smi.")
-        raise VendorCheckError()
+        raise VendorCheckError() from error
     gpus = []
     available = []
     for i, (_card, info) in enumerate(sorted(data.items())):
@@ -301,10 +315,17 @@ def sample_amd(env, count):
 # ---- enflame -------------------------------------------------------------- #
 def detect_enflame(env):
     _, out, _ = _run(["efsmi", "-L"], env=env)
-    count = sum(1 for line in out.splitlines()
-                if re.match(r"^\s*\d+\s+.*\b[\da-fA-F]{4}:[\da-fA-F]{2}:[\da-fA-F]{2}\.\d\b", line))
+    count = sum(
+        1
+        for line in out.splitlines()
+        if re.match(
+            r"^\s*\d+\s+.*\b[\da-fA-F]{4}:[\da-fA-F]{2}:[\da-fA-F]{2}\.\d\b", line
+        )
+    )
     if count == 0:
-        eprint("No Enflame GPUs detected. Please ensure you have Enflame GPUs installed and properly configured.")
+        eprint(
+            "No Enflame GPUs detected. Please ensure you have Enflame GPUs installed and properly configured."
+        )
         raise VendorCheckError()
     return count
 
@@ -388,7 +409,9 @@ def detect_iluvatar(env):
     _, out, _ = _run(["ixsmi", "--query-gpu=name", "--format=csv,noheader"], env=env)
     count = sum(1 for line in out.splitlines() if line.strip())
     if count == 0:
-        eprint("No Iluvatar GPUs detected. Please ensure you have Iluvatar GPUs installed and properly configured.")
+        eprint(
+            "No Iluvatar GPUs detected. Please ensure you have Iluvatar GPUs installed and properly configured."
+        )
         raise VendorCheckError()
     return count
 
@@ -399,8 +422,12 @@ def _csv_values(cmd, env):
 
 
 def sample_iluvatar(env, count):
-    usage = _csv_values(["ixsmi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"], env)
-    total = _csv_values(["ixsmi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"], env)
+    usage = _csv_values(
+        ["ixsmi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"], env
+    )
+    total = _csv_values(
+        ["ixsmi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"], env
+    )
     gpus = []
     available = []
     for i in range(count):
@@ -420,7 +447,9 @@ def detect_kunlunxin(env):
     _, out, _ = _run(["xpu-smi"], env=env)
     count = sum(1 for line in out.splitlines() if "P800" in line)
     if count == 0:
-        eprint("No KLX GPUs detected. Please ensure you have KLX cards installed and properly configured.")
+        eprint(
+            "No KLX GPUs detected. Please ensure you have KLX cards installed and properly configured."
+        )
         raise VendorCheckError()
     return count
 
@@ -455,7 +484,9 @@ def sample_kunlunxin(env, count):
 def detect_metax(env):
     rc, out, _ = _run(["mx-smi"], env=env)
     if rc == 127:
-        eprint("Failed to run mx-smi. Please check if mx-smi is installed and working correctly.")
+        eprint(
+            "Failed to run mx-smi. Please check if mx-smi is installed and working correctly."
+        )
         raise VendorCheckError()
     count = None
     for line in out.splitlines():
@@ -465,14 +496,18 @@ def detect_metax(env):
                 count = fields[3]
             break
     if count is None:
-        eprint("Failed to run mx-smi. Please check if mx-smi is installed and working correctly.")
+        eprint(
+            "Failed to run mx-smi. Please check if mx-smi is installed and working correctly."
+        )
         raise VendorCheckError()
     try:
         count = int(count)
     except ValueError:
         count = 0
     if count == 0:
-        eprint("No MetaX GPUs detected. Please ensure you have MetaX GPUs installed and properly configured.")
+        eprint(
+            "No MetaX GPUs detected. Please ensure you have MetaX GPUs installed and properly configured."
+        )
         raise VendorCheckError()
     return count
 
@@ -507,7 +542,9 @@ def detect_mthreads(env):
     _, out, _ = _run(["mthreads-gmi", "-L"], env=env)
     count = sum(1 for line in out.splitlines() if "GPU " in line)
     if count == 0:
-        eprint("No Moore Threads GPUs detected. Please ensure you have GPUs installed and properly configured.")
+        eprint(
+            "No Moore Threads GPUs detected. Please ensure you have GPUs installed and properly configured."
+        )
         raise VendorCheckError()
     return count
 
@@ -530,7 +567,7 @@ def sample_mthreads(env, count):
         section = []
         for idx, line in enumerate(lines):
             if "FB Memory Usage" in line:
-                section = lines[idx:idx + 4]  # matching line + next 3 (grep -A 3)
+                section = lines[idx : idx + 4]  # matching line + next 3 (grep -A 3)
                 break
         total_s = _mthreads_field(section, "Total")
         used_s = _mthreads_field(section, "Used")
@@ -550,11 +587,15 @@ def sample_mthreads(env, count):
 def detect_sunrise(env):
     rc, out, _ = _run(["pt_smi"], env=env)
     if rc == 127:
-        eprint("Failed to run pt_smi. Please check if pt_smi is installed and working correctly.")
+        eprint(
+            "Failed to run pt_smi. Please check if pt_smi is installed and working correctly."
+        )
         raise VendorCheckError()
     count = len(_sunrise_memory(out))
     if count == 0:
-        eprint("No Sunrise GPUs detected. Please ensure you have Sunrise GPUs installed and properly configured.")
+        eprint(
+            "No Sunrise GPUs detected. Please ensure you have Sunrise GPUs installed and properly configured."
+        )
         raise VendorCheckError()
     return count
 
@@ -562,7 +603,8 @@ def detect_sunrise(env):
 def _sunrise_memory(text):
     return re.findall(
         r"(\d+(?:\.\d+)?)\s*(B|KiB|MiB|GiB)\s*/\s*"
-        r"(\d+(?:\.\d+)?)\s*(B|KiB|MiB|GiB)", text,
+        r"(\d+(?:\.\d+)?)\s*(B|KiB|MiB|GiB)",
+        text,
     )
 
 
@@ -633,7 +675,9 @@ def detect_tsingmicro(env):
     except ValueError:
         count = 0
     if count == 0:
-        eprint("No TsingMicro cards detected. Please ensure you have TsingMicro cards installed and properly configured.")
+        eprint(
+            "No TsingMicro cards detected. Please ensure you have TsingMicro cards installed and properly configured."
+        )
         raise VendorCheckError()
     return count
 
@@ -677,20 +721,85 @@ def sample_tsingmicro(env, count):
 # the SMI binary used for the secondary (command -v) probe signal; ``unit`` is
 # the noun shown in the table header and the periodic/timeout messages.
 # --------------------------------------------------------------------------- #
-VENDORS = {
-    "nvidia": {"unit": "GPU", "command": "nvidia-smi", "detect": detect_nvidia, "sample": sample_nvidia},
-    "ascend": {"unit": "NPU", "command": "npu-smi", "detect": detect_ascend, "sample": sample_ascend},
-    "cambricon": {"unit": "MLU", "command": "cnmon", "detect": detect_cambricon, "sample": sample_cambricon},
-    "amd": {"unit": "GPU", "command": "rocm-smi", "detect": detect_amd, "sample": sample_amd},
-    "enflame": {"unit": "GPU", "command": "efsmi", "detect": detect_enflame, "sample": sample_enflame},
-    "hygon": {"unit": "DCU", "command": "hy-smi", "detect": detect_hygon, "sample": sample_hygon},
-    "iluvatar": {"unit": "GPU", "command": "ixsmi", "detect": detect_iluvatar, "sample": sample_iluvatar},
-    "kunlunxin": {"unit": "GPU", "command": "xpu-smi", "detect": detect_kunlunxin, "sample": sample_kunlunxin},
-    "metax": {"unit": "GPU", "command": "mx-smi", "detect": detect_metax, "sample": sample_metax},
-    "mthreads": {"unit": "GPU", "command": "mthreads-gmi", "detect": detect_mthreads, "sample": sample_mthreads},
-    "sunrise": {"unit": "GPU", "command": "pt_smi", "detect": detect_sunrise, "sample": sample_sunrise},
-    "thead": {"unit": "PPU", "command": "ppu-smi", "detect": detect_thead, "sample": sample_thead},
-    "tsingmicro": {"unit": "GPU", "command": "tsm_smi", "detect": detect_tsingmicro, "sample": sample_tsingmicro},
+VENDORS: dict[str, dict[str, Any]] = {
+    "nvidia": {
+        "unit": "GPU",
+        "command": "nvidia-smi",
+        "detect": detect_nvidia,
+        "sample": sample_nvidia,
+    },
+    "ascend": {
+        "unit": "NPU",
+        "command": "npu-smi",
+        "detect": detect_ascend,
+        "sample": sample_ascend,
+    },
+    "cambricon": {
+        "unit": "MLU",
+        "command": "cnmon",
+        "detect": detect_cambricon,
+        "sample": sample_cambricon,
+    },
+    "amd": {
+        "unit": "GPU",
+        "command": "rocm-smi",
+        "detect": detect_amd,
+        "sample": sample_amd,
+    },
+    "enflame": {
+        "unit": "GPU",
+        "command": "efsmi",
+        "detect": detect_enflame,
+        "sample": sample_enflame,
+    },
+    "hygon": {
+        "unit": "DCU",
+        "command": "hy-smi",
+        "detect": detect_hygon,
+        "sample": sample_hygon,
+    },
+    "iluvatar": {
+        "unit": "GPU",
+        "command": "ixsmi",
+        "detect": detect_iluvatar,
+        "sample": sample_iluvatar,
+    },
+    "kunlunxin": {
+        "unit": "GPU",
+        "command": "xpu-smi",
+        "detect": detect_kunlunxin,
+        "sample": sample_kunlunxin,
+    },
+    "metax": {
+        "unit": "GPU",
+        "command": "mx-smi",
+        "detect": detect_metax,
+        "sample": sample_metax,
+    },
+    "mthreads": {
+        "unit": "GPU",
+        "command": "mthreads-gmi",
+        "detect": detect_mthreads,
+        "sample": sample_mthreads,
+    },
+    "sunrise": {
+        "unit": "GPU",
+        "command": "pt_smi",
+        "detect": detect_sunrise,
+        "sample": sample_sunrise,
+    },
+    "thead": {
+        "unit": "PPU",
+        "command": "ppu-smi",
+        "detect": detect_thead,
+        "sample": sample_thead,
+    },
+    "tsingmicro": {
+        "unit": "GPU",
+        "command": "tsm_smi",
+        "detect": detect_tsingmicro,
+        "sample": sample_tsingmicro,
+    },
 }
 
 # Probe priority order. Every vendor is uniquely identifiable by its /dev node,
@@ -701,9 +810,9 @@ VENDORS = {
 #                             unique, so device-based probing avoids the clash.
 #   * nvidia LAST -- genuine NVIDIA hosts fall through to here.
 VENDOR_ORDER = [
-    "hygon",      # must precede amd (see _device_present)
+    "hygon",  # must precede amd (see _device_present)
     "amd",
-    "thead",      # must precede nvidia
+    "thead",  # must precede nvidia
     "iluvatar",
     "kunlunxin",
     "enflame",
@@ -713,7 +822,7 @@ VENDOR_ORDER = [
     "mthreads",
     "ascend",
     "sunrise",
-    "nvidia",     # keep last
+    "nvidia",  # keep last
 ]
 
 
@@ -821,8 +930,12 @@ def run_vendor_check(key):
                 "memory_unit": "MiB",
                 "available_gpus": avail_str,
                 "gpus": [
-                    {"id": g["index"], "total": g["total"],
-                     "used": g["used"], "free": g["free"]}
+                    {
+                        "id": g["index"],
+                        "total": g["total"],
+                        "used": g["used"],
+                        "free": g["free"],
+                    }
                     for g in gpus
                 ],
             }
@@ -845,12 +958,16 @@ def render_text(result):
     ):
         lines.append(f"{label}: {result[field] or 'unknown'}")
     device = f" {result['device']}" if result["device"] else ""
-    lines.extend([
-        (f"Detected {result['device_count']} {VENDOR_NAMES[result['vendor']]}"
-         f"{device} {result['unit']}(s)."),
-        f"Available GPUs: {result['available_gpus']}",
-        _table_header(result["unit"]),
-    ])
+    lines.extend(
+        [
+            (
+                f"Detected {result['device_count']} {VENDOR_NAMES[result['vendor']]}"
+                f"{device} {result['unit']}(s)."
+            ),
+            f"Available GPUs: {result['available_gpus']}",
+            _table_header(result["unit"]),
+        ]
+    )
     for g in result["gpus"]:
         lines.append(_table_row(g["id"], g["total"], g["used"], g["free"]))
     return "\n".join(lines) + "\n"
@@ -870,15 +987,22 @@ def main():
         description="Probe the host GPU vendor and report available GPUs.",
     )
     parser.add_argument(
-        "-f", "--format", choices=["text", "json", "yaml"], default="text",
+        "-f",
+        "--format",
+        choices=["text", "json", "yaml"],
+        default="text",
         help="output format (default: text); diagnostics always go to stderr",
     )
     parser.add_argument(
-        "-o", "--output", metavar="PATH",
+        "-o",
+        "--output",
+        metavar="PATH",
         help="save the rendered output to a file (in the chosen format)",
     )
     parser.add_argument(
-        "--vendor", choices=sorted(VENDORS), metavar="VENDOR",
+        "--vendor",
+        choices=sorted(VENDORS),
+        metavar="VENDOR",
         help=f"skip auto-probe and force a specific vendor (one of: {', '.join(sorted(VENDORS))})",
     )
     args = parser.parse_args()

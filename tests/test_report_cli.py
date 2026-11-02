@@ -24,7 +24,6 @@ from unittest import mock
 
 from flagos_optest import add_labels
 
-
 PACKAGE_DIR = Path(add_labels.__file__).resolve().parent
 
 

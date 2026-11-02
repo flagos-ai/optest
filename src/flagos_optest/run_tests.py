@@ -123,6 +123,7 @@ from decimal import getcontext
 from importlib import metadata
 from multiprocessing import Process, Queue
 from pathlib import Path
+from typing import Any, TextIO
 
 import distro
 import yaml
@@ -131,8 +132,8 @@ if __package__:
     from .gpu_check import probe_accelerator_metadata
     from .performance_report import parse_perf_data
 else:
-    from gpu_check import probe_accelerator_metadata
-    from performance_report import parse_perf_data
+    from gpu_check import probe_accelerator_metadata  # type: ignore[no-redef]
+    from performance_report import parse_perf_data  # type: ignore[no-redef]
 
 # Known FlagOS libraries probed at runtime: (import_name, display_name).
 # The script does NOT take a library-name argument; it try-imports each entry
@@ -165,19 +166,19 @@ ROOT = Path.cwd()
 OPTS = argparse.Namespace()
 CFG = types.SimpleNamespace()
 
-GLOBAL_RESULTS = {}
-ENV_INFO = {}
+GLOBAL_RESULTS: dict[str, Any] = {}
+ENV_INFO: dict[str, Any] = {}
 
 # The canonical FlagOS library MODULE object (highest-priority detected lib),
 # set by _probe_gems(). Used to query backend metadata such as the customized
 # op list. Workers fork after probe_env(), so they inherit this reference.
-GEMS_MODULE = None
+GEMS_MODULE: types.ModuleType | None = None
 
 # Canonical vendor/device context (highest-priority detected lib, with
 # vendor/device backfilled from the others). Kept OUT of ENV_INFO so it is not
 # duplicated into the result JSON next to the real per-library entry; the whole
 # ENV_INFO dict is serialized, but this internal alias must not be.
-GEMS_ENV = {}
+GEMS_ENV: dict[str, Any] = {}
 
 TIMEOUT = -100
 INFRASTRUCTURE_EXIT_CODE = 2
@@ -185,7 +186,7 @@ SHM_PATH = Path("/dev/shm")
 # This is a coarse startup guard, not a peak-memory estimate. It deliberately
 # rejects Docker's 64 MiB default for highly parallel test runs on every vendor.
 MIN_SHM_BYTES_PER_WORKER = 16 * 1024 * 1024
-WORKER_PROCESSES = []
+WORKER_PROCESSES: list[Process] = []
 INTERRUPTED = False
 
 IS_TTY = sys.stdout.isatty()
@@ -231,9 +232,7 @@ def check_shared_memory(worker_count):
     except InfrastructureError:
         raise
     except OSError as error:
-        raise InfrastructureError(
-            f"failed to inspect {SHM_PATH}: {error}"
-        ) from error
+        raise InfrastructureError(f"failed to inspect {SHM_PATH}: {error}") from error
 
     required = worker_count * MIN_SHM_BYTES_PER_WORKER
     recommended = required * 2
@@ -387,7 +386,7 @@ def get_ops_from_inventory():
     catalog = []
     try:
         op_inventory = ROOT / "conf" / "operators.yaml"
-        with open(str(op_inventory), "r") as f:
+        with open(str(op_inventory)) as f:
             data = yaml.safe_load(f)
             catalog = data.get("ops", [])
     except Exception as e:
@@ -513,7 +512,7 @@ def _probe_gems():
             traceback.print_exc()
             sys.exit(1)
 
-        info = {"library_name": lib_name}
+        info: dict[str, Any] = {"library_name": lib_name}
         try:
             info["version"] = mod.__version__
         except Exception:
@@ -668,19 +667,19 @@ def get_env(gpu_ids):
 
 
 def run_cmd(op, cmd, cwd=None, env=None, timeout=1800, flavor=None):
-    stdout = subprocess.DEVNULL
-    stderr = subprocess.DEVNULL
+    stdout_file: TextIO | None = None
+    stderr_file: TextIO | None = None
     if CFG.dump_output:
         op_dir = CFG.output_dir.joinpath(op)
         stdout_log = str(op_dir / f"{flavor}_stdout.log")
         stderr_log = str(op_dir / f"{flavor}_stderr.log")
         try:
-            stdout = open(stdout_log, "w")
-            stderr = open(stderr_log, "w")
+            stdout_file = open(stdout_log, "w")
+            stderr_file = open(stderr_log, "w")
             # Log the executed command to stderr log for debugging
-            stderr.write(f"[CMD] {cmd}\n")
-            stderr.write(f"[CWD] {cwd}\n\n")
-            stderr.flush()
+            stderr_file.write(f"[CMD] {cmd}\n")
+            stderr_file.write(f"[CWD] {cwd}\n\n")
+            stderr_file.flush()
         except Exception:
             pass
 
@@ -688,8 +687,8 @@ def run_cmd(op, cmd, cwd=None, env=None, timeout=1800, flavor=None):
         shlex.split(cmd),
         cwd=cwd,
         env=env,
-        stdout=stdout,
-        stderr=stderr,
+        stdout=stdout_file or subprocess.DEVNULL,
+        stderr=stderr_file or subprocess.DEVNULL,
         start_new_session=True,
     )
 
@@ -714,10 +713,10 @@ def run_cmd(op, cmd, cwd=None, env=None, timeout=1800, flavor=None):
         perror(f"run_cmd failed: {e}")
         return -1
     finally:
-        if stdout != subprocess.DEVNULL:
-            stdout.close()
-        if stderr != subprocess.DEVNULL:
-            stderr.close()
+        if stdout_file is not None:
+            stdout_file.close()
+        if stderr_file is not None:
+            stderr_file.close()
 
 
 def parse_accuracy_data(result_file):
@@ -736,8 +735,8 @@ def parse_accuracy_data(result_file):
         }
 
     passed = []
-    skipped = {}
-    failed = {}
+    skipped: dict[str, Any] = {}
+    failed: dict[str, Any] = {}
     num_skipped = 0
     num_failed = 0
     num_passed = 0
@@ -746,7 +745,7 @@ def parse_accuracy_data(result_file):
         case_str = test_case[: test_case.find("[")]
         result = item.get("result", "")
         params = [case_str]
-        for k, v in item.get("params", {}).items():
+        for _key, v in item.get("params", {}).items():
             params.append(str(v).replace(" ", ""))
         param_str = ":".join(params)
 
@@ -961,7 +960,7 @@ def worker_proc(gpu_id, work_queue, display_queue):
         "duration": 0,
     }
 
-    worker_result = {}
+    worker_result: dict[str, Any] = {}
     # try/finally ensures the exit signal is always sent, even if the worker
     # crashes midway. Without this, display_loop would wait forever for a signal
     # that never arrives, causing the entire test run to hang indefinitely.
@@ -1024,13 +1023,15 @@ def worker_proc(gpu_id, work_queue, display_queue):
                 # Customized op list from the canonical FlagOS library. Not all
                 # libraries expose runtime.backend.get_customized_ops(); fall
                 # back to an empty list so a missing API never fails the op.
+                customized_ops = []
                 try:
+                    if GEMS_MODULE is None:
+                        raise RuntimeError("FlagOS library is not initialized")
                     customized_ops = [
-                        o[0]
-                        for o in GEMS_MODULE.runtime.backend.get_customized_ops()
+                        o[0] for o in GEMS_MODULE.runtime.backend.get_customized_ops()
                     ]
                 except Exception:
-                    customized_ops = []
+                    pass
                 result = {
                     "customized": op in customized_ops,
                     "accuracy": acc,
@@ -1069,7 +1070,7 @@ def display_loop(queue, display, workers):
     during queue timeouts to detect dead workers and break the loop gracefully.
     """
     # Track which workers have exited (by their Process object id)
-    exited = set()
+    exited: set[Any] = set()
     # Build a map from gpu_id to Process for liveness checks
     gpu_to_proc = {getattr(p, "_gpu_id", None): p for p in workers}
 
@@ -1130,7 +1131,7 @@ def display_loop(queue, display, workers):
                 )
             else:
                 ts = datetime.datetime.now().strftime("%H:%M:%S")
-                display.log(f"[INFO] [{ts}][GPU {gpu_id:2d}]" f" {label} {op_col} ...")
+                display.log(f"[INFO] [{ts}][GPU {gpu_id:2d}] {label} {op_col} ...")
 
         elif kind == "done":
             _, gpu_id, phase, op, status, dur = msg
@@ -1187,7 +1188,7 @@ def cleanup_intermediate_files():
 
 def terminate_workers():
     for p in WORKER_PROCESSES:
-        if p.is_alive():
+        if p.is_alive() and p.pid is not None:
             try:
                 os.killpg(os.getpgid(p.pid), signal.SIGTERM)
             except (OSError, ProcessLookupError):
@@ -1231,7 +1232,7 @@ def get_ops_to_test():
     if OPTS.op_list_file:
         lines = []
         try:
-            with open(OPTS.op_list_file, "r") as f:
+            with open(OPTS.op_list_file) as f:
                 lines = f.readlines()
         except Exception as e:
             perror(f"Failed reading the specified op list file: {e}")
@@ -1277,7 +1278,7 @@ def get_ops_to_test():
 def _parse_marks_file(marks_file):
     marks = set()
     try:
-        with open(marks_file, "r") as f:
+        with open(marks_file) as f:
             data = yaml.safe_load(f)
         if data:
             for item in data:
@@ -1546,16 +1547,16 @@ def main():
 
     op_width = min(max(len(op) for op in ops), 40) if ops else 20
 
-    work_queue = Queue()
+    work_queue: Any = Queue()
     for op in ops:
         work_queue.put(op)
 
-    display_queue = Queue()
+    display_queue: Any = Queue()
     display = LiveDisplay(gpu_ids, op_count, op_width=op_width)
 
     for gpu in gpu_ids:
         p = Process(target=worker_proc, args=(gpu, work_queue, display_queue))
-        p._gpu_id = gpu  # Attach gpu_id for display_loop to identify dead workers
+        p._gpu_id = gpu  # type: ignore[attr-defined]
         p.start()
         WORKER_PROCESSES.append(p)
 

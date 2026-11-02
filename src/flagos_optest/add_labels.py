@@ -54,16 +54,18 @@ def project_directory(value):
     if not path.exists():
         raise argparse.ArgumentTypeError(f"project directory does not exist: {value}")
     if not path.is_dir():
-        raise argparse.ArgumentTypeError(f"project directory is not a directory: {value}")
+        raise argparse.ArgumentTypeError(
+            f"project directory is not a directory: {value}"
+        )
     return path
 
 
 def load_op_labels():
     """Load operator labels from conf/operators.yaml."""
-    op_labels = {}
+    op_labels: dict[str, list[str]] = {}
     op_inventory = ROOT / "conf" / "operators.yaml"
     try:
-        with open(str(op_inventory), "r") as f:
+        with open(str(op_inventory)) as f:
             data = yaml.safe_load(f)
             catalog = data.get("ops", [])
     except Exception as e:

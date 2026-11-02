@@ -33,9 +33,11 @@ class ProjectDirectoryTest(unittest.TestCase):
         original_root = run_tests.ROOT
         try:
             os.chdir(start_directory)
-            with mock.patch.object(sys, "argv", argv), mock.patch.object(
-                run_tests, "probe_env"
-            ), mock.patch.object(run_tests, "get_ops_to_test", return_value=[]):
+            with (
+                mock.patch.object(sys, "argv", argv),
+                mock.patch.object(run_tests, "probe_env"),
+                mock.patch.object(run_tests, "get_ops_to_test", return_value=[]),
+            ):
                 with mock.patch.object(run_tests.signal, "signal"):
                     with self.assertRaisesRegex(SystemExit, "1"):
                         run_tests.main()
@@ -86,17 +88,19 @@ class ProjectDirectoryTest(unittest.TestCase):
                 (target / "ops.txt").write_text("add\n", encoding="utf-8")
                 os.chdir(caller)
 
-                with mock.patch.object(
-                    sys,
-                    "argv",
-                    ["flagos-optest", "../target", "--op-list-file", "ops.txt"],
-                ), mock.patch.object(run_tests.signal, "signal"), mock.patch.object(
-                    run_tests, "probe_env"
-                ), mock.patch.object(
-                    run_tests, "check_shared_memory"
-                ), mock.patch.object(
-                    run_tests, "collect_marks", side_effect=RuntimeError("stop")
-                ) as collect_marks:
+                with (
+                    mock.patch.object(
+                        sys,
+                        "argv",
+                        ["flagos-optest", "../target", "--op-list-file", "ops.txt"],
+                    ),
+                    mock.patch.object(run_tests.signal, "signal"),
+                    mock.patch.object(run_tests, "probe_env"),
+                    mock.patch.object(run_tests, "check_shared_memory"),
+                    mock.patch.object(
+                        run_tests, "collect_marks", side_effect=RuntimeError("stop")
+                    ) as collect_marks,
+                ):
                     with self.assertRaisesRegex(RuntimeError, "stop"):
                         run_tests.main()
 
@@ -112,35 +116,37 @@ class ProjectDirectoryTest(unittest.TestCase):
             with tempfile.TemporaryDirectory() as parent:
                 target = Path(parent) / "target"
                 target.mkdir()
-                with mock.patch.object(
-                    sys,
-                    "argv",
-                    [
-                        "flagos-optest",
-                        str(target),
-                        "--ops",
-                        "add",
-                        "--output-dir",
-                        "results",
-                    ],
-                ), mock.patch.object(run_tests.signal, "signal"), mock.patch.object(
-                    run_tests, "probe_env"
-                ), mock.patch.object(
-                    run_tests, "get_ops_to_test", return_value=["add"]
-                ), mock.patch.object(
-                    run_tests, "check_shared_memory"
-                ), mock.patch.object(
-                    run_tests, "collect_marks", return_value=({"add"}, {"add"})
-                ), mock.patch.object(
-                    run_tests, "Process", return_value=mock.MagicMock()
-                ), mock.patch.object(
-                    run_tests, "LiveDisplay", return_value=mock.MagicMock()
-                ), mock.patch.object(
-                    run_tests, "display_loop"
-                ), mock.patch.object(
-                    run_tests, "WORKER_PROCESSES", []
-                ), mock.patch.object(
-                    run_tests, "ENV_INFO", {}
+                with (
+                    mock.patch.object(
+                        sys,
+                        "argv",
+                        [
+                            "flagos-optest",
+                            str(target),
+                            "--ops",
+                            "add",
+                            "--output-dir",
+                            "results",
+                        ],
+                    ),
+                    mock.patch.object(run_tests.signal, "signal"),
+                    mock.patch.object(run_tests, "probe_env"),
+                    mock.patch.object(
+                        run_tests, "get_ops_to_test", return_value=["add"]
+                    ),
+                    mock.patch.object(run_tests, "check_shared_memory"),
+                    mock.patch.object(
+                        run_tests, "collect_marks", return_value=({"add"}, {"add"})
+                    ),
+                    mock.patch.object(
+                        run_tests, "Process", return_value=mock.MagicMock()
+                    ),
+                    mock.patch.object(
+                        run_tests, "LiveDisplay", return_value=mock.MagicMock()
+                    ),
+                    mock.patch.object(run_tests, "display_loop"),
+                    mock.patch.object(run_tests, "WORKER_PROCESSES", []),
+                    mock.patch.object(run_tests, "ENV_INFO", {}),
                 ):
                     run_tests.main()
 
@@ -167,18 +173,19 @@ class ProjectDirectoryTest(unittest.TestCase):
                 ops = ",".join(f"op_{index}" for index in range(16))
                 gpus = ",".join(str(index) for index in range(16))
                 failure = run_tests.InfrastructureError("insufficient /dev/shm")
-                with mock.patch.object(
-                    sys,
-                    "argv",
-                    ["flagos-optest", target, "--ops", ops, "--gpus", gpus],
-                ), mock.patch.object(run_tests.signal, "signal"), mock.patch.object(
-                    run_tests, "probe_env"
-                ), mock.patch.object(
-                    run_tests, "check_shared_memory", side_effect=failure
-                ) as check_shared_memory, mock.patch.object(
-                    run_tests, "collect_marks"
-                ) as collect_marks, redirect_stdout(
-                    io.StringIO()
+                with (
+                    mock.patch.object(
+                        sys,
+                        "argv",
+                        ["flagos-optest", target, "--ops", ops, "--gpus", gpus],
+                    ),
+                    mock.patch.object(run_tests.signal, "signal"),
+                    mock.patch.object(run_tests, "probe_env"),
+                    mock.patch.object(
+                        run_tests, "check_shared_memory", side_effect=failure
+                    ) as check_shared_memory,
+                    mock.patch.object(run_tests, "collect_marks") as collect_marks,
+                    redirect_stdout(io.StringIO()),
                 ):
                     with self.assertRaises(SystemExit) as raised:
                         run_tests.main()
@@ -203,9 +210,11 @@ class ProjectDirectoryTest(unittest.TestCase):
                 quick=False,
                 skip_cpu_tests=[],
             )
-            with mock.patch.object(run_tests, "ROOT", root), mock.patch.object(
-                run_tests, "CFG", config
-            ), mock.patch.object(run_tests, "get_env", return_value={}):
+            with (
+                mock.patch.object(run_tests, "ROOT", root),
+                mock.patch.object(run_tests, "CFG", config),
+                mock.patch.object(run_tests, "get_env", return_value={}),
+            ):
                 with mock.patch.object(run_tests, "run_cmd", return_value=1) as runner:
                     run_tests.run_accuracy_q(0, "add")
                     accuracy_call = runner.call_args
@@ -241,12 +250,10 @@ class SharedMemoryPreflightTest(unittest.TestCase):
             free=64 * 1024 * 1024,
         )
         output = io.StringIO()
-        with mock.patch.object(
-            run_tests, "SHM_PATH", self.shm_path
-        ), mock.patch.object(
-            run_tests.shutil, "disk_usage", return_value=usage
-        ), redirect_stdout(
-            output
+        with (
+            mock.patch.object(run_tests, "SHM_PATH", self.shm_path),
+            mock.patch.object(run_tests.shutil, "disk_usage", return_value=usage),
+            redirect_stdout(output),
         ):
             run_tests.check_shared_memory(3)
 
@@ -258,12 +265,10 @@ class SharedMemoryPreflightTest(unittest.TestCase):
             used=0,
             free=64 * 1024 * 1024,
         )
-        with mock.patch.object(
-            run_tests, "SHM_PATH", self.shm_path
-        ), mock.patch.object(
-            run_tests.shutil, "disk_usage", return_value=usage
-        ), redirect_stdout(
-            io.StringIO()
+        with (
+            mock.patch.object(run_tests, "SHM_PATH", self.shm_path),
+            mock.patch.object(run_tests.shutil, "disk_usage", return_value=usage),
+            redirect_stdout(io.StringIO()),
         ):
             with self.assertRaises(run_tests.InfrastructureError) as raised:
                 run_tests.check_shared_memory(16)
@@ -279,12 +284,10 @@ class SharedMemoryPreflightTest(unittest.TestCase):
             used=1000 * 1024 * 1024,
             free=24 * 1024 * 1024,
         )
-        with mock.patch.object(
-            run_tests, "SHM_PATH", self.shm_path
-        ), mock.patch.object(
-            run_tests.shutil, "disk_usage", return_value=usage
-        ), redirect_stdout(
-            io.StringIO()
+        with (
+            mock.patch.object(run_tests, "SHM_PATH", self.shm_path),
+            mock.patch.object(run_tests.shutil, "disk_usage", return_value=usage),
+            redirect_stdout(io.StringIO()),
         ):
             with self.assertRaises(run_tests.InfrastructureError) as raised:
                 run_tests.check_shared_memory(2)
@@ -312,9 +315,12 @@ class ProbeGemsImportTest(unittest.TestCase):
         def import_module(name):
             raise ModuleNotFoundError(f"No module named '{name}'", name=name)
 
-        with mock.patch.object(
-            run_tests.importlib, "import_module", side_effect=import_module
-        ) as importer, redirect_stdout(io.StringIO()):
+        with (
+            mock.patch.object(
+                run_tests.importlib, "import_module", side_effect=import_module
+            ) as importer,
+            redirect_stdout(io.StringIO()),
+        ):
             with self.assertRaises(SystemExit):
                 run_tests._probe_gems()
 
@@ -326,11 +332,13 @@ class ProbeGemsImportTest(unittest.TestCase):
     def test_internal_import_error_prints_traceback_and_exits(self):
         failure = ModuleNotFoundError("No module named 'torch'", name="torch")
 
-        with mock.patch.object(
-            run_tests.importlib, "import_module", side_effect=failure
-        ) as importer, redirect_stdout(io.StringIO()), redirect_stderr(
-            io.StringIO()
-        ) as stderr:
+        with (
+            mock.patch.object(
+                run_tests.importlib, "import_module", side_effect=failure
+            ) as importer,
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(io.StringIO()) as stderr,
+        ):
             with self.assertRaises(SystemExit) as raised:
                 run_tests._probe_gems()
 
@@ -350,10 +358,12 @@ class AcceleratorMetadataTest(unittest.TestCase):
             "runtime_version": "13.3.0",
         }
         output = io.StringIO()
-        with mock.patch.object(
-            run_tests, "probe_accelerator_metadata", return_value=expected
-        ), mock.patch.object(run_tests, "ENV_INFO", {}) as env, redirect_stdout(
-            output
+        with (
+            mock.patch.object(
+                run_tests, "probe_accelerator_metadata", return_value=expected
+            ),
+            mock.patch.object(run_tests, "ENV_INFO", {}) as env,
+            redirect_stdout(output),
         ):
             run_tests._probe_accelerator()
 

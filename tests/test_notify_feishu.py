@@ -74,8 +74,11 @@ class NotifyFeishuRefTest(unittest.TestCase):
             "GITHUB_EVENT_NAME": "workflow_dispatch",
         }
         environment.update(overrides)
-        with mock.patch.dict(os.environ, environment, clear=True), mock.patch.object(
-            self.module.urllib.request, "urlopen", side_effect=self.urlopen
+        with (
+            mock.patch.dict(os.environ, environment, clear=True),
+            mock.patch.object(
+                self.module.urllib.request, "urlopen", side_effect=self.urlopen
+            ),
         ):
             self.module.main()
 
@@ -160,7 +163,10 @@ class NotifyFeishuRefTest(unittest.TestCase):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
         prepare_steps = workflow["jobs"]["prepare"]["steps"]
         self.assertTrue(
-            any(step.get("name") == "Checkout optest workflow source" for step in prepare_steps)
+            any(
+                step.get("name") == "Checkout optest workflow source"
+                for step in prepare_steps
+            )
         )
 
         steps = workflow["jobs"]["test-container"]["steps"]
@@ -245,7 +251,9 @@ class NotifyFeishuRefTest(unittest.TestCase):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
         steps = workflow["jobs"]["test-container"]["steps"]
         publish = next(
-            step for step in steps if step.get("name") == "Publish results to op-monitor"
+            step
+            for step in steps
+            if step.get("name") == "Publish results to op-monitor"
         )
         script = publish["run"]
         curl_command = script[

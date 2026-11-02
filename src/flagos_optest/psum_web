@@ -51,7 +51,7 @@ def select_best_dirs(raw_dir):
         return []
 
     # Group by (platform, compiler), keep latest date
-    groups = {}
+    groups: dict[tuple[str, str | None], tuple[Path, str, str | None]] = {}
     for d in sorted(raw_path.iterdir()):
         if not d.is_dir():
             continue
@@ -64,7 +64,7 @@ def select_best_dirs(raw_dir):
 
     # Per platform, prefer flagtree over triton over others
     platform_best = {}
-    for (platform, compiler), (d, date, comp) in groups.items():
+    for (platform, _compiler), (d, date, comp) in groups.items():
         if platform not in platform_best:
             platform_best[platform] = (d, comp, date)
         else:

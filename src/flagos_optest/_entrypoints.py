@@ -30,10 +30,9 @@ plain callable, not a module path); it forwards ``sys.argv`` so argparse sees th
 command line unchanged.
 """
 
+import runpy
 import sys
 from pathlib import Path
-
-import runpy
 
 
 def _run_flat(script):

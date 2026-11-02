@@ -21,10 +21,11 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 import consts
 
-DATA = {}
+DATA: dict[str, Any] = {}
 DATA_DIR = None
 
 ASSETS_DIR = Path(__file__).resolve().parent / "html_assets"
@@ -195,7 +196,7 @@ def _render_log_tabs(summary_text, log_files, uid):
     parts.append("</div>")
 
     # Tab panels
-    for idx, (fname, content) in enumerate(log_files):
+    for idx, (_fname, content) in enumerate(log_files):
         display = "" if idx == 0 else ' style="display:none"'
         escaped = html_module.escape(content)
         parts.append(f'<div class="tab-panel"{display}>')
@@ -263,7 +264,7 @@ def parse_env():
 
 
 def parse_single_accuracy_details(fmt, details, num, kind):
-    lines = []
+    lines: list[str] = []
     if num == 0:
         return lines
 

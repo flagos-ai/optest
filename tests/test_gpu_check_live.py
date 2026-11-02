@@ -39,8 +39,10 @@ def capture(request, tmp_path, monkeypatch):
     def isolated_path(name):
         return tmp_path / str(name).lstrip("/")
 
-    outputs = {tuple(c["argv"]): (c["returncode"], c["stdout"], c["stderr"])
-               for c in data["commands"]}
+    outputs = {
+        tuple(c["argv"]): (c["returncode"], c["stdout"], c["stderr"])
+        for c in data["commands"]
+    }
 
     def run(argv, env=None, timeout=None):
         # Installation-root compilers are redirected through the temporary tree.
@@ -48,10 +50,14 @@ def capture(request, tmp_path, monkeypatch):
         return outputs.get(tuple(argv), (127, "", "not present in capture"))
 
     monkeypatch.setattr(gpu_metadata, "Path", isolated_path)
-    monkeypatch.setattr(gpu_metadata, "AMD_SYSFS_ROOT", isolated_path("/sys/bus/pci/devices"))
+    monkeypatch.setattr(
+        gpu_metadata, "AMD_SYSFS_ROOT", isolated_path("/sys/bus/pci/devices")
+    )
     monkeypatch.setattr(gpu_check, "_run", run)
     monkeypatch.setattr(gpu_check, "_vendor_env", lambda vendor: data["environment"])
-    monkeypatch.setattr(gpu_check.shutil, "which", lambda *args, **kwargs: "/captured/tool")
+    monkeypatch.setattr(
+        gpu_check.shutil, "which", lambda *args, **kwargs: "/captured/tool"
+    )
     monkeypatch.setattr(gpu_check, "MAX_WAIT", 0)
     return data
 

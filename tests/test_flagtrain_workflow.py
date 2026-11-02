@@ -211,7 +211,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     "#!/bin/sh\n"
                     'if [ "$1" = "--version" ]; then echo "uv 0.13.6"; exit 0; fi\n'
                     'case "$UV_DEFAULT_INDEX" in *tuna*) exit 23 ;; esac\n'
-                    "printf '[fake uv cwd=%s] %s\\n' \"$PWD\" \"$*\"\n"
+                    'printf \'[fake uv cwd=%s] %s\\n\' "$PWD" "$*"\n'
                 ),
             }
             for name, content in commands.items():
@@ -286,18 +286,10 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             with self.subTest(entry=entry):
                 self.assertIn(entry, output)
 
-        self.assertEqual(
-            test_only_completed.returncode, 0, test_only_completed.stderr
-        )
-        self.assertIn(
-            "Detected vendor extra: false", test_only_completed.stdout
-        )
-        self.assertIn(
-            "Selected target extras: test", test_only_completed.stdout
-        )
-        self.assertIn(
-            "--editable .[test]", test_only_completed.stdout
-        )
+        self.assertEqual(test_only_completed.returncode, 0, test_only_completed.stderr)
+        self.assertIn("Detected vendor extra: false", test_only_completed.stdout)
+        self.assertIn("Selected target extras: test", test_only_completed.stdout)
+        self.assertIn("--editable .[test]", test_only_completed.stdout)
         self.assertIn(
             "UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/",
             github_env_contents,

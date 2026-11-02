@@ -113,6 +113,8 @@ Common options:
 | `DIRECTORY` | Target operator repository. Defaults to the current directory. |
 | `--ops add,sum` | Test an explicit comma-separated operator list. This takes priority over `--op-list-file` and `--stages`. |
 | `--op-list-file FILE` | Read operator IDs from a file, one per line; lines beginning with `#` are comments. |
+| `--exclude-ops add,sum` | Omit a comma-separated list from the selected operators. This takes priority over `--exclude-op-list-file`. |
+| `--exclude-op-list-file FILE` | Read operator IDs to omit from a file, one per line; lines beginning with `#` are comments. |
 | `--start OP_ID` | Resume from an operator ID by testing IDs lexicographically greater than or equal to it. |
 | `--gpus 0,1` | Select device IDs. Use `--gpus all` to use every device detected by PyTorch. Default: `0`. |
 | `--stages stable,beta` | Select inventory stages. Supported values are `alpha`, `beta`, `stable`, `all`, and `removed`. Default: `stable`. |
@@ -135,8 +137,25 @@ flagos-optest --ops abs,add,sum --gpus 0,1,2 \
 # Run stable and beta operators in another checkout.
 flagos-optest /work/FlagGems --stages stable,beta --gpus 0,1
 
+# Run all stable operators except those listed as unsupported.
+flagos-optest --exclude-ops index_add,scatter --gpus all
+
+# Apply a file-based exclusion list to an explicit include list.
+flagos-optest --op-list-file ops.txt --exclude-op-list-file unsupported.txt
+
 # Resume a list from the operator named "mul".
 flagos-optest --start mul --stages all --gpus 0
+```
+
+Explicit include and exclude lists are deduplicated while preserving their
+original order. Exclusions use exact, case-sensitive operator ID matching. When
+any list option is supplied, the startup log reports the parsed include and
+exclude counts, the number of exclusions that matched, and the final number of
+operators scheduled:
+
+```text
+[INFO] Operator selection ... include=3 (--ops), exclude=2 (--exclude-ops), matched=1
+[INFO] Testing 2 operators ...
 ```
 
 ### Results and `summary.json`
@@ -235,6 +254,7 @@ time, and test completion.
 [INFO] Accelerator ... nvidia / H800
 [INFO] Driver ... 610.57.04
 [INFO] Runtime ... cuda 13.3.0
+[INFO] Operator selection ... include=3 (--ops), exclude=0 (none), matched=0
 [INFO] Testing 3 operators ...
 [INFO] Only 3 operators requested, skipping mark collection
 [INFO] [18:48:59][GPU  0] accuracy  abs ...

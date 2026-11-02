@@ -85,14 +85,23 @@ class ProjectDirectoryTest(unittest.TestCase):
                 (target / "conf" / "operators.yaml").write_text(
                     "ops: []\n", encoding="utf-8"
                 )
-                (target / "ops.txt").write_text("add\n", encoding="utf-8")
+                (target / "ops.txt").write_text("add\nmul\n", encoding="utf-8")
+                (target / "excluded.txt").write_text("mul\n", encoding="utf-8")
                 os.chdir(caller)
 
+                output = io.StringIO()
                 with (
                     mock.patch.object(
                         sys,
                         "argv",
-                        ["flagos-optest", "../target", "--op-list-file", "ops.txt"],
+                        [
+                            "flagos-optest",
+                            "../target",
+                            "--op-list-file",
+                            "ops.txt",
+                            "--exclude-op-list-file",
+                            "excluded.txt",
+                        ],
                     ),
                     mock.patch.object(run_tests.signal, "signal"),
                     mock.patch.object(run_tests, "probe_env"),
@@ -100,11 +109,18 @@ class ProjectDirectoryTest(unittest.TestCase):
                     mock.patch.object(
                         run_tests, "collect_marks", side_effect=RuntimeError("stop")
                     ) as collect_marks,
+                    redirect_stdout(output),
                 ):
                     with self.assertRaisesRegex(RuntimeError, "stop"):
                         run_tests.main()
 
                 collect_marks.assert_called_once_with(["add"])
+                self.assertIn(
+                    "Operator selection ... include=2 (--op-list-file), "
+                    "exclude=1 (--exclude-op-list-file), matched=1",
+                    output.getvalue(),
+                )
+                self.assertIn("Testing 1 operators", output.getvalue())
         finally:
             os.chdir(original_directory)
             run_tests.ROOT = original_root

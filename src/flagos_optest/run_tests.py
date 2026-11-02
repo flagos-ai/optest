@@ -34,7 +34,8 @@ Operator Source
 ---------------
 By default, the operator list is read from conf/operators.yaml and filtered by
 stage (alpha/beta/stable). You can also explicitly specify operators via --ops or
---op-list-file.
+--op-list-file, then omit selected operators via --exclude-ops or
+--exclude-op-list-file.
 
 Output Structure
 ----------------
@@ -60,8 +61,14 @@ CLI Arguments
                       Example: --ops "add,mul,softmax"
 
   --op-list-file FILE Read operator list from file, one ID per line (# = comment).
-                      Mutually exclusive with --ops.
                       Priority: --ops > --op-list-file > --stages
+
+  --exclude-ops OPS   Comma-separated operator ID list to omit from the selected
+                      operators. Example: --exclude-ops "add,mul"
+
+  --exclude-op-list-file FILE
+                      Read operator IDs to omit from a file, one ID per line.
+                      Priority: --exclude-ops > --exclude-op-list-file
 
   --start OP_ID       Start from this operator ID; only test operators with
                       lexicographic order >= this ID. Useful for resuming.
@@ -95,6 +102,9 @@ Examples
 
   # Read operator list from file, use all GPUs
   python run_tests.py --op-list-file my_ops.txt --gpus all
+
+  # Run all stable operators except known unsupported operators
+  python run_tests.py --exclude-ops "index_add,scatter" --gpus all
 
   # Resume from "mul", test stable+beta stages
   python run_tests.py --start mul --stages "stable,beta" --gpus 0,1
@@ -216,6 +226,10 @@ def ensure_dir(p):
 
 class InfrastructureError(RuntimeError):
     """Raised when the host cannot safely start the requested test workers."""
+
+
+class OperatorSelectionError(RuntimeError):
+    """Raised when an explicit operator list cannot be read."""
 
 
 def check_shared_memory(worker_count):
@@ -1213,44 +1227,31 @@ def handle_interrupt(signum, frame):
     sys.exit(1)
 
 
-def get_ops_to_test():
-    op_catalog = get_ops_from_inventory()
-    skip_cpu_tests = []
-    for op in op_catalog:
-        labels = op.get("labels", [])
-        if "NoCPU" in labels:
-            skip_cpu_tests.append(op["id"])
-    CFG.skip_cpu_tests = skip_cpu_tests
-    CFG.all_op_ids = {op["id"] for op in op_catalog}
+def _unique_ops(items):
+    """Return non-empty operator IDs in first-seen order without duplicates."""
+    return list(dict.fromkeys(item.strip() for item in items if item.strip()))
 
-    if OPTS.ops:
-        ops = []
-        for op in OPTS.ops.split(","):
-            ops.append(op.strip())
-        return ops
 
-    if OPTS.op_list_file:
-        lines = []
-        try:
-            with open(OPTS.op_list_file) as f:
-                lines = f.readlines()
-        except Exception as e:
-            perror(f"Failed reading the specified op list file: {e}")
-            return []
+def _read_op_list_file(path):
+    """Read an operator list file, ignoring blank lines and comments."""
+    try:
+        with open(path, encoding="utf-8") as file:
+            return _unique_ops(
+                line for line in file if not line.strip().startswith("#")
+            )
+    except Exception as error:
+        raise OperatorSelectionError(
+            f"Failed reading the specified operator list file {path}: {error}"
+        ) from error
 
-        ops = []
-        for ln in lines:
-            ln = ln.strip()
-            if ln.startswith("#"):
-                continue
-            ops.append(ln)
-        return ops
 
+def _ops_for_stages(op_catalog):
+    """Select inventory operators using the configured stages and start ID."""
     effective_stages = []
-    for s in OPTS.stages.split(","):
-        stage = s.strip()
+    for value in OPTS.stages.split(","):
+        stage = value.strip()
         if stage not in ["alpha", "beta", "stable", "all", "removed"]:
-            pwarn(f"ignoring unsupported stage name '{s}'...")
+            pwarn(f"ignoring unsupported stage name '{value}'...")
             continue
         if stage == "all":
             effective_stages = ["alpha", "beta", "stable"]
@@ -1271,8 +1272,66 @@ def get_ops_to_test():
         if OPTS.start is not None and op["id"] < OPTS.start:
             continue
         ops.append(op["id"])
+    return _unique_ops(ops)
 
-    return ops
+
+def get_ops_to_test():
+    op_catalog = get_ops_from_inventory()
+    skip_cpu_tests = []
+    for op in op_catalog:
+        labels = op.get("labels", [])
+        if "NoCPU" in labels:
+            skip_cpu_tests.append(op["id"])
+    CFG.skip_cpu_tests = skip_cpu_tests
+    CFG.all_op_ids = {op["id"] for op in op_catalog}
+
+    has_ops = OPTS.ops is not None
+    has_op_list_file = OPTS.op_list_file is not None
+    if has_ops and has_op_list_file:
+        pwarn("Both --ops and --op-list-file specified; using --ops.")
+
+    if has_ops:
+        included_ops = _unique_ops(OPTS.ops.split(","))
+        include_source = "--ops"
+    elif has_op_list_file:
+        included_ops = _read_op_list_file(OPTS.op_list_file)
+        include_source = "--op-list-file"
+    else:
+        included_ops = _ops_for_stages(op_catalog)
+        include_source = f"--stages {OPTS.stages}"
+
+    has_exclude_ops = OPTS.exclude_ops is not None
+    has_exclude_op_list_file = OPTS.exclude_op_list_file is not None
+    if has_exclude_ops and has_exclude_op_list_file:
+        pwarn(
+            "Both --exclude-ops and --exclude-op-list-file specified; "
+            "using --exclude-ops."
+        )
+
+    if has_exclude_ops:
+        excluded_ops = _unique_ops(OPTS.exclude_ops.split(","))
+        exclude_source = "--exclude-ops"
+    elif has_exclude_op_list_file:
+        excluded_ops = _read_op_list_file(OPTS.exclude_op_list_file)
+        exclude_source = "--exclude-op-list-file"
+    else:
+        excluded_ops = []
+        exclude_source = "none"
+
+    excluded_set = set(excluded_ops)
+    matched_count = sum(op in excluded_set for op in included_ops)
+    selected_ops = [op for op in included_ops if op not in excluded_set]
+    CFG.operator_selection = types.SimpleNamespace(
+        explicit=any(
+            [has_ops, has_op_list_file, has_exclude_ops, has_exclude_op_list_file]
+        ),
+        include_count=len(included_ops),
+        include_source=include_source,
+        exclude_count=len(excluded_ops),
+        exclude_source=exclude_source,
+        matched_count=matched_count,
+    )
+    return selected_ops
 
 
 def _parse_marks_file(marks_file):
@@ -1374,6 +1433,7 @@ def main():
             "  flagos-optest /path/to/project --gpus 0,1\n"
             '  flagos-optest --ops "add,softmax,multinomial" --gpus 0\n'
             "  flagos-optest --op-list-file my_ops.txt --gpus all\n"
+            '  flagos-optest --stages all --exclude-ops "scatter,index_add"\n'
             '  flagos-optest --start mul --stages "stable,beta" --gpus 0,1\n'
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1403,6 +1463,24 @@ def main():
         help=(
             "Read operator list from file, one ID per line (# = comment). "
             "Priority: --ops > --op-list-file > --stages"
+        ),
+    )
+    parser.add_argument(
+        "--exclude-ops",
+        required=False,
+        metavar="OPS",
+        help=(
+            "Comma-separated operator ID list to omit from the selected operators. "
+            'Example: --exclude-ops "add,mul"'
+        ),
+    )
+    parser.add_argument(
+        "--exclude-op-list-file",
+        required=False,
+        metavar="FILE",
+        help=(
+            "Read operator IDs to omit from a file, one ID per line "
+            "(# = comment). Priority: --exclude-ops > --exclude-op-list-file"
         ),
     )
     parser.add_argument(
@@ -1492,6 +1570,28 @@ def main():
         USE_COLORS = False
         RED = GREEN = YELLOW = CYAN = DIM = NC = ""
 
+    try:
+        ops = get_ops_to_test()
+    except OperatorSelectionError as error:
+        perror(str(error))
+        sys.exit(1)
+
+    selection = getattr(
+        CFG, "operator_selection", types.SimpleNamespace(explicit=False)
+    )
+    if selection.explicit:
+        pinfo(
+            "Operator selection ... "
+            f"include={selection.include_count} ({selection.include_source}), "
+            f"exclude={selection.exclude_count} ({selection.exclude_source}), "
+            f"matched={selection.matched_count}"
+        )
+    op_count = len(ops)
+    if op_count == 0:
+        pwarn("No operators to test. Please specify at least one operator.")
+        sys.exit(1)
+    pinfo(f"Testing {op_count} operators ...")
+
     # ---- Record the start time of the whole test run ----
     # Kept as a datetime object so the total elapsed time can be computed
     # once all accuracy/benchmark tests finish.
@@ -1499,13 +1599,6 @@ def main():
     pinfo(f"Test started at ... {test_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     probe_env()
-
-    ops = get_ops_to_test()
-    op_count = len(ops)
-    if op_count == 0:
-        pwarn("No operators to test. Please specify at lease one operator.")
-        sys.exit(1)
-    pinfo(f"Testing {op_count} operators ...")
 
     if OPTS.gpus.strip().lower() == "all":
         dev_count = ENV_INFO.get("torch", {}).get("device_count", 0)

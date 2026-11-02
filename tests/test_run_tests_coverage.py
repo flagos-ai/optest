@@ -649,29 +649,71 @@ def test_cleanup_workers_interrupt_and_selection(tmp_path, monkeypatch):
     ]
     monkeypatch.setattr(run_tests, "get_ops_from_inventory", lambda: catalog)
     monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace())
-    monkeypatch.setattr(
-        run_tests, "OPTS", argparse.Namespace(ops=" x, y ", op_list_file=None)
+
+    def options(**overrides):
+        values = {
+            "ops": None,
+            "op_list_file": None,
+            "exclude_ops": None,
+            "exclude_op_list_file": None,
+            "stages": "stable",
+            "start": None,
+        }
+        values.update(overrides)
+        return argparse.Namespace(**values)
+
+    include_file = tmp_path / "include.txt"
+    include_file.write_text("add\n", encoding="utf-8")
+    exclude_file = tmp_path / "exclude.txt"
+    exclude_file.write_text("other\n", encoding="utf-8")
+    run_tests.OPTS = options(
+        ops=" x, y, x, ,",
+        op_list_file=include_file,
+        exclude_ops=" y, missing, y",
+        exclude_op_list_file=exclude_file,
     )
-    assert run_tests.get_ops_to_test() == ["x", "y"]
+    assert run_tests.get_ops_to_test() == ["x"]
+    selection = run_tests.CFG.operator_selection
+    assert selection.include_count == 2
+    assert selection.include_source == "--ops"
+    assert selection.exclude_count == 2
+    assert selection.exclude_source == "--exclude-ops"
+    assert selection.matched_count == 1
+    assert selection.explicit is True
+
     missing = tmp_path / "missing"
-    run_tests.OPTS = argparse.Namespace(ops=None, op_list_file=missing)
-    assert run_tests.get_ops_to_test() == []
+    run_tests.OPTS = options(op_list_file=missing)
+    with pytest.raises(run_tests.OperatorSelectionError):
+        run_tests.get_ops_to_test()
+
     listing = tmp_path / "ops.txt"
-    listing.write_text("# comment\nadd\n\n", encoding="utf-8")
-    run_tests.OPTS = argparse.Namespace(ops=None, op_list_file=listing)
-    assert run_tests.get_ops_to_test() == ["add", ""]
-    run_tests.OPTS = argparse.Namespace(
-        ops=None, op_list_file=None, stages="bad", start=None
-    )
+    listing.write_text("# comment\nadd\n\nmul\nadd\n", encoding="utf-8")
+    excluded = tmp_path / "excluded.txt"
+    excluded.write_text("# comment\nmul\nunknown\n\n", encoding="utf-8")
+    run_tests.OPTS = options(op_list_file=listing, exclude_op_list_file=excluded)
+    assert run_tests.get_ops_to_test() == ["add"]
+    selection = run_tests.CFG.operator_selection
+    assert selection.include_count == 2
+    assert selection.exclude_count == 2
+    assert selection.matched_count == 1
+
+    run_tests.OPTS = options(ops="add", exclude_op_list_file=missing)
+    with pytest.raises(run_tests.OperatorSelectionError):
+        run_tests.get_ops_to_test()
+
+    run_tests.OPTS = options(ops="add", exclude_ops="add")
     assert run_tests.get_ops_to_test() == []
-    run_tests.OPTS = argparse.Namespace(
-        ops=None, op_list_file=None, stages="all", start="beta"
-    )
+    assert run_tests.CFG.operator_selection.matched_count == 1
+
+    run_tests.OPTS = options(stages="bad")
+    assert run_tests.get_ops_to_test() == []
+    assert run_tests.CFG.operator_selection.explicit is False
+    run_tests.OPTS = options(stages="all", start="beta")
     assert run_tests.get_ops_to_test() == ["beta"]
-    run_tests.OPTS = argparse.Namespace(
-        ops=None, op_list_file=None, stages="alpha,beta", start=None
-    )
-    assert run_tests.get_ops_to_test() == ["alpha", "beta"]
+    run_tests.OPTS = options(stages="alpha,beta", exclude_ops="alpha,Alpha")
+    assert run_tests.get_ops_to_test() == ["beta"]
+    assert run_tests.CFG.operator_selection.include_source == "--stages alpha,beta"
+    assert run_tests.CFG.operator_selection.matched_count == 1
 
 
 def test_marks_parsing_and_collection(tmp_path, monkeypatch):
@@ -727,6 +769,25 @@ def test_marks_parsing_and_collection(tmp_path, monkeypatch):
 
 def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    with (
+        mock.patch.object(run_tests.signal, "signal"),
+        mock.patch.object(run_tests, "probe_env") as probe_env,
+        mock.patch.object(
+            sys,
+            "argv",
+            [
+                "flagos-optest",
+                "--ops",
+                "add",
+                "--exclude-op-list-file",
+                "missing.txt",
+            ],
+        ),
+    ):
+        with pytest.raises(SystemExit):
+            run_tests.main()
+    probe_env.assert_not_called()
+
     common = [
         mock.patch.object(run_tests.signal, "signal"),
         mock.patch.object(run_tests, "probe_env"),

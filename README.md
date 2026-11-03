@@ -5,8 +5,8 @@ English | [简体中文](README.zh-CN.md)
 [![Python checks](https://github.com/flagos-ai/optest/actions/workflows/python-checks.yaml/badge.svg?branch=main)](https://github.com/flagos-ai/optest/actions/workflows/python-checks.yaml)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](https://github.com/flagos-ai/optest/actions/workflows/python-checks.yaml)
 
-`flagos-optest` is the shared operator accuracy and performance test driver
-for the various FlagOS operator libraries. The package also provides report-generation,
+`flagos-optest` is a shared tool for accuracy and performance testing across
+FlagOS operator libraries. The package also provides report-generation,
 result-labeling, web-data conversion, and vendor-specific GPU checking toolsuite.
 
 ## Menu
@@ -615,10 +615,11 @@ gpus:
 
 ## Target Repository Dependencies with uv
 
-The operator library, rather than the `optest` wheel, owns heavyweight runtime
-and vendor dependencies. Define optional dependency groups in the target
-repository's `pyproject.toml` so developers and CI can install a reproducible
-test environment directly from that repository.
+The target operator library or repository defines its own runtime and
+vendor-specific dependencies in `pyproject.toml`. The `optest` workflow reads
+that configuration, then automatically selects and installs the dependency
+groups that match the detected vendor. This lets developers and CI install a
+reproducible test environment directly from the target repository.
 
 > **Important:** Use `uv pip install`, not `pip install`, for target repository
 > extras that rely on `[tool.uv].exclude-dependencies`. Hardware images often

@@ -5,7 +5,7 @@
 [![Python checks](https://github.com/flagos-ai/optest/actions/workflows/python-checks.yaml/badge.svg?branch=main)](https://github.com/flagos-ai/optest/actions/workflows/python-checks.yaml)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](https://github.com/flagos-ai/optest/actions/workflows/python-checks.yaml)
 
-`flagos-optest` 是供多个 FlagOS 算子库共用的算子精度和性能测试驱动程序。
+`flagos-optest` 是供多个 FlagOS 算子库共用的算子精度与性能测试工具。
 本软件包还提供报告生成、结果标签添加、Web 数据转换以及厂商专用的 GPU 检查工具集。
 
 ## 目录
@@ -567,8 +567,9 @@ gpus:
 
 ## 使用 uv 管理目标仓库依赖
 
-重量级运行时和厂商依赖应由算子库而非 `optest` wheel 管理。在目标仓库的
-`pyproject.toml` 中定义可选依赖组，使开发者和 CI 能够直接从该仓库安装可复现的测试环境。
+目标算子库或仓库在自己的 `pyproject.toml` 中定义运行时和厂商专用依赖。
+`optest` 工作流读取该配置，并根据检测到的厂商自动选择和安装匹配的依赖组。
+这样，开发者和 CI 就能直接从目标仓库安装可复现的测试环境。
 
 > **重要：** 对依赖 `[tool.uv].exclude-dependencies` 的目标仓库 extra，请使用
 > `uv pip install`，不要使用 `pip install`。硬件镜像通常会提供 torch 和 Triton

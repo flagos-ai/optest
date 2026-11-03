@@ -328,7 +328,7 @@ class NotifyFeishuRefTest(unittest.TestCase):
         self.assertNotIn("flagos-install-target-deps", install_target["run"])
         self.assertNotIn("vendor_pip_args", install_target["run"])
 
-    def test_workflow_retries_result_uploads(self):
+    def test_workflow_retries_transient_result_upload_failures(self):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
         steps = workflow["jobs"]["test-container"]["steps"]
         publish = next(
@@ -341,10 +341,12 @@ class NotifyFeishuRefTest(unittest.TestCase):
             script.index("curl -X POST") : script.index("--compressed")
         ]
         self.assertIn(
-            "--max-time 300 --retry 3 --retry-delay 15 --retry-all-errors",
+            "--max-time 900 --retry 3 --retry-delay 15",
             curl_command,
         )
-        retry_budget_seconds = 4 * 300 + 3 * 15
+        self.assertIn("--fail-with-body", curl_command)
+        self.assertNotIn("--retry-all-errors", curl_command)
+        retry_budget_seconds = 4 * 900 + 3 * 15
         self.assertGreaterEqual(publish["timeout-minutes"] * 60, retry_budget_seconds)
 
 

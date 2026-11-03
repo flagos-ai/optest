@@ -838,9 +838,9 @@ jobs:
 
       - name: Publish results to op-monitor
         if: needs.prepare.outputs.publish_results == 'true'
-        # Four possible 300-second attempts plus three 15-second retry delays
-        # need up to 20m45s; keep enough step-level overhead around that budget.
-        timeout-minutes: 25
+        # Four possible 900-second attempts plus three 15-second retry delays
+        # need up to 60m45s; keep enough step-level overhead around that budget.
+        timeout-minutes: 65
         continue-on-error: true
         run: |
           # get backend name from matrix
@@ -860,8 +860,8 @@ jobs:
             -F "library_name=${{ needs.prepare.outputs.library_name }}" \
             -F "backend_name=${BACKEND_NAME}" \
             -F "test_date=${DATE}" \
-            --max-time 300 --retry 3 --retry-delay 15 --retry-all-errors \
-            --compressed -o - -w "\nHTTP %{http_code}\n"
+            --max-time 900 --retry 3 --retry-delay 15 \
+            --fail-with-body --compressed -o - -w "\nHTTP %{http_code}\n"
 
       - name: Send Feishu notification
         if: always() && needs.prepare.outputs.send_feishu == 'true'

@@ -41,19 +41,25 @@ class ProjectDirectoryTest(unittest.TestCase):
                 with mock.patch.object(run_tests.signal, "signal"):
                     with self.assertRaisesRegex(SystemExit, "1"):
                         run_tests.main()
-            return run_tests.ROOT, Path.cwd(), run_tests.CFG.base_data
+            return (
+                run_tests.ROOT,
+                Path.cwd(),
+                run_tests.CFG.base_data,
+                run_tests.CFG.timeout,
+            )
         finally:
             os.chdir(original_directory)
             run_tests.ROOT = original_root
 
     def test_defaults_to_current_directory(self):
         with tempfile.TemporaryDirectory() as directory:
-            root, working_directory, _ = self.run_until_operator_selection(
+            root, working_directory, _, timeout = self.run_until_operator_selection(
                 ["flagos-optest"], directory
             )
 
         self.assertEqual(root, Path(directory).resolve())
         self.assertEqual(working_directory, Path(directory).resolve())
+        self.assertEqual(timeout, run_tests.DEFAULT_COMMAND_TIMEOUT_SECONDS)
 
     def test_uses_explicit_directory_for_execution_and_relative_paths(self):
         with tempfile.TemporaryDirectory() as parent:
@@ -63,14 +69,30 @@ class ProjectDirectoryTest(unittest.TestCase):
             caller.mkdir()
             target.mkdir()
 
-            root, working_directory, base_data = self.run_until_operator_selection(
-                ["flagos-optest", "../target", "--base-data", "baseline.json"],
-                caller,
+            root, working_directory, base_data, timeout = (
+                self.run_until_operator_selection(
+                    [
+                        "flagos-optest",
+                        "../target",
+                        "--base-data",
+                        "baseline.json",
+                        "--timeout",
+                        "3600",
+                    ],
+                    caller,
+                )
             )
 
         self.assertEqual(root, target.resolve())
         self.assertEqual(working_directory, target.resolve())
         self.assertEqual(base_data, str(target.resolve() / "baseline.json"))
+        self.assertEqual(timeout, 3600)
+
+    def test_timeout_requires_a_positive_integer(self):
+        for value in ("invalid", "0", "-1"):
+            with self.subTest(value=value):
+                with self.assertRaises(argparse.ArgumentTypeError):
+                    run_tests.positive_int(value)
 
     def test_reads_relative_operator_list_from_selected_directory(self):
         original_directory = Path.cwd()
@@ -235,6 +257,7 @@ class ProjectDirectoryTest(unittest.TestCase):
                 output_dir=root / "results",
                 quick=False,
                 skip_cpu_tests=[],
+                timeout=45,
             )
             with (
                 mock.patch.object(run_tests, "ROOT", root),
@@ -246,6 +269,7 @@ class ProjectDirectoryTest(unittest.TestCase):
                     accuracy_call = runner.call_args
                     accuracy_command = shlex.split(accuracy_call.args[1])
                     self.assertEqual(accuracy_call.kwargs["cwd"], root)
+                    self.assertEqual(accuracy_call.kwargs["timeout"], 45)
                     self.assertIn(str(root / "tests"), accuracy_command)
                     self.assertIn(
                         str(root / "tests" / "accuracy_add.json"),
@@ -257,6 +281,7 @@ class ProjectDirectoryTest(unittest.TestCase):
                     benchmark_call = runner.call_args
                     benchmark_command = shlex.split(benchmark_call.args[1])
                     self.assertEqual(benchmark_call.kwargs["cwd"], root)
+                    self.assertEqual(benchmark_call.kwargs["timeout"], 45)
                     self.assertIn(str(root / "benchmark"), benchmark_command)
                     self.assertIn(
                         str(root / "benchmark" / "benchmark_add.json"),

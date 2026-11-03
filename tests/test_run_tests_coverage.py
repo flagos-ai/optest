@@ -368,6 +368,7 @@ def _queue_config(tmp_path):
         all_op_ids={"stack"},
         skip_cpu_tests=[],
         quick=True,
+        timeout=1800,
         output_dir=tmp_path / "results",
         base_data="base data.json",
         accuracy_marks={"add"},

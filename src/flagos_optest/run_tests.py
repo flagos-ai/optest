@@ -80,6 +80,9 @@ CLI Arguments
   --output-dir DIR    Test results output directory (relative or absolute path).
                       Default: logs_results_YYYYMMDD_HHMM (current timestamp).
 
+  --timeout SECONDS   Timeout for each accuracy or performance subprocess.
+                      Default: 1800 seconds.
+
   --stages STAGES     Comma-separated operator stage filter.
                       Options: alpha, beta, stable, all, removed
                       Default: "stable" (only test stable-stage operators).
@@ -191,6 +194,7 @@ GEMS_MODULE: types.ModuleType | None = None
 GEMS_ENV: dict[str, Any] = {}
 
 TIMEOUT = -100
+DEFAULT_COMMAND_TIMEOUT_SECONDS = 1800
 INFRASTRUCTURE_EXIT_CODE = 2
 SHM_PATH = Path("/dev/shm")
 OP_RESULT_STATUS_KEYS = {
@@ -304,6 +308,19 @@ def project_directory(value):
     if not path.is_dir():
         raise argparse.ArgumentTypeError(f"project path is not a directory: {value}")
     return path
+
+
+def positive_int(value):
+    """Parse a positive integer for argparse."""
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            f"expected a positive integer, got: {value}"
+        ) from error
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError(f"expected a positive integer, got: {value}")
+    return parsed
 
 
 class LiveDisplay:
@@ -703,7 +720,14 @@ def get_env(gpu_ids):
     return env
 
 
-def run_cmd(op, cmd, cwd=None, env=None, timeout=1800, flavor=None):
+def run_cmd(
+    op,
+    cmd,
+    cwd=None,
+    env=None,
+    timeout=DEFAULT_COMMAND_TIMEOUT_SECONDS,
+    flavor=None,
+):
     stdout_file: TextIO | None = None
     stderr_file: TextIO | None = None
     if CFG.dump_output:
@@ -887,7 +911,14 @@ def run_accuracy_q(gpu_id, op):
     op_dir = CFG.output_dir.joinpath(op)
     ensure_dir(op_dir)
     dur = time.time()
-    code = run_cmd(op, cmd, cwd=ROOT, env=env, flavor="accuracy")
+    code = run_cmd(
+        op,
+        cmd,
+        cwd=ROOT,
+        env=env,
+        timeout=CFG.timeout,
+        flavor="accuracy",
+    )
     dur = time.time() - dur
 
     if code == TIMEOUT:
@@ -948,7 +979,14 @@ def run_benchmark_q(gpu_id, op):
     )
     if getattr(CFG, "base_data", None):
         cmd += f" --base-data={shlex.quote(CFG.base_data)}"
-    code = run_cmd(op, cmd, cwd=ROOT, env=env, flavor="performance")
+    code = run_cmd(
+        op,
+        cmd,
+        cwd=ROOT,
+        env=env,
+        timeout=CFG.timeout,
+        flavor="performance",
+    )
     dur = time.time() - dur
 
     if code == TIMEOUT:
@@ -1480,6 +1518,7 @@ def main():
             '  flagos-optest --ops "add,softmax,multinomial" --gpus 0\n'
             "  flagos-optest --op-list-file my_ops.txt --gpus all\n"
             '  flagos-optest --stages all --exclude-ops "scatter,index_add"\n'
+            "  flagos-optest --timeout 3600 --gpus all\n"
             '  flagos-optest --start mul --stages "stable,beta" --gpus 0,1\n'
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1557,6 +1596,16 @@ def main():
         ),
     )
     parser.add_argument(
+        "--timeout",
+        type=positive_int,
+        default=DEFAULT_COMMAND_TIMEOUT_SECONDS,
+        metavar="SECONDS",
+        help=(
+            "Timeout in seconds for each accuracy or performance subprocess. "
+            f"Default: {DEFAULT_COMMAND_TIMEOUT_SECONDS}"
+        ),
+    )
+    parser.add_argument(
         "--stages",
         required=False,
         default="stable",
@@ -1599,6 +1648,7 @@ def main():
     CFG.dump_output = OPTS.dump_output
     CFG.quick = OPTS.quick
     CFG.start = OPTS.start
+    CFG.timeout = OPTS.timeout
 
     # Apply color mode (IS_TTY controls cursor-based footer, USE_COLORS controls ANSI colors)
     global USE_COLORS, RED, GREEN, YELLOW, CYAN, DIM, NC

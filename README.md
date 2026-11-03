@@ -119,6 +119,7 @@ Common options:
 | `--gpus 0,1` | Select device IDs. Use `--gpus all` to use every device detected by PyTorch. Default: `0`. |
 | `--stages stable,beta` | Select inventory stages. Supported values are `alpha`, `beta`, `stable`, `all`, and `removed`. Default: `stable`. |
 | `--output-dir DIR` | Result directory. Relative paths are resolved from the target repository. Default: `logs_results_YYYYMMDD_HHMM`. |
+| `--timeout SECONDS` | Timeout for each accuracy or performance subprocess. Default: `1800` seconds. |
 | `--dump-output` | Preserve each accuracy and benchmark subprocess's stdout and stderr. |
 | `--quick` | Ask the target tests to use reduced parameter combinations. |
 | `--color auto\|always\|never` | Control ANSI color output. Default: `auto`. |
@@ -136,6 +137,9 @@ flagos-optest --ops abs,add,sum --gpus 0,1,2 \
 
 # Run stable and beta operators in another checkout.
 flagos-optest /work/FlagGems --stages stable,beta --gpus 0,1
+
+# Allow each accuracy and performance subprocess up to one hour.
+flagos-optest --timeout 3600 --gpus all
 
 # Run all stable operators except those listed as unsupported.
 flagos-optest --exclude-ops index_add,scatter --gpus all

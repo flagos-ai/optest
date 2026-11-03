@@ -238,6 +238,25 @@ def test_probe_gems_success_and_failures(monkeypatch):
             run_tests._probe_gems()
 
 
+def test_probe_gems_uses_distribution_version(monkeypatch):
+    module = types.SimpleNamespace(vendor_name="nvidia", device="H800")
+    monkeypatch.setattr(run_tests, "_KNOWN_LIBS", [("flag_train", "FlagTrain")])
+    monkeypatch.setattr(run_tests.importlib, "import_module", lambda _name: module)
+    version = mock.Mock(return_value="0.0.0")
+    monkeypatch.setattr(run_tests.metadata, "version", version)
+    monkeypatch.setattr(run_tests, "ENV_INFO", {})
+
+    run_tests._probe_gems()
+
+    assert run_tests.ENV_INFO["flag_train"] == {
+        "library_name": "FlagTrain",
+        "version": "0.0.0",
+        "vendor": "nvidia",
+        "device": "H800",
+    }
+    version.assert_called_once_with("flag_train")
+
+
 def test_get_env_all_vendors(monkeypatch):
     monkeypatch.setenv("KEEP", "yes")
     for vendor, expected in (

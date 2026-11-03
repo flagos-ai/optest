@@ -156,6 +156,7 @@ _KNOWN_LIBS = [
     ("flaggems_vllm", "FlagGems-vllm"),
     ("flaggems_sglang", "FlagGems-sglang"),
     ("flag_attn", "FlagAttention"),
+    ("flag_train", "FlagTrain"),
     ("flag_gems", "FlagGems"),
 ]
 
@@ -553,7 +554,10 @@ def _probe_gems():
         try:
             info["version"] = mod.__version__
         except Exception:
-            info["version"] = "?"
+            try:
+                info["version"] = metadata.version(mod_name)
+            except metadata.PackageNotFoundError:
+                info["version"] = "?"
         try:
             info["vendor"] = mod.vendor_name
         except Exception:
@@ -571,9 +575,10 @@ def _probe_gems():
         )
 
     if not found:
+        known_modules = " / ".join(name for name, _ in _KNOWN_LIBS)
         perror(
             "No FlagOS library detected "
-            "(flag_gems / flaggems_vllm / flaggems_sglang / flag_attn). "
+            f"({known_modules}). "
             "Please run `uv pip install -e .` in the project repo."
         )
         sys.exit(-1)

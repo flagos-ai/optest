@@ -22,6 +22,8 @@ from pathlib import Path
 
 import yaml
 
+from flagos_optest import run_tests
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -65,6 +67,12 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("          - FlagTrain\n", workflow_text)
+
+    def test_configured_repositories_have_runtime_probes(self):
+        configured_repos = set(self.repos["repos"])
+        probed_repos = {display_name for _, display_name in run_tests._KNOWN_LIBS}
+
+        self.assertLessEqual(configured_repos, probed_repos)
 
     def test_gpu_probe_precedes_vendor_dependency_install(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]

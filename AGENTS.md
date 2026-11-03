@@ -46,6 +46,15 @@ Use PR #2 as the history for project-agnostic command behavior and PR #4 as
 the history for wheel packaging. Do not mix a broad source-layout migration,
 workflow behavior change, and CLI semantic change in one PR.
 
+## Repository Onboarding
+
+When adding a repository to `.github/configs/repos.yaml`, also add its Python
+import name and repository display name to `_KNOWN_LIBS` in
+`src/flagos_optest/run_tests.py`. The runtime probe uses this list to import the
+library and record its name, version, vendor, and device metadata under `env`
+in `summary.json`. Keep the repository configuration and probe list in sync so
+new libraries are represented in test results.
+
 ## Conventions
 
 - Preserve UTF-8 without BOM and Unix line endings.

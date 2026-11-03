@@ -22,8 +22,8 @@
 #   2. upload library_name  -> passed to op-monitor as `library_name=<key>`
 #   3. Feishu notification label
 # so there is no separate github/library_name/import_name field. The tested
-# library is auto-detected at runtime by flagos-optest (try-import), so no
-# import name needs to be configured here either.
+# library is auto-detected at runtime by flagos-optest using the import names
+# maintained in src/flagos_optest/run_tests.py.
 #
 # Container images are defined per hardware in .github/configs/backends/<NAME>.yaml
 # and shared by all repos. A repo only needs a `container_images:` block when its
@@ -31,7 +31,8 @@
 #
 # To onboard a new repo: add one block under `repos:` with its default_branch,
 # enabled backends, and (optionally) container_images / deps / base_data /
-# timeout. No workflow or script change is required.
+# timeout. Also add its (import_name, display_name) pair to _KNOWN_LIBS in
+# src/flagos_optest/run_tests.py so runtime metadata reaches summary.json.
 # ---------------------------------------------------------------------------
 
 # GitHub organization that owns every target repo. Combined with the repo key

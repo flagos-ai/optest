@@ -2,6 +2,7 @@
 # Copyright 2026 FlagOS Contributors
 # SPDX-License-Identifier: Apache-2.0
 """Dynamically schedule isolated operator collectors, one consumer per GPU."""
+
 from __future__ import annotations
 
 import argparse

@@ -259,8 +259,7 @@ def profile_with_ncu(op_name, profile_script, shape, dtype_str, report_dir=None)
             return _empty_result()
         if proc.returncode != 0:
             print(
-                f"  ✗ NCU profiling failed (code={proc.returncode}): "
-                f"{_err_msg(proc)}"
+                f"  ✗ NCU profiling failed (code={proc.returncode}): {_err_msg(proc)}"
             )
             return _empty_result()
 
@@ -281,7 +280,7 @@ def profile_with_ncu(op_name, profile_script, shape, dtype_str, report_dir=None)
             timeout=120,
         )
         if imp.returncode != 0:
-            print(f"  ✗ NCU import failed (code={imp.returncode}): " f"{_err_msg(imp)}")
+            print(f"  ✗ NCU import failed (code={imp.returncode}): {_err_msg(imp)}")
             return _empty_result()
 
         agg = _parse_ncu_csv(imp.stdout, metrics)
@@ -421,8 +420,7 @@ def _dumps(obj, indent=2, level=0):
         if not obj:
             return "{}"
         items = [
-            f"{pad2}{json.dumps(k, ensure_ascii=False)}: "
-            f"{_dumps(v, indent, level + 1)}"
+            f"{pad2}{json.dumps(k, ensure_ascii=False)}: {_dumps(v, indent, level + 1)}"
             for k, v in obj.items()
         ]
         return "{\n" + ",\n".join(items) + "\n" + pad + "}"
@@ -501,9 +499,7 @@ def _select_ops(discovered, only=None):
     if only:
         unknown = sorted(only - available)
         if unknown:
-            print(
-                f"warning: --ops operators not found, ignored: " f"{', '.join(unknown)}"
-            )
+            print(f"warning: --ops operators not found, ignored: {', '.join(unknown)}")
 
     return [(name, mod) for name, mod in discovered if only is None or name in only]
 
@@ -579,9 +575,7 @@ def _collect_one_op_ops(
         )
         op(*probe_args, **probe_kwargs)
         torch.cuda.synchronize()
-    except (
-        Exception
-    ) as e:  # noqa: BLE001 - any failure means this host cannot collect it
+    except Exception as e:  # noqa: BLE001 - any failure means this host cannot collect it
         print(
             f"\nskipping {op_name}: pre-check failed, cannot collect on this host"
             f" ({type(e).__name__}: {str(e)[:120]})"
@@ -777,7 +771,7 @@ def check_ops(device=None, only=None):
     _mark = {"ok": "✓", "fail": "✗", "skip": "—"}
     _word = {"ok": "ok", "fail": "fail", "skip": "skip"}
     counts = {"ok": 0, "fail": 0, "skip": 0}
-    for op_name, op_module in ops_modules:
+    for _op_name, op_module in ops_modules:
         r = _check_one_op(op_module, device=device)
         counts[r["status"]] += 1
         sig = r["call"]
@@ -825,7 +819,7 @@ def collect_baseline(
     ops_modules = _select_ops(ops_modules, only=only)
 
     if worker:
-        for op_name, op_module in ops_modules:
+        for _op_name, op_module in ops_modules:
             _collect_one_op_ops(
                 op_module,
                 report_dir,

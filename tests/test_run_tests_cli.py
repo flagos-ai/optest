@@ -123,6 +123,8 @@ class ProjectDirectoryTest(unittest.TestCase):
                             "ops.txt",
                             "--exclude-op-list-file",
                             "excluded.txt",
+                            "--timeout",
+                            "600",
                         ],
                     ),
                     mock.patch.object(run_tests.signal, "signal"),
@@ -153,6 +155,7 @@ class ProjectDirectoryTest(unittest.TestCase):
                 )
                 self.assertIn("[INFO]   mul", output.getvalue())
                 self.assertIn("Testing 1 operators", output.getvalue())
+                self.assertIn("Command timeout ... 600 seconds", output.getvalue())
         finally:
             os.chdir(original_directory)
             run_tests.ROOT = original_root

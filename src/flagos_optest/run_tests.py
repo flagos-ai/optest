@@ -1715,6 +1715,7 @@ def main():
     # once all accuracy/benchmark tests finish.
     test_start_time = datetime.datetime.now()
     pinfo(f"Test started at ... {test_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    pinfo(f"Command timeout ... {CFG.timeout} seconds")
 
     probe_env()
 

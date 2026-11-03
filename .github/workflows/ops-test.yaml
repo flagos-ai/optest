@@ -18,8 +18,8 @@
 # repo defined in .github/configs/repos.yaml; the workflow checks out that repo
 # into ./target, installs it, and runs this repo's shared optest package against it.
 #
-# Per-repo config: .github/configs/repos.yaml  (org, default_branch,
-#                  container_images, backends, deps, base_data, timeout)
+# Per-repo config: .github/configs/repos.yaml  (org, default_branch, images,
+#                  backends, deps, base_data, timeout overrides)
 # Shared backend hardware config: .github/configs/backends/<NAME>.yaml
 # vendors: Nvidia,MThreads,KunLunXin,Iluvatar,Ascend,Hygon,Metax,THead,Cambricon,AMD,TsingMicro,Enflame
 name: ops-test
@@ -147,9 +147,13 @@ jobs:
           # configured default_branch.
           checkout_ref = os.environ.get('REF_INPUT', '').strip() or rc['default_branch']
 
-          # Shared default timeout, overridable per repo.
+          # Shared step and per-command defaults, each overridable per repo.
           default_timeout = main.get('defaults', {}).get('ops_test_timeout_minutes', 240)
           repo_timeout = rc.get('ops_test_timeout_minutes', default_timeout)
+          default_op_cmd_timeout = main.get('defaults', {}).get(
+              'op_cmd_timeout', 600
+          )
+          op_cmd_timeout = rc.get('op_cmd_timeout', default_op_cmd_timeout)
 
           images = rc.get('container_images', {})
           deps_cfg = rc.get('deps', {}) or {}
@@ -188,6 +192,7 @@ jobs:
 
               backend['base_data'] = base_data
               backend['ops_test_timeout'] = repo_timeout
+              backend['op_cmd_timeout'] = op_cmd_timeout
               backend['test_env'] = json.dumps(backend.get('test_env') or {})
               container_include.append(backend)
 
@@ -729,6 +734,7 @@ jobs:
           echo "[Run ops tests] Running on backend: ${{ matrix.name }} (vendor: ${{ matrix.vendor }})"
           echo "[Run ops tests] Container image: ${{ matrix.container_image }}"
           echo "[Run ops tests] Timeout: ${{ matrix.ops_test_timeout }} minutes"
+          echo "[Run ops tests] Per-command timeout: ${{ matrix.op_cmd_timeout }} seconds"
           echo "[Run ops tests] Test output directory: ${OUTPUT_DIR}"
           echo "[Run ops tests] Test GPUs: ${AVAILABLE_GPUS}"
           echo "[Run ops tests] Test date: ${DATE}"
@@ -774,12 +780,13 @@ jobs:
           echo "[Run ops tests] Base-data arguments: ${BASE_DATA_ARG:-<none>}"
           # Run from the target checkout so the installed scheduler discovers
           # its conf/operators.yaml, tests/ and benchmark/ from the cwd.
-          echo "[Run ops tests] Command: flagos-optest --gpus \"${AVAILABLE_GPUS}\" ${OP_ARGS} ${EXCLUDE_OPS_ARG} ${BASE_DATA_ARG} --dump-output --output-dir \"${OUTPUT_DIR}\""
+          echo "[Run ops tests] Command: flagos-optest --gpus \"${AVAILABLE_GPUS}\" ${OP_ARGS} ${EXCLUDE_OPS_ARG} ${BASE_DATA_ARG} --timeout \"${{ matrix.op_cmd_timeout }}\" --dump-output --output-dir \"${OUTPUT_DIR}\""
           flagos-optest \
             --gpus "${AVAILABLE_GPUS}" \
             ${OP_ARGS} \
             ${EXCLUDE_OPS_ARG} \
             ${BASE_DATA_ARG} \
+            --timeout "${{ matrix.op_cmd_timeout }}" \
             --dump-output \
             --output-dir "${OUTPUT_DIR}"
           # process the test results to generate summary files

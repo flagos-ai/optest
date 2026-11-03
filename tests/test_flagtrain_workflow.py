@@ -59,8 +59,10 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         }
         self.assertEqual(
             enabled,
-            {"H800", "BW1000", "BI-V150", "P800", "910B", "C550", "MTT-S5000", "S60"},
+            {"H800", "BW1000", "BI-V150", "910B", "C550", "MTT-S5000"},
         )
+        self.assertFalse(config["backends"]["P800"]["enabled"])
+        self.assertFalse(config["backends"]["S60"]["enabled"])
         self.assertNotIn("deps", config)
 
         workflow_text = (ROOT / ".github/workflows/ops-test.yaml").read_text(
@@ -96,43 +98,67 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             install,
         )
 
-    def test_matrix_does_not_encode_target_dependency_policy(self):
+    def test_matrix_resolves_command_timeout_without_dependency_policy(self):
         prepare_steps = self.workflow["jobs"]["prepare"]["steps"]
         script = next(
             step["run"] for step in prepare_steps if step.get("id") == "build-matrix"
         )
 
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "github-output"
-            environment = {
-                **os.environ,
-                "REPO_INPUT": "FlagTrain",
-                "REF_INPUT": "",
-                "VENDORS_INPUT": "",
-                "OPS_INPUT": "",
-                "UPLOAD_LOG_INPUT": "",
-                "SEND_FEISHU_INPUT": "",
-                "GITHUB_OUTPUT": str(output),
-            }
-            completed = subprocess.run(
-                [sys.executable, "-c", script],
-                cwd=ROOT,
-                check=False,
-                capture_output=True,
-                env=environment,
-                text=True,
-            )
+        for repo, expected_timeout in (("FlagTrain", 600), ("FlagGems", 1800)):
+            with self.subTest(repo=repo), tempfile.TemporaryDirectory() as directory:
+                output = Path(directory) / "github-output"
+                environment = {
+                    **os.environ,
+                    "REPO_INPUT": repo,
+                    "REF_INPUT": "",
+                    "VENDORS_INPUT": "",
+                    "OPS_INPUT": "",
+                    "UPLOAD_LOG_INPUT": "",
+                    "SEND_FEISHU_INPUT": "",
+                    "GITHUB_OUTPUT": str(output),
+                }
+                completed = subprocess.run(
+                    [sys.executable, "-c", script],
+                    cwd=ROOT,
+                    check=False,
+                    capture_output=True,
+                    env=environment,
+                    text=True,
+                )
 
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            matrix_line = next(
-                line
-                for line in output.read_text(encoding="utf-8").splitlines()
-                if line.startswith("matrix_container=")
-            )
-            matrix = json.loads(matrix_line.removeprefix("matrix_container="))
-            self.assertTrue(matrix["include"])
-            for backend in matrix["include"]:
-                self.assertNotIn("vendor_pip_args", backend)
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                matrix_line = next(
+                    line
+                    for line in output.read_text(encoding="utf-8").splitlines()
+                    if line.startswith("matrix_container=")
+                )
+                matrix = json.loads(matrix_line.removeprefix("matrix_container="))
+                self.assertTrue(matrix["include"])
+                for backend in matrix["include"]:
+                    self.assertNotIn("vendor_pip_args", backend)
+                    self.assertEqual(backend["op_cmd_timeout"], expected_timeout)
+
+                if repo == "FlagTrain":
+                    backend_names = {backend["name"] for backend in matrix["include"]}
+                    self.assertNotIn("P800", backend_names)
+                    self.assertNotIn("S60", backend_names)
+
+    def test_per_repo_command_timeout_configuration(self):
+        self.assertEqual(self.repos["defaults"]["op_cmd_timeout"], 600)
+        self.assertEqual(self.repos["repos"]["FlagGems"]["op_cmd_timeout"], 1800)
+        for repo in (
+            "FlagTrain",
+            "FlagGems-vllm",
+            "FlagGems-sglang",
+            "FlagAttention",
+        ):
+            self.assertNotIn("op_cmd_timeout", self.repos["repos"][repo])
+
+        steps = self.workflow["jobs"]["test-container"]["steps"]
+        run_ops_tests = next(
+            step["run"] for step in steps if step.get("name") == "Run ops tests"
+        )
+        self.assertIn('--timeout "${{ matrix.op_cmd_timeout }}"', run_ops_tests)
 
     def test_optest_install_retries_package_indexes(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]

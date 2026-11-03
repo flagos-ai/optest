@@ -291,6 +291,7 @@ time, and test completion.
 ```text
 [INFO] Project root ... /__w/optest/optest/target
 [INFO] Test started at ... 2026-10-23 18:48:49
+[INFO] Command timeout ... 1800 seconds
 [INFO] PyTorch detected ... 2.11.0+cu130
 [INFO] PyTorch CUDA support ... True
 [INFO] PyTorch device name ... NVIDIA H800
@@ -726,6 +727,7 @@ form the GitHub checkout target. Each repository entry can define:
 | `deps.default` | Explicit fallback packages installed for every enabled backend. Prefer target `pyproject.toml` vendor extras. |
 | `deps.<backend>` | Explicit fallback packages installed only for one backend. Prefer target `pyproject.toml` vendor extras. |
 | `base_data` | Optional performance-baseline JSON path in the target checkout. |
+| `op_cmd_timeout` | Timeout in seconds for each accuracy or performance subprocess. Inherits `defaults.op_cmd_timeout`. |
 | `ops_test_timeout_minutes` | Per-repository timeout for the operator-test step. |
 
 The image keys intentionally differ by level:

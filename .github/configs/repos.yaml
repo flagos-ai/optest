@@ -31,8 +31,8 @@
 #
 # To onboard a new repo: add one block under `repos:` with its default_branch,
 # enabled backends, and (optionally) container_images / deps / base_data /
-# timeout. Also add its (import_name, display_name) pair to _KNOWN_LIBS in
-# src/flagos_optest/run_tests.py so runtime metadata reaches summary.json.
+# timeout overrides. Also add its (import_name, display_name) pair to _KNOWN_LIBS
+# in src/flagos_optest/run_tests.py so runtime metadata reaches summary.json.
 # ---------------------------------------------------------------------------
 
 # GitHub organization that owns every target repo. Combined with the repo key
@@ -45,6 +45,9 @@ server:
 
 # Defaults applied to every repo unless overridden in its block below.
 defaults:
+  # Timeout in seconds for each accuracy or performance subprocess. Override
+  # per repo via `op_cmd_timeout`.
+  op_cmd_timeout: 600
   # Per-vendor "Run ops tests" STEP timeout (minutes). The container/native
   # job keeps a large hard cap at the job level (GitHub Actions cannot read a
   # matrix value for a job-level timeout); the real per-repo limit lives on the
@@ -56,6 +59,8 @@ repos:
   FlagGems:
     # Branch used when the `branch` workflow input is empty.
     default_branch: master
+    # The full operator suite needs the longer per-command timeout.
+    op_cmd_timeout: 1800
     # Full operator suite; 910B alone runs ~15h, so allow a long step timeout.
     ops_test_timeout_minutes: 1440
     # Uses the shared backend images (.github/configs/backends/<NAME>.yaml);
@@ -150,10 +155,10 @@ repos:
       BI-V150: {enabled: true}
       PPU-ZW810E: {enabled: false}
       MLU590-M9DE: {enabled: false}
-      P800: {enabled: true}
+      P800: {enabled: false}  # FlagTrain: unsupported for now.
       W7900D: {enabled: false}
       TX8110: {enabled: false}
-      S60: {enabled: true}
+      S60: {enabled: false}   # FlagTrain: unsupported for now.
 
   # =========================================================================
   FlagAttention:

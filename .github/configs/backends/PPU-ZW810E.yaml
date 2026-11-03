@@ -20,9 +20,6 @@ vendor: THead
 # Runner labels for this backends (self-hosted)
 runner_labels: 810e-flaggems-weekly
 
-# Use container or not for this backends
-use_container: true
-
 # Container image for this backend (DEFAULT).
 # Priority: repos.yaml `images.<BACKEND>` for the selected repo OVERRIDES
 # this value; when that repo has no override here, this default is used.
@@ -60,12 +57,6 @@ container_options: >-
   --ulimit=memlock=-1
   --ulimit=stack=67108864
   --workdir=/root
-
-# GPUs to test for this backends
-test_gpus: "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15"
-
-# GPU availability check script for this backend
-gpu_check_script: flagos-gpu-check
 
 # Output base directory; ops-test appends the GitHub repository name
 output_base_dir: /home/github-outputs

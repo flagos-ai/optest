@@ -92,7 +92,6 @@ jobs:
       target_repo: ${{ steps.build-matrix.outputs.target_repo }}
       library_name: ${{ steps.build-matrix.outputs.library_name }}
       matrix_container: ${{ steps.build-matrix.outputs.matrix_container }}
-      api: ${{ steps.build-matrix.outputs.api }}
       ops: ${{ steps.build-matrix.outputs.ops }}
       exclude_ops: ${{ steps.build-matrix.outputs.exclude_ops }}
       publish_results: ${{ steps.build-matrix.outputs.publish_results }}
@@ -194,6 +193,7 @@ jobs:
               backend['ops_test_timeout'] = repo_timeout
               backend['op_cmd_timeout'] = op_cmd_timeout
               backend['test_env'] = json.dumps(backend.get('test_env') or {})
+              backend['test_gpus'] = str(backend.get('test_gpus') or '').strip()
               container_include.append(backend)
 
           # ops: empty input -> "all" operator stages; otherwise the given ops.
@@ -207,13 +207,12 @@ jobs:
               out.write(f"target_repo={target_repo}\n")
               out.write(f"library_name={library_name}\n")
               out.write(f"matrix_container={json.dumps({'include': container_include})}\n")
-              out.write(f"api={main['server']['api']}\n")
               out.write(f"ops={ops}\n")
               out.write(f"exclude_ops={exclude_ops}\n")
               out.write(f"publish_results={publish_results}\n")
               out.write(f"send_feishu={send_feishu}\n")
 
-  # All backends run inside a container (use_container: true)
+  # All backends run inside a container.
   test-container:
     name: ${{ needs.prepare.outputs.library_name }} (${{ matrix.name }})
     needs: prepare
@@ -483,34 +482,32 @@ jobs:
       - name: Check GPU availability
         shell: bash --login -e -o pipefail {0}
         run: |
-          echo "[GPU check] Running GPU availability check script: ${{ matrix.gpu_check_script }} --format json"
+          echo "[GPU check] Running GPU availability check script: flagos-gpu-check --format json"
           # Use JSON output and parse it with python3 (stdlib) instead of
           # grepping text: in --format json mode the command prints ONLY the
           # JSON document to stdout (progress tables and the vendor line go to
           # stderr, still visible in the step log), so parsing is exact and
           # robust against formatting changes.
           set +e
-          GPU_JSON=$(${{ matrix.gpu_check_script }} --format json)
+          GPU_JSON=$(flagos-gpu-check --format json)
           GPU_RC=$?
           set -e
           if [ -n "${GPU_JSON}" ]; then
             echo "[GPU check] GPU availability check JSON:"
             echo "${GPU_JSON}"
           fi
-          if [ "${{ matrix.force_test_gpus }}" = "true" ]; then
-            # This backend deliberately pins the GPUs under test to the
-            # configured test_gpus list (e.g. TsingMicro exposes more cards than
-            # we want to use). The check is run for logging/inspection only, so
-            # a non-zero exit here must NOT fail the job; test_gpus is
-            # authoritative below.
+          if [ -n "${{ matrix.test_gpus }}" ]; then
+            # A backend can deliberately override the detected GPUs. The check
+            # still runs for logging and metadata, but its result does not gate
+            # tests when an explicit list is configured.
             AVAILABLE_GPUS="${{ matrix.test_gpus }}"
-            echo "[GPU check] force_test_gpus=true -> using configured test_gpus"
+            echo "[GPU check] Using configured test_gpus override: ${AVAILABLE_GPUS}"
           else
             # Capture the exit code explicitly (instead of relying on set -e)
             # so a failure is reported clearly before we stop. A failed GPU
             # check means we have no reliable GPU list, so the job must exit 1.
             if [ "${GPU_RC}" -ne 0 ]; then
-              echo "[GPU check] ERROR: '${{ matrix.gpu_check_script }}' failed with exit code ${GPU_RC}."
+              echo "[GPU check] ERROR: 'flagos-gpu-check' failed with exit code ${GPU_RC}."
               exit 1
             fi
             # Extract available_gpus (a CSV string, e.g. "0,1,2") from the JSON.

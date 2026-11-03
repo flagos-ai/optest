@@ -21,9 +21,6 @@ vendor: TsingMicro
 # Runner labels for this backends (self-hosted)
 runner_labels: tx8110-flaggems-weekly
 
-# Use container or not for this backends
-use_container: true
-
 # Container image for this backend (DEFAULT).
 # Priority: repos.yaml `images.<BACKEND>` for the selected repo OVERRIDES
 # this value; when that repo has no override here, this default is used.
@@ -48,21 +45,14 @@ container_options: >-
   --security-opt seccomp=unconfined
   --workdir=/root
 
-# GPUs to test for this backends. The physical host exposes more than 16
-# cards, but we deliberately test only the first 16 (0-15). force_test_gpus
-# makes the workflow use THIS list directly instead of the "Available GPUs"
-# output of gpu_check_script (which is still run, for reporting only).
+# Override the GPUs detected by flagos-gpu-check. The physical host exposes
+# more than 16 cards, but tests deliberately use only the first 16 (0-15).
 test_gpus: "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15"
-force_test_gpus: true
 
 # Extra environment variables injected only into the "Run ops tests" step
 test_env:
   GEMS_VENDOR: tsingmicro
   PIP_CACHE_DIR: /root/.cache/pip
-
-# GPU availability check script for this backend. With force_test_gpus: true
-# this runs for logging/inspection only; its result does not gate the tests.
-gpu_check_script: flagos-gpu-check
 
 # Output base directory; ops-test appends the GitHub repository name
 output_base_dir: /data/github-outputs

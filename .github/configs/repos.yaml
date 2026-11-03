@@ -39,10 +39,6 @@
 # to form the checkout target "<org>/<repo>".
 org: flagos-ai
 
-# op-monitor upload endpoint (shared by all repos).
-server:
-  api: http://10.1.4.213:31080/api/upload/archive
-
 # Defaults applied to every repo unless overridden in its block below.
 defaults:
   # Timeout in seconds for each accuracy or performance subprocess. Override

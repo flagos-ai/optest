@@ -76,6 +76,27 @@ class FlagTrainWorkflowTest(unittest.TestCase):
 
         self.assertLessEqual(configured_repos, probed_repos)
 
+    def test_backend_gpu_configuration_uses_dynamic_detection_by_default(self):
+        self.assertNotIn("server", self.repos)
+
+        backend_dir = ROOT / ".github/configs/backends"
+        backend_configs = {
+            path.stem: yaml.safe_load(path.read_text(encoding="utf-8"))
+            for path in backend_dir.glob("*.yaml")
+        }
+        for name, config in backend_configs.items():
+            with self.subTest(backend=name):
+                self.assertNotIn("use_container", config)
+                self.assertNotIn("gpu_check_script", config)
+                self.assertNotIn("force_test_gpus", config)
+                if name == "TX8110":
+                    self.assertEqual(
+                        config.get("test_gpus"),
+                        "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15",
+                    )
+                else:
+                    self.assertNotIn("test_gpus", config)
+
     def test_gpu_probe_precedes_vendor_dependency_install(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]
         names = [step.get("name") for step in steps]
@@ -337,9 +358,8 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             if step.get("name") == "Check GPU availability"
         )
         replacements = {
-            "${{ matrix.gpu_check_script }}": "fake-gpu-check",
-            "${{ matrix.force_test_gpus }}": "false",
-            "${{ matrix.test_gpus }}": "0,1",
+            "flagos-gpu-check": "fake-gpu-check",
+            "${{ matrix.test_gpus }}": "",
             "${{ matrix.vendor }}": "Nvidia",
         }
         for expression, value in replacements.items():
@@ -384,6 +404,60 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             self.assertIn("AVAILABLE_GPUS=0,1", exported)
             self.assertIn("FLAGOS_GPU_VENDOR=nvidia", exported)
             self.assertIn("FLAGOS_GPU_DRIVER=", exported)
+
+    def test_configured_test_gpus_override_detected_devices(self):
+        steps = self.workflow["jobs"]["test-container"]["steps"]
+        script = next(
+            step["run"]
+            for step in steps
+            if step.get("name") == "Check GPU availability"
+        )
+        replacements = {
+            "flagos-gpu-check": "fake-gpu-check",
+            "${{ matrix.test_gpus }}": "8,9",
+            "${{ matrix.vendor }}": "TsingMicro",
+        }
+        for expression, value in replacements.items():
+            script = script.replace(expression, value)
+
+        result = {
+            "vendor": "tsingmicro",
+            "device": "TX8110",
+            "driver": "1.0",
+            "runtime": "tsingmicro",
+            "runtime_version": "1.0",
+            "available_gpus": "0,1",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gpu_check = root / "fake-gpu-check"
+            gpu_check.write_text(
+                "#!/bin/sh\nprintf '%s\\n' '" + json.dumps(result) + "'\n",
+                encoding="utf-8",
+            )
+            gpu_check.chmod(0o755)
+            github_env = root / "github-env"
+            completed = subprocess.run(
+                ["bash", "-e", "-o", "pipefail", "-c", script],
+                check=False,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "GITHUB_ENV": str(github_env),
+                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                },
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn(
+                "[GPU check] Using configured test_gpus override: 8,9",
+                completed.stdout,
+            )
+            self.assertIn(
+                "AVAILABLE_GPUS=8,9",
+                github_env.read_text(encoding="utf-8").splitlines(),
+            )
 
 
 if __name__ == "__main__":

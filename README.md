@@ -766,15 +766,12 @@ hardware configuration shared by all repositories:
 | `name` | Hardware/backend identifier referenced by `repos.yaml`. |
 | `vendor` | Vendor filter name accepted by the workflow. |
 | `runner_labels` | Self-hosted GitHub Actions runner label. |
-| `use_container` | Whether the test job runs in a container. |
 | `container_image` | Default image, unless the selected repository overrides it. |
 | `container_volumes` | Host paths mounted into the job container. |
 | `container_options` | Device mappings, privileges, IPC, shared memory, and other container runtime options. |
-| `test_gpus` | Configured device IDs for this hardware. |
-| `force_test_gpus` | When true, use `test_gpus` even if GPU probing reports a different set. |
+| `test_gpus` | Optional device-ID override; when omitted, `flagos-gpu-check` supplies the available devices. |
 | `test_env` | Environment variables injected into the operator-test step. |
 | `deps` | Hardware-specific packages prepended to repository dependency groups. |
-| `gpu_check_script` | Availability command; current backends use `flagos-gpu-check`. |
 | `output_base_dir` | Base directory for result folders and archives. |
 
 Current backend defaults cover H800/NVIDIA, 910B/Ascend, C550/MetaX,
@@ -786,19 +783,19 @@ backend YAML file.
 
 | Backend | Vendor | Runner label | Default test devices | Output base |
 | --- | --- | --- | --- | --- |
-| `H800` | Nvidia | `h800-flaggems-weekly` | `0-7` | `/data/github-outputs` |
-| `910B` | Ascend | `910b-flaggems-weekly` | `0-7` | `/data/github-outputs` |
-| `C550` | Metax | `c550-flaggems-weekly` | `0-7` | `/data/github-outputs` |
-| `BW1000` | Hygon | `bw1000-flaggems-weekly` | `0-7` | `/data/github-outputs` |
-| `MTT-S5000` | MThreads | `s5000-flaggems-weekly` | `0-7` | `/data/github-outputs` |
-| `BI-V150` | Iluvatar | `v150-flaggems-weekly` | `0-15` | `/data/github-outputs` |
-| `PPU-ZW810E` | THead | `810e-flaggems-weekly` | `0-15` | `/home/github-outputs` |
-| `MLU590-M9DE` | Cambricon | `mlu590-m9de-flaggems-weekly` | `0-7` | `/data/github-outputs` |
-| `P800` | KunLunXin | `p800-flaggems-weekly` | `0-7` | `/data/github-outputs` |
-| `W7900D` | AMD | `w7900d-flaggems-weekly` | `0-7` | `/data/github-outputs` |
-| `TX8110` | TsingMicro | `tx8110-flaggems-weekly` | `0-15` (forced) | `/data/github-outputs` |
-| `S60` | Enflame | `s60-flaggems-weekly` | `0-7` | `/data/github-outputs` |
+| `H800` | Nvidia | `h800-flaggems-weekly` | detected | `/data/github-outputs` |
+| `910B` | Ascend | `910b-flaggems-weekly` | detected | `/data/github-outputs` |
+| `C550` | Metax | `c550-flaggems-weekly` | detected | `/data/github-outputs` |
+| `BW1000` | Hygon | `bw1000-flaggems-weekly` | detected | `/data/github-outputs` |
+| `MTT-S5000` | MThreads | `s5000-flaggems-weekly` | detected | `/data/github-outputs` |
+| `BI-V150` | Iluvatar | `v150-flaggems-weekly` | detected | `/data/github-outputs` |
+| `PPU-ZW810E` | THead | `810e-flaggems-weekly` | detected | `/home/github-outputs` |
+| `MLU590-M9DE` | Cambricon | `mlu590-m9de-flaggems-weekly` | detected | `/data/github-outputs` |
+| `P800` | KunLunXin | `p800-flaggems-weekly` | detected | `/data/github-outputs` |
+| `W7900D` | AMD | `w7900d-flaggems-weekly` | detected | `/data/github-outputs` |
+| `TX8110` | TsingMicro | `tx8110-flaggems-weekly` | `0-15` (override) | `/data/github-outputs` |
+| `S60` | Enflame | `s60-flaggems-weekly` | detected | `/data/github-outputs` |
 
-All current backends use containers and `flagos-gpu-check`. Keep
-repository-specific policy in `repos.yaml`; change a backend file only when the
-shared hardware default itself changes.
+All current backends use containers, and the workflow always invokes
+`flagos-gpu-check`. Keep repository-specific policy in `repos.yaml`; change a
+backend file only when the shared hardware default itself changes.

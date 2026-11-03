@@ -1255,6 +1255,19 @@ def _unique_ops(items):
     return list(dict.fromkeys(item.strip() for item in items if item.strip()))
 
 
+def _selection_source_label(source, source_file=None):
+    """Return a concise operator-selection source label for console output."""
+    if source_file is None:
+        return source
+    return f"{source}: {Path(source_file).name}"
+
+
+def _entry_count_label(count):
+    """Return an operator entry count with the correct singular or plural noun."""
+    noun = "entry" if count == 1 else "entries"
+    return f"{count} {noun}"
+
+
 def _read_op_list_file(path):
     """Read an operator list file, ignoring blank lines and comments."""
     try:
@@ -1316,12 +1329,15 @@ def get_ops_to_test():
     if has_ops:
         included_ops = _unique_ops(OPTS.ops.split(","))
         include_source = "--ops"
+        include_file = None
     elif has_op_list_file:
         included_ops = _read_op_list_file(OPTS.op_list_file)
         include_source = "--op-list-file"
+        include_file = OPTS.op_list_file
     else:
         included_ops = _ops_for_stages(op_catalog)
         include_source = f"--stages {OPTS.stages}"
+        include_file = None
 
     has_exclude_ops = OPTS.exclude_ops is not None
     has_exclude_op_list_file = OPTS.exclude_op_list_file is not None
@@ -1334,12 +1350,15 @@ def get_ops_to_test():
     if has_exclude_ops:
         excluded_ops = _unique_ops(OPTS.exclude_ops.split(","))
         exclude_source = "--exclude-ops"
+        exclude_file = None
     elif has_exclude_op_list_file:
         excluded_ops = _read_op_list_file(OPTS.exclude_op_list_file)
         exclude_source = "--exclude-op-list-file"
+        exclude_file = OPTS.exclude_op_list_file
     else:
         excluded_ops = []
         exclude_source = "none"
+        exclude_file = None
 
     excluded_set = set(excluded_ops)
     matched_count = sum(op in excluded_set for op in included_ops)
@@ -1350,10 +1369,13 @@ def get_ops_to_test():
         ),
         include_count=len(included_ops),
         include_source=include_source,
+        include_file=include_file,
         exclude_count=len(excluded_ops),
         exclude_source=exclude_source,
+        exclude_file=exclude_file,
         excluded_ops=excluded_ops,
         matched_count=matched_count,
+        selected_count=len(selected_ops),
     )
     return selected_ops
 
@@ -1604,14 +1626,29 @@ def main():
         CFG, "operator_selection", types.SimpleNamespace(explicit=False)
     )
     if selection.explicit:
-        pinfo(
-            "Operator selection ... "
-            f"include={selection.include_count} ({selection.include_source}), "
-            f"exclude={selection.exclude_count} ({selection.exclude_source}), "
-            f"matched={selection.matched_count}"
+        include_label = _selection_source_label(
+            selection.include_source, selection.include_file
         )
+        exclude_label = _selection_source_label(
+            selection.exclude_source, selection.exclude_file
+        )
+        pinfo("Operator selection ...")
+        pinfo(f"  Included ... {selection.include_count} ({include_label})")
+        pinfo(f"  Exclusions ... {selection.exclude_count} ({exclude_label})")
+        pinfo(f"  Matched exclusions ... {selection.matched_count}")
+        pinfo(f"  Selected ... {selection.selected_count}")
         if selection.exclude_count:
-            pinfo(f"Operator exclusions ... {', '.join(selection.excluded_ops)}")
+            exclusion_list_source = (
+                Path(selection.exclude_file).name
+                if selection.exclude_file is not None
+                else selection.exclude_source
+            )
+            pinfo(
+                f"Operator exclusions ... {exclusion_list_source} "
+                f"({_entry_count_label(selection.exclude_count)}):"
+            )
+            for excluded_op in selection.excluded_ops:
+                pinfo(f"  {excluded_op}")
     op_count = len(ops)
     if op_count == 0:
         pwarn("No operators to test. Please specify at least one operator.")

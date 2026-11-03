@@ -692,10 +692,13 @@ def test_cleanup_workers_interrupt_and_selection(tmp_path, monkeypatch):
     selection = run_tests.CFG.operator_selection
     assert selection.include_count == 2
     assert selection.include_source == "--ops"
+    assert selection.include_file is None
     assert selection.exclude_count == 2
     assert selection.exclude_source == "--exclude-ops"
+    assert selection.exclude_file is None
     assert selection.excluded_ops == ["y", "missing"]
     assert selection.matched_count == 1
+    assert selection.selected_count == 1
     assert selection.explicit is True
 
     missing = tmp_path / "missing"
@@ -711,8 +714,18 @@ def test_cleanup_workers_interrupt_and_selection(tmp_path, monkeypatch):
     assert run_tests.get_ops_to_test() == ["add"]
     selection = run_tests.CFG.operator_selection
     assert selection.include_count == 2
+    assert selection.include_file == listing
     assert selection.exclude_count == 2
+    assert selection.exclude_file == excluded
     assert selection.matched_count == 1
+    assert selection.selected_count == 1
+    assert run_tests._selection_source_label("--ops") == "--ops"
+    assert (
+        run_tests._selection_source_label("--op-list-file", listing)
+        == "--op-list-file: ops.txt"
+    )
+    assert run_tests._entry_count_label(1) == "1 entry"
+    assert run_tests._entry_count_label(2) == "2 entries"
 
     run_tests.OPTS = options(ops="add", exclude_op_list_file=missing)
     with pytest.raises(run_tests.OperatorSelectionError):

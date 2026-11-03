@@ -155,9 +155,31 @@ operators scheduled. It also records every parsed exclusion, including names
 that did not match the selected operators:
 
 ```text
-[INFO] Operator selection ... include=3 (--ops), exclude=2 (--exclude-ops), matched=1
-[INFO] Operator exclusions ... mul, unsupported_op
+[INFO] Operator selection ...
+[INFO]   Included ... 3 (--ops)
+[INFO]   Exclusions ... 2 (--exclude-ops)
+[INFO]   Matched exclusions ... 1
+[INFO]   Selected ... 2
+[INFO] Operator exclusions ... --exclude-ops (2 entries):
+[INFO]   mul
+[INFO]   unsupported_op
 [INFO] Testing 2 operators ...
+```
+
+For file-based lists, the source filename is included in the summary and list
+heading. Each parsed exclusion is printed on its own line for readability:
+
+```text
+[INFO] Operator selection ...
+[INFO]   Included ... 5 (--op-list-file: ops.txt)
+[INFO]   Exclusions ... 3 (--exclude-op-list-file: unsupported_ops.txt)
+[INFO]   Matched exclusions ... 2
+[INFO]   Selected ... 3
+[INFO] Operator exclusions ... unsupported_ops.txt (3 entries):
+[INFO]   add
+[INFO]   sum
+[INFO]   unsupported_op
+[INFO] Testing 3 operators ...
 ```
 
 ### Results and `summary.json`
@@ -278,7 +300,11 @@ time, and test completion.
 [INFO] Accelerator ... nvidia / H800
 [INFO] Driver ... 610.57.04
 [INFO] Runtime ... cuda 13.3.0
-[INFO] Operator selection ... include=3 (--ops), exclude=0 (none), matched=0
+[INFO] Operator selection ...
+[INFO]   Included ... 3 (--ops)
+[INFO]   Exclusions ... 0 (none)
+[INFO]   Matched exclusions ... 0
+[INFO]   Selected ... 3
 [INFO] Testing 3 operators ...
 [INFO] Only 3 operators requested, skipping mark collection
 [INFO] [18:48:59][GPU  0] accuracy  abs ...

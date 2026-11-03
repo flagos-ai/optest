@@ -115,12 +115,21 @@ class ProjectDirectoryTest(unittest.TestCase):
                         run_tests.main()
 
                 collect_marks.assert_called_once_with(["add"])
+                self.assertIn("Operator selection ...", output.getvalue())
                 self.assertIn(
-                    "Operator selection ... include=2 (--op-list-file), "
-                    "exclude=1 (--exclude-op-list-file), matched=1",
+                    "Included ... 2 (--op-list-file: ops.txt)", output.getvalue()
+                )
+                self.assertIn(
+                    "Exclusions ... 1 (--exclude-op-list-file: excluded.txt)",
                     output.getvalue(),
                 )
-                self.assertIn("Operator exclusions ... mul", output.getvalue())
+                self.assertIn("Matched exclusions ... 1", output.getvalue())
+                self.assertIn("Selected ... 1", output.getvalue())
+                self.assertIn(
+                    "Operator exclusions ... excluded.txt (1 entry):",
+                    output.getvalue(),
+                )
+                self.assertIn("[INFO]   mul", output.getvalue())
                 self.assertIn("Testing 1 operators", output.getvalue())
         finally:
             os.chdir(original_directory)

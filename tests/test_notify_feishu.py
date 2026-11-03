@@ -341,12 +341,12 @@ class NotifyFeishuRefTest(unittest.TestCase):
             script.index("curl -X POST") : script.index("--compressed")
         ]
         self.assertIn(
-            "--max-time 900 --retry 3 --retry-delay 15",
+            "--max-time 900 --retry 2 --retry-delay 15",
             curl_command,
         )
         self.assertIn("--fail-with-body", curl_command)
         self.assertNotIn("--retry-all-errors", curl_command)
-        retry_budget_seconds = 4 * 900 + 3 * 15
+        retry_budget_seconds = 3 * 900 + 2 * 15
         self.assertGreaterEqual(publish["timeout-minutes"] * 60, retry_budget_seconds)
 
 

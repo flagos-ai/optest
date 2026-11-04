@@ -46,7 +46,6 @@ on:
         type: choice
         default: FlagGems-vllm
         options:
-          - FlagGems
           - FlagGems-vllm
           - FlagGems-sglang
       ref:
@@ -64,7 +63,9 @@ jobs:
     runs-on: h800-flaggems-weekly
     timeout-minutes: 240
     container:
-      image: harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-vllm-nv-baseline-ncu-2026.3.1:0.24.0
+      # Per-repo image: each target repo ships its own NV stack (+ Nsight
+      # Compute for ncu). Add a branch here when onboarding a new repo.
+      image: ${{ github.event.inputs.repo == 'FlagGems-sglang' && 'harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-sglang-nv-baseline-ncu-2026.3.1:0.5.11' || 'harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-vllm-nv-baseline-ncu-2026.3.1:0.24.0' }}
       volumes:
         - /data:/data
         - /home:/home
@@ -81,7 +82,8 @@ jobs:
         --gpus all
     env:
       DEVICE: '7'
-      OUTPUT: 'op_vllm_perf_baseline.json'
+      # Per-repo output json name. Add a branch here when onboarding a new repo.
+      OUTPUT: ${{ github.event.inputs.repo == 'FlagGems-sglang' && 'op_sglang_perf_baseline.json' || 'op_vllm_perf_baseline.json' }}
       # Target repo providing baseline/ operator modules, as <org>/<repo>.
       TARGET_REPO: flagos-ai/${{ github.event.inputs.repo }}
       # Empty ref -> actions/checkout uses the target repo's default branch.

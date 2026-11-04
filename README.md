@@ -713,15 +713,16 @@ vendor-agnostic, so every vendor automatically discovers its own files on its
 own runner. For other repositories the step keeps the default stage selection
 and performs no probe.
 
-The probed paths use the matrix vendor name:
+The probed paths use the lowercased vendor name:
 
 ```text
 /data/flaggems/<vendor>/ops_include.txt   # include list -> --op-list-file
 /data/flaggems/<vendor>/ops_exclude.txt   # exclude list -> --exclude-op-list-file
 ```
 
-Here `<vendor>` is the backend vendor as spelled in the matrix, for example
-`Ascend`, `Cambricon`, or `Enflame`. Probe behavior:
+Here `<vendor>` is the matrix backend vendor lowercased to match the name
+reported by `flagos-gpu-check` and the runner directory layout, for example
+`ascend`, `cambricon`, or `enflame`. Probe behavior:
 
 - If `ops_include.txt` exists, the step appends `--op-list-file <path>` and the
   run tests exactly that list instead of `--stages all`.

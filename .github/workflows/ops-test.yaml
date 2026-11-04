@@ -753,9 +753,13 @@ jobs:
           OP_INCLUDE_FILE=""
           OP_EXCLUDE_FILE=""
           if [ "${{ needs.prepare.outputs.library_name }}" = "FlagGems" ]; then
-            OP_LIST_INCLUDE="/data/flaggems/${{ matrix.vendor }}/ops_include.txt"
-            OP_LIST_EXCLUDE="/data/flaggems/${{ matrix.vendor }}/ops_exclude.txt"
-            echo "[Run ops tests] FlagGems op-list probe for vendor '${{ matrix.vendor }}':"
+            # Runner directories use the lowercase vendor name reported by
+            # flagos-gpu-check (e.g. "cambricon"), while matrix.vendor is the
+            # capitalized backend label (e.g. "Cambricon"); lowercase to match.
+            VENDOR_DIR="$(printf '%s' "${{ matrix.vendor }}" | tr '[:upper:]' '[:lower:]')"
+            OP_LIST_INCLUDE="/data/flaggems/${VENDOR_DIR}/ops_include.txt"
+            OP_LIST_EXCLUDE="/data/flaggems/${VENDOR_DIR}/ops_exclude.txt"
+            echo "[Run ops tests] FlagGems op-list probe for vendor '${{ matrix.vendor }}' (dir '${VENDOR_DIR}'):"
             echo "[Run ops tests]   include candidate: ${OP_LIST_INCLUDE}"
             echo "[Run ops tests]   exclude candidate: ${OP_LIST_EXCLUDE}"
             if [ -f "${OP_LIST_INCLUDE}" ]; then

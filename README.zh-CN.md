@@ -650,15 +650,16 @@ uv pip install --python /path/to/active/python -e '.[test,nvidia]'
 算子列表。探测逻辑与厂商无关，因此每个厂商都会在自己的 runner 上自动发现自己的文件。
 对于其他仓库，该步骤保持默认的 stage 选择，不做任何探测。
 
-探测的路径使用 matrix 中的厂商名称：
+探测的路径使用小写的厂商名称：
 
 ```text
 /data/flaggems/<vendor>/ops_include.txt   # include 列表 -> --op-list-file
 /data/flaggems/<vendor>/ops_exclude.txt   # exclude 列表 -> --exclude-op-list-file
 ```
 
-其中 `<vendor>` 为 matrix 中拼写的后端厂商名，例如 `Ascend`、`Cambricon` 或
-`Enflame`。探测行为如下：
+其中 `<vendor>` 为 matrix 后端厂商名转为小写后的结果，以匹配 `flagos-gpu-check`
+上报的厂商名及 runner 的目录结构，例如 `ascend`、`cambricon` 或 `enflame`。
+探测行为如下：
 
 - 若存在 `ops_include.txt`，步骤追加 `--op-list-file <path>`，运行时精确测试该列表，
   而不再使用 `--stages all`。

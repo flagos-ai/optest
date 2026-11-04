@@ -61,7 +61,9 @@ The operator-test step in `.github/workflows/ops-test.yaml` probes runner-local
 operator lists when, and only when, the target repository is `FlagGems`. The
 probe is vendor-agnostic: it uses `${{ matrix.vendor }}` in the path, so each
 vendor discovers its own files on its own runner with no hardcoded per-vendor
-branch.
+branch. The matrix vendor is lowercased before probing to match the name
+reported by `flagos-gpu-check` and the runner directory layout (for example
+`cambricon`, not `Cambricon`).
 
 - Include list: `/data/flaggems/<vendor>/ops_include.txt` -> `--op-list-file`.
 - Exclude list: `/data/flaggems/<vendor>/ops_exclude.txt` ->

@@ -55,6 +55,28 @@ library and record its name, version, vendor, and device metadata under `env`
 in `summary.json`. Keep the repository configuration and probe list in sync so
 new libraries are represented in test results.
 
+## FlagGems Per-Vendor Operator Lists
+
+The operator-test step in `.github/workflows/ops-test.yaml` probes runner-local
+operator lists when, and only when, the target repository is `FlagGems`. The
+probe is vendor-agnostic: it uses `${{ matrix.vendor }}` in the path, so each
+vendor discovers its own files on its own runner with no hardcoded per-vendor
+branch.
+
+- Include list: `/data/flaggems/<vendor>/ops_include.txt` -> `--op-list-file`.
+- Exclude list: `/data/flaggems/<vendor>/ops_exclude.txt` ->
+  `--exclude-op-list-file`.
+- Each file is optional; a missing file is skipped and never fails the step.
+- A `ops` input other than `all` overrides the include probe, and an explicit
+  `exclude_ops` input overrides the probed exclude file, matching the scheduler
+  priority `--ops > --op-list-file` and `--exclude-ops > --exclude-op-list-file`.
+- The step logs the probed paths, hit/miss for each, and the final operator and
+  exclusion arguments for debugging.
+
+When changing this logic, keep it FlagGems-only so other repositories keep the
+default `--stages all` selection, and update the matching sections in
+`README.md` and `README.zh-CN.md`.
+
 ## Conventions
 
 - Preserve UTF-8 without BOM and Unix line endings.

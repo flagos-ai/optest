@@ -746,23 +746,48 @@ jobs:
           # does not auto-mask for values from the container/runner env.
           # printenv | grep -viE '^(https?_proxy|all_proxy)=' || true
           OPS="${TEST_OPS}"
+          # Per-vendor FlagGems op-list probe. Only FlagGems keeps runner-local
+          # include/exclude lists under /data/flaggems/<vendor>/; the probe is
+          # vendor-agnostic so every vendor finds its own files on its runner.
+          # Other repositories keep the default stage selection untouched.
+          OP_INCLUDE_FILE=""
+          OP_EXCLUDE_FILE=""
+          if [ "${{ needs.prepare.outputs.library_name }}" = "FlagGems" ]; then
+            OP_LIST_INCLUDE="/data/flaggems/${{ matrix.vendor }}/ops_include.txt"
+            OP_LIST_EXCLUDE="/data/flaggems/${{ matrix.vendor }}/ops_exclude.txt"
+            echo "[Run ops tests] FlagGems op-list probe for vendor '${{ matrix.vendor }}':"
+            echo "[Run ops tests]   include candidate: ${OP_LIST_INCLUDE}"
+            echo "[Run ops tests]   exclude candidate: ${OP_LIST_EXCLUDE}"
+            if [ -f "${OP_LIST_INCLUDE}" ]; then
+              OP_INCLUDE_FILE="${OP_LIST_INCLUDE}"
+              echo "[Run ops tests]   include file found -> append --op-list-file"
+            else
+              echo "[Run ops tests]   include file missing -> skipped"
+            fi
+            if [ -f "${OP_LIST_EXCLUDE}" ]; then
+              OP_EXCLUDE_FILE="${OP_LIST_EXCLUDE}"
+              echo "[Run ops tests]   exclude file found -> append --exclude-op-list-file"
+            else
+              echo "[Run ops tests]   exclude file missing -> skipped"
+            fi
+          fi
           if [ "${OPS}" = "all" ]; then
-            if [ "${{ matrix.vendor }}" = "Enflame" ] && [ "${{ needs.prepare.outputs.library_name }}" = "FlagGems" ]; then
-              OP_LIST_FILE="/data/flaggems/ops_list.txt"
-              if [ ! -f "${OP_LIST_FILE}" ]; then
-                echo "[Run ops tests] ERROR: Enflame op list file not found: ${OP_LIST_FILE}"
-                exit 1
-              fi
-              OP_ARGS="--op-list-file ${OP_LIST_FILE}"
+            if [ -n "${OP_INCLUDE_FILE}" ]; then
+              OP_ARGS="--op-list-file ${OP_INCLUDE_FILE}"
             else
               OP_ARGS="--stages all"
             fi
           else
             OP_ARGS="--ops ${OPS}"
           fi
+          # Exclusions: an explicit workflow_dispatch input wins over the probed
+          # file, matching the scheduler priority
+          # --exclude-ops > --exclude-op-list-file.
           EXCLUDE_OPS_ARG=""
           if [ -n "${TEST_EXCLUDE_OPS}" ]; then
             EXCLUDE_OPS_ARG="--exclude-ops ${TEST_EXCLUDE_OPS}"
+          elif [ -n "${OP_EXCLUDE_FILE}" ]; then
+            EXCLUDE_OPS_ARG="--exclude-op-list-file ${OP_EXCLUDE_FILE}"
           fi
           # Optional per-repo ops baseline (repos.yaml base_data); path is
           # relative to the target checkout. Empty = not passed.

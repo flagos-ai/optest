@@ -705,6 +705,41 @@ replace packages such as numpy. Target-specific package names and exclusion
 policy therefore stay in the target repository's `pyproject.toml`, not in
 `repos.yaml` or the workflow.
 
+### FlagGems per-vendor operator lists
+
+When the target repository is `FlagGems`, the operator-test step probes each
+runner for vendor-specific operator lists before scheduling. The probe is
+vendor-agnostic, so every vendor automatically discovers its own files on its
+own runner. For other repositories the step keeps the default stage selection
+and performs no probe.
+
+The probed paths use the matrix vendor name:
+
+```text
+/data/flaggems/<vendor>/ops_include.txt   # include list -> --op-list-file
+/data/flaggems/<vendor>/ops_exclude.txt   # exclude list -> --exclude-op-list-file
+```
+
+Here `<vendor>` is the backend vendor as spelled in the matrix, for example
+`Ascend`, `Cambricon`, or `Enflame`. Probe behavior:
+
+- If `ops_include.txt` exists, the step appends `--op-list-file <path>` and the
+  run tests exactly that list instead of `--stages all`.
+- If `ops_exclude.txt` exists, the step appends `--exclude-op-list-file <path>`.
+- If both exist, both arguments are appended.
+- A missing file is simply skipped; no file is required and the step never
+  fails because a list is absent.
+
+An explicit `exclude_ops` workflow input still wins over a probed exclude file,
+matching the scheduler priority `--exclude-ops > --exclude-op-list-file`.
+Likewise an explicit `ops` input (anything other than `all`) takes priority
+over the include probe.
+
+The step logs the probed candidate paths, whether each file was found, and the
+final operator and exclusion arguments, so a run log shows exactly which lists
+were loaded and took effect. Each vendor maintains its own lists on its runner;
+the workflow carries no hardcoded per-vendor path.
+
 ## Repository Layout
 
 ```text

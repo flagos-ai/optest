@@ -644,6 +644,36 @@ uv pip install --python /path/to/active/python -e '.[test,nvidia]'
 与 uv 的解析版本保持一致，可能替换 numpy 等软件包。因此，目标专用的软件包名称和排除策略
 应保留在目标仓库的 `pyproject.toml` 中，而不是放入 `repos.yaml` 或工作流。
 
+### FlagGems 各厂商算子列表
+
+当目标仓库为 `FlagGems` 时，算子测试步骤会在调度之前于各 runner 上探测厂商专用的
+算子列表。探测逻辑与厂商无关，因此每个厂商都会在自己的 runner 上自动发现自己的文件。
+对于其他仓库，该步骤保持默认的 stage 选择，不做任何探测。
+
+探测的路径使用 matrix 中的厂商名称：
+
+```text
+/data/flaggems/<vendor>/ops_include.txt   # include 列表 -> --op-list-file
+/data/flaggems/<vendor>/ops_exclude.txt   # exclude 列表 -> --exclude-op-list-file
+```
+
+其中 `<vendor>` 为 matrix 中拼写的后端厂商名，例如 `Ascend`、`Cambricon` 或
+`Enflame`。探测行为如下：
+
+- 若存在 `ops_include.txt`，步骤追加 `--op-list-file <path>`，运行时精确测试该列表，
+  而不再使用 `--stages all`。
+- 若存在 `ops_exclude.txt`，步骤追加 `--exclude-op-list-file <path>`。
+- 若两者都存在，则两个参数都追加。
+- 文件缺失时直接跳过；列表并非必需，步骤不会因缺少列表而失败。
+
+显式的 `exclude_ops` 工作流输入仍优先于探测到的 exclude 文件，与调度器优先级
+`--exclude-ops > --exclude-op-list-file` 一致。同理，显式的 `ops` 输入（非 `all`）
+优先于 include 探测。
+
+步骤会打印探测到的候选路径、各文件是否命中，以及最终的算子参数和排除参数，因此运行日志
+会清晰显示到底加载并生效了哪些列表。各厂商在自己的 runner 上维护各自的列表；工作流中不再
+含有任何硬编码的厂商路径。
+
 ## 仓库布局
 
 ```text

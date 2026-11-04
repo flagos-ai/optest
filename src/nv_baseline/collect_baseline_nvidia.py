@@ -641,7 +641,7 @@ def _collect_one_op_ops(
     return entry
 
 
-def _spawn_op_worker(op_name, report_dir, device, op_timeout):
+def _spawn_op_worker(op_name, report_dir, device, op_timeout, ops_dir=None):
     fd, tmp = tempfile.mkstemp(prefix=f"baseline_{op_name}_", suffix=".json")
     os.close(fd)
     cmd = [
@@ -654,6 +654,8 @@ def _spawn_op_worker(op_name, report_dir, device, op_timeout):
         "--report-dir",
         str(report_dir),
     ]
+    if ops_dir is not None:
+        cmd += ["--ops-dir", str(ops_dir)]
     if device is not None:
         cmd += ["--device", str(device)]
     env = dict(os.environ, BASELINE_WORKER="1")
@@ -746,7 +748,7 @@ def _check_one_op(op_module, device=None):
     return result
 
 
-def check_ops(device=None, only=None):
+def check_ops(device=None, only=None, ops_dir=None):
     """--check entry: call each operator once, print how it is called and ok/fail;
     collect nothing and write no JSON. Works with --ops/--device.
     Returns the number of failures (nonzero exit code if any)."""
@@ -756,7 +758,9 @@ def check_ops(device=None, only=None):
         raise RuntimeError("CUDA device required")
     device_name = torch.cuda.get_device_name()
 
-    ops_dir = OPS_DIR
+    if ops_dir is None:
+        ops_dir = OPS_DIR
+    ops_dir = Path(ops_dir)
     if not ops_dir.is_dir():
         raise RuntimeError(f"operator directory not found: {ops_dir}")
     ops_modules = _discover_ops(ops_dir)
@@ -800,6 +804,7 @@ def collect_baseline(
     op_timeout=1800,
     reference_chip=DEFAULT_REFERENCE_CHIP,
     task_exit_status=False,
+    ops_dir=None,
 ):
     if device is not None:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(device)
@@ -812,7 +817,9 @@ def collect_baseline(
     results = {}
     output_path = Path(output_path)
 
-    ops_dir = OPS_DIR
+    if ops_dir is None:
+        ops_dir = OPS_DIR
+    ops_dir = Path(ops_dir)
     if not ops_dir.is_dir():
         raise RuntimeError(f"operator directory not found: {ops_dir}")
     ops_modules = _discover_ops(ops_dir)
@@ -863,7 +870,9 @@ def collect_baseline(
         )
     failed = []
     for op_name, _ in ops_modules:
-        entry, ok = _spawn_op_worker(op_name, report_dir, device, op_timeout)
+        entry, ok = _spawn_op_worker(
+            op_name, report_dir, device, op_timeout, ops_dir=ops_dir
+        )
         if entry is not None:
             results[op_name] = entry
         if not ok:
@@ -914,6 +923,13 @@ if __name__ == "__main__":
         default=None,
         help="only collect the given operators (comma-separated, e.g. "
         "moe_sum,grouped_topk), default is all",
+    )
+    parser.add_argument(
+        "--ops-dir",
+        default=None,
+        help="directory of per-operator baseline modules to collect from "
+        "(e.g. a checked-out target repo's baseline/ dir). Defaults to the "
+        "baseline/ directory next to this collector package",
     )
     parser.add_argument(
         "--op-timeout",
@@ -970,7 +986,11 @@ if __name__ == "__main__":
         #     "--resume requires multiple card numbers in --device (multi-card collection)"
         # )
     if args.check:
-        n_fail = check_ops(device=args.device, only=_parse_name_list(args.ops))
+        n_fail = check_ops(
+            device=args.device,
+            only=_parse_name_list(args.ops),
+            ops_dir=args.ops_dir,
+        )
         sys.exit(1 if n_fail else 0)
     exit_code = collect_baseline(
         args.output,
@@ -981,6 +1001,7 @@ if __name__ == "__main__":
         op_timeout=args.op_timeout,
         reference_chip=args.reference_chip,
         task_exit_status=task_exit_status,
+        ops_dir=args.ops_dir,
     )
 
     sys.exit(exit_code or 0)

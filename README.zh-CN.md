@@ -657,9 +657,9 @@ uv pip install --python /path/to/active/python -e '.[test,nvidia]'
 /data/flaggems/<vendor>/ops_exclude.txt   # exclude 列表 -> --exclude-op-list-file
 ```
 
-其中 `<vendor>` 为 matrix 后端厂商名转为小写后的结果，以匹配 `flagos-gpu-check`
-上报的厂商名及 runner 的目录结构，例如 `ascend`、`cambricon` 或 `enflame`。
-探测行为如下：
+其中 `<vendor>` 即 `FLAGOS_GPU_VENDOR`，为 `flagos-gpu-check` 上报并在任务前序步骤
+导出的厂商名。它本身即为小写，且与 runner 的目录结构一致，例如 `ascend`、`cambricon`
+或 `enflame`。探测行为如下：
 
 - 若存在 `ops_include.txt`，步骤追加 `--op-list-file <path>`，运行时精确测试该列表，
   而不再使用 `--stages all`。

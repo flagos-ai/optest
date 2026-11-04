@@ -720,9 +720,10 @@ The probed paths use the lowercased vendor name:
 /data/flaggems/<vendor>/ops_exclude.txt   # exclude list -> --exclude-op-list-file
 ```
 
-Here `<vendor>` is the matrix backend vendor lowercased to match the name
-reported by `flagos-gpu-check` and the runner directory layout, for example
-`ascend`, `cambricon`, or `enflame`. Probe behavior:
+Here `<vendor>` is `FLAGOS_GPU_VENDOR`, the vendor reported by
+`flagos-gpu-check` and exported earlier in the job. It is already lowercase and
+matches the runner directory layout, for example `ascend`, `cambricon`, or
+`enflame`. Probe behavior:
 
 - If `ops_include.txt` exists, the step appends `--op-list-file <path>` and the
   run tests exactly that list instead of `--stages all`.

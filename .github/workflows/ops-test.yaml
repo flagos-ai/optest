@@ -753,26 +753,30 @@ jobs:
           OP_INCLUDE_FILE=""
           OP_EXCLUDE_FILE=""
           if [ "${{ needs.prepare.outputs.library_name }}" = "FlagGems" ]; then
-            # Runner directories use the lowercase vendor name reported by
-            # flagos-gpu-check (e.g. "cambricon"), while matrix.vendor is the
-            # capitalized backend label (e.g. "Cambricon"); lowercase to match.
-            VENDOR_DIR="$(printf '%s' "${{ matrix.vendor }}" | tr '[:upper:]' '[:lower:]')"
-            OP_LIST_INCLUDE="/data/flaggems/${VENDOR_DIR}/ops_include.txt"
-            OP_LIST_EXCLUDE="/data/flaggems/${VENDOR_DIR}/ops_exclude.txt"
-            echo "[Run ops tests] FlagGems op-list probe for vendor '${{ matrix.vendor }}' (dir '${VENDOR_DIR}'):"
-            echo "[Run ops tests]   include candidate: ${OP_LIST_INCLUDE}"
-            echo "[Run ops tests]   exclude candidate: ${OP_LIST_EXCLUDE}"
-            if [ -f "${OP_LIST_INCLUDE}" ]; then
-              OP_INCLUDE_FILE="${OP_LIST_INCLUDE}"
-              echo "[Run ops tests]   include file found -> append --op-list-file"
+            # Use the vendor name reported by flagos-gpu-check (FLAGOS_GPU_VENDOR,
+            # exported to GITHUB_ENV), which is already lowercase and matches the
+            # runner directory layout under /data/flaggems/<vendor>/.
+            VENDOR_DIR="${FLAGOS_GPU_VENDOR:-}"
+            if [ -z "${VENDOR_DIR}" ]; then
+              echo "[Run ops tests]   FLAGOS_GPU_VENDOR is empty; skipping op-list probe"
             else
-              echo "[Run ops tests]   include file missing -> skipped"
-            fi
-            if [ -f "${OP_LIST_EXCLUDE}" ]; then
-              OP_EXCLUDE_FILE="${OP_LIST_EXCLUDE}"
-              echo "[Run ops tests]   exclude file found -> append --exclude-op-list-file"
-            else
-              echo "[Run ops tests]   exclude file missing -> skipped"
+              OP_LIST_INCLUDE="/data/flaggems/${VENDOR_DIR}/ops_include.txt"
+              OP_LIST_EXCLUDE="/data/flaggems/${VENDOR_DIR}/ops_exclude.txt"
+              echo "[Run ops tests] FlagGems op-list probe for vendor '${VENDOR_DIR}':"
+              echo "[Run ops tests]   include candidate: ${OP_LIST_INCLUDE}"
+              echo "[Run ops tests]   exclude candidate: ${OP_LIST_EXCLUDE}"
+              if [ -f "${OP_LIST_INCLUDE}" ]; then
+                OP_INCLUDE_FILE="${OP_LIST_INCLUDE}"
+                echo "[Run ops tests]   include file found -> append --op-list-file"
+              else
+                echo "[Run ops tests]   include file missing -> skipped"
+              fi
+              if [ -f "${OP_LIST_EXCLUDE}" ]; then
+                OP_EXCLUDE_FILE="${OP_LIST_EXCLUDE}"
+                echo "[Run ops tests]   exclude file found -> append --exclude-op-list-file"
+              else
+                echo "[Run ops tests]   exclude file missing -> skipped"
+              fi
             fi
           fi
           if [ "${OPS}" = "all" ]; then

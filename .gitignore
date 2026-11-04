@@ -2,6 +2,8 @@ __pycache__/
 *.py[cod]
 
 .venv/
+# Keep environment-specific package indexes out of the shared repository.
+uv.lock
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/

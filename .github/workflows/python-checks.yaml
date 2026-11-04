@@ -33,13 +33,13 @@ jobs:
         run: uv python install 3.14
 
       - name: Install development dependencies
-        run: uv sync --locked --python 3.14 --group dev
+        run: uv sync --python 3.14 --group dev
 
       - name: Run pre-commit checks
-        run: uv run --locked --python 3.14 --group dev pre-commit run --all-files --show-diff-on-failure --color=always
+        run: uv run --no-sync pre-commit run --all-files --show-diff-on-failure --color=always
 
       - name: Build wheel and source distribution
-        run: uv run --locked --python 3.14 --group dev python -m build
+        run: uv run --no-sync python -m build
 
   test:
     name: Pytest (Python ${{ matrix.python-version }})
@@ -63,7 +63,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install test dependencies
-        run: uv sync --locked --python ${{ matrix.python-version }} --no-default-groups --group test
+        run: uv sync --python ${{ matrix.python-version }} --no-default-groups --group test
 
       - name: Run tests
-        run: uv run --locked --python ${{ matrix.python-version }} --no-default-groups --group test python -m pytest -q
+        run: uv run --no-sync python -m pytest -q

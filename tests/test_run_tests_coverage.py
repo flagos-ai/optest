@@ -817,6 +817,29 @@ def test_marks_parsing_and_collection(tmp_path, monkeypatch):
     assert "bench" in benchmark
 
 
+def test_collect_marks_only_collects_tests(tmp_path, monkeypatch):
+    ops = [f"op{index}" for index in range(11)]
+    commands = []
+
+    def call(command, **_kwargs):
+        commands.append(command)
+        target = Path(
+            next(
+                argument.split("=", 1)[1]
+                for argument in command
+                if argument.startswith("--collect-marks=")
+            )
+        )
+        target.write_text("[]\n", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(run_tests.subprocess, "call", call)
+    run_tests.collect_marks(ops)
+
+    assert [command[-1] for command in commands] == ["tests/", "benchmark/"]
+    assert all("--collect-only" in command for command in commands)
+
+
 def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     with (

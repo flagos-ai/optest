@@ -1454,6 +1454,7 @@ def collect_marks(ops):
             [
                 "pytest",
                 f"--collect-marks={acc_file}",
+                "--collect-only",
                 "--continue-on-collection-errors",
                 "tests/",
             ],
@@ -1479,6 +1480,7 @@ def collect_marks(ops):
             [
                 "pytest",
                 f"--collect-marks={bench_file}",
+                "--collect-only",
                 "--continue-on-collection-errors",
                 "benchmark/",
             ],

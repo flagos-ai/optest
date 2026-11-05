@@ -16,10 +16,13 @@
 #
 # A deliberately small, NVIDIA-only workflow: it checks out optest for the
 # collector, checks out the selected target repo into ./target for its
-# baseline/ operator modules, runs inside the H800 container image, and
+# baseline/ operator modules, runs inside that repo's NV container image, and
 # executes the baseline collector (src/nv_baseline/collect_baseline_nvidia.py)
 # on a single card against target/baseline. Unlike ops-test.yaml there is no
-# repo matrix, no multi-backend matrix, no reporting, upload, or Feishu steps.
+# multi-backend matrix, no reporting, upload, or Feishu steps.
+#
+# Per-repo image + output json name live in .github/configs/baseline_repos.yaml;
+# the `prepare` job resolves them so onboarding a repo is a config-only change.
 #
 # Example of the collector command this workflow runs:
 #   python3 src/nv_baseline/collect_baseline_nvidia.py \
@@ -48,6 +51,8 @@ on:
         options:
           - FlagGems-vllm
           - FlagGems-sglang
+          - FlagGems
+          - FlagTrain
       ref:
         description: 'Target repository ref. Empty = the repo default branch.'
         required: false
@@ -58,14 +63,59 @@ defaults:
     shell: bash
 
 jobs:
+  # Resolve the per-repo image and output file name from
+  # .github/configs/baseline_repos.yaml, so the collect job (and its container)
+  # can be fully config-driven.
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+      output: ${{ steps.resolve.outputs.output }}
+      target_repo: ${{ steps.resolve.outputs.target_repo }}
+    steps:
+      - name: Checkout optest workflow source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
+
+      - id: resolve
+        shell: python3 {0}
+        env:
+          REPO_INPUT: ${{ github.event.inputs.repo }}
+        run: |
+          import os
+          import yaml
+
+          with open('.github/configs/baseline_repos.yaml') as f:
+              cfg = yaml.safe_load(f)
+
+          repo = os.environ.get('REPO_INPUT', '').strip()
+          repos = cfg.get('repos', {})
+          if repo not in repos:
+              raise SystemExit(
+                  f"repo '{repo}' is not defined in baseline_repos.yaml "
+                  f"(known: {', '.join(repos)})"
+              )
+          rc = repos[repo]
+          image = rc.get('image', '').strip()
+          output = rc.get('output', '').strip()
+          if not image or not output:
+              raise SystemExit(f"repo '{repo}' must set both 'image' and 'output'")
+          org = cfg.get('org', 'flagos-ai')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f"image={image}\n")
+              out.write(f"output={output}\n")
+              out.write(f"target_repo={org}/{repo}\n")
+
   collect:
     name: nv-baseline (H800)
+    needs: prepare
     runs-on: h800-flaggems-weekly
-    timeout-minutes: 240
+    timeout-minutes: 720
     container:
-      # Per-repo image: each target repo ships its own NV stack (+ Nsight
-      # Compute for ncu). Add a branch here when onboarding a new repo.
-      image: ${{ github.event.inputs.repo == 'FlagGems-sglang' && 'harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-sglang-nv-baseline-ncu-2025.2.0:0.5.21' || 'harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-vllm-nv-baseline-ncu-2026.3.1:0.24.0' }}
+      image: ${{ needs.prepare.outputs.image }}
       volumes:
         - /data:/data
         - /home:/home
@@ -81,11 +131,12 @@ jobs:
         --shm-size=32G
         --gpus all
     env:
-      DEVICE: '7'
-      # Per-repo output json name. Add a branch here when onboarding a new repo.
-      OUTPUT: ${{ github.event.inputs.repo == 'FlagGems-sglang' && 'op_sglang_perf_baseline.json' || 'op_vllm_perf_baseline.json' }}
+      # Comma-separated cards dispatch to the multi-GPU scheduler (one operator
+      # consumer per card); progress is printed as operators complete.
+      DEVICE: '0,1,2,3,4,5,6,7'
+      OUTPUT: ${{ needs.prepare.outputs.output }}
       # Target repo providing baseline/ operator modules, as <org>/<repo>.
-      TARGET_REPO: flagos-ai/${{ github.event.inputs.repo }}
+      TARGET_REPO: ${{ needs.prepare.outputs.target_repo }}
       # Empty ref -> actions/checkout uses the target repo's default branch.
       TARGET_REF: ${{ github.event.inputs.ref }}
     steps:
@@ -170,6 +221,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: nv-baseline-${{ github.run_id }}
+          name: nv-baseline-${{ github.event.inputs.repo }}-${{ github.run_id }}
           path: ${{ env.OUTPUT }}
           if-no-files-found: warn

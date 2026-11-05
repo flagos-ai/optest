@@ -959,32 +959,29 @@ if __name__ == "__main__":
 
     multi_gpu = args.device is not None and "," in args.device
     if multi_gpu:
-        # 多卡采集暂不支持，先拦截返回。原多卡调度逻辑保留在下方注释中，
-        # 待后续恢复支持时再取消注释。
-        print("multi-card collection is not supported yet")
-        sys.exit(1)
-        # if args.check or worker:
-        #     parser.error(
-        #         "multi-card collection (multiple card numbers in --device) "
-        #         "cannot be combined with --check or worker mode"
-        #     )
-        # if args.op_timeout <= 0:
-        #     parser.error("--op-timeout must be positive")
-        # args.devices = args.device
-        # from collect_baseline_multi_gpu import collect
-        #
-        # try:
-        #     sys.exit(collect(args))
-        # except ValueError as exc:
-        #     parser.error(str(exc))
+        # Multi-card collection: a comma-separated --device dispatches to the
+        # dynamic multi-GPU scheduler, one operator consumer per card.
+        if args.check or worker:
+            parser.error(
+                "multi-card collection (multiple card numbers in --device) "
+                "cannot be combined with --check or worker mode"
+            )
+        if args.op_timeout <= 0:
+            parser.error("--op-timeout must be positive")
+        args.devices = args.device
+        try:
+            from .collect_baseline_multi_gpu import collect
+        except ImportError:
+            from collect_baseline_multi_gpu import collect
+
+        try:
+            sys.exit(collect(args))
+        except ValueError as exc:
+            parser.error(str(exc))
     if args.resume:
-        # --resume 仅服务于多卡采集，多卡暂不支持，这里一并拦截返回。
-        # 原校验逻辑保留在下方注释中，待恢复多卡支持时再取消注释。
-        print("--resume is not supported yet")
-        sys.exit(1)
-        # parser.error(
-        #     "--resume requires multiple card numbers in --device (multi-card collection)"
-        # )
+        parser.error(
+            "--resume requires multiple card numbers in --device (multi-card collection)"
+        )
     if args.check:
         n_fail = check_ops(
             device=args.device,

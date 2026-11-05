@@ -23,7 +23,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-# 算子固定取自 baseline/ 目录。
+# Directory of this collector package (holds collect_baseline_nvidia.py and
+# hardware_specs.json).
+PKG_DIR = Path(__file__).resolve().parent
+# Default per-operator module dir; overridable via --ops-dir (e.g. a checked-out
+# target repo's baseline/). Mirrors collect_baseline_nvidia.OPS_DIR.
 OPS_DIR = ROOT / "baseline"
 
 
@@ -60,24 +64,30 @@ def name_list(value):
     return {s for line in content.splitlines() if (s := line.split("#")[0].strip())}
 
 
-def select_operators(only=None):
-    if not OPS_DIR.is_dir():
-        raise ValueError(f"operator directory not found: {OPS_DIR}")
-    names = sorted(p.stem for p in OPS_DIR.glob("*.py") if p.stem != "__init__")
+def select_operators(only=None, ops_dir=OPS_DIR):
+    ops_dir = Path(ops_dir)
+    if not ops_dir.is_dir():
+        raise ValueError(f"operator directory not found: {ops_dir}")
+    names = sorted(p.stem for p in ops_dir.glob("*.py") if p.stem != "__init__")
     unknown = (only or set()) - set(names)
     if unknown:
         raise ValueError(f"unknown operator modules: {sorted(unknown)}")
     return [n for n in names if only is None or n in only]
 
 
-def source_digest():
+def source_digest(ops_dir=OPS_DIR):
+    ops_dir = Path(ops_dir)
     digest = hashlib.sha256()
-    paths = sorted(OPS_DIR.rglob("*.py"))
-    paths += sorted(OPS_DIR.rglob("*.json"))
-    paths += sorted((ROOT / "tools").glob("*.py"))
-    paths += [ROOT / "tools" / "hardware_specs.json"]
+    paths = sorted(ops_dir.rglob("*.py"))
+    paths += sorted(ops_dir.rglob("*.json"))
+    paths += sorted(PKG_DIR.glob("*.py"))
+    paths += [PKG_DIR / "hardware_specs.json"]
     for path in paths:
-        digest.update(str(path.relative_to(ROOT)).encode())
+        if not path.exists():
+            continue
+        # Paths may live outside ROOT (e.g. a target repo checkout); key the
+        # digest on the file name, which is stable across checkout locations.
+        digest.update(path.name.encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()
 
@@ -186,11 +196,35 @@ def merge_event(results, origins, name, record, data):
     results["_collection"]["tasks"][name] = record
 
 
+_TERMINAL_STATUSES = ("completed", "failed", "skipped", "profiling_incomplete")
+
+
+def _print_progress(tasks, total):
+    """Emit one overall-progress line: how many operators have reached a
+    terminal state out of the total, broken down by status, plus which
+    operators are still running on which card."""
+    counts = {s: 0 for s in _TERMINAL_STATUSES}
+    running = []
+    for name, rec in tasks.items():
+        status = rec.get("status")
+        if status in counts:
+            counts[status] += 1
+        elif status == "running":
+            running.append(f"{name}@cuda{rec.get('device')}")
+    done = sum(counts.values())
+    breakdown = " ".join(f"{s}={counts[s]}" for s in _TERMINAL_STATUSES)
+    line = f"[progress] {done}/{total} done ({breakdown})"
+    if running:
+        line += f" | running: {', '.join(sorted(running))}"
+    print(line, flush=True)
+
+
 def _collect(args, *, execute=run_process):
     if not math.isfinite(args.op_timeout) or args.op_timeout <= 0:
         raise ValueError("--op-timeout must be finite and positive")
+    ops_dir = Path(getattr(args, "ops_dir", None) or OPS_DIR)
     devices = parse_devices(args.devices)
-    names = select_operators(name_list(args.ops))
+    names = select_operators(name_list(args.ops), ops_dir=ops_dir)
     if not names:
         raise ValueError("no operators selected")
     output = Path(args.output).resolve()
@@ -200,7 +234,7 @@ def _collect(args, *, execute=run_process):
         "devices": devices,
         "op_timeout": args.op_timeout,
         "reference_chip": args.reference_chip,
-        "source_sha256": source_digest(),
+        "source_sha256": source_digest(ops_dir=ops_dir),
         "report_dir": (
             str(Path(args.report_dir).resolve())
             if getattr(args, "report_dir", None)
@@ -261,9 +295,11 @@ def _collect(args, *, execute=run_process):
             part = folder / "result.json"
             command = [
                 sys.executable,
-                str(ROOT / "tools" / "collect_baseline_nvidia.py"),
+                str(PKG_DIR / "collect_baseline_nvidia.py"),
                 "--ops",
                 name,
+                "--ops-dir",
+                str(ops_dir),
                 "--output",
                 str(part),
                 "--report-dir",
@@ -363,6 +399,10 @@ def _collect(args, *, execute=run_process):
                         continue
                     merge_event(results, origins, name, record, data)
                     atomic_json(output, results)
+                    # Print an overall progress line on each terminal event
+                    # (running events carry data=None and are skipped here).
+                    if data is not None:
+                        _print_progress(results["_collection"]["tasks"], len(names))
                 for future in futures:
                     future.result()
             except BaseException:
@@ -392,6 +432,13 @@ def main():
         "--report-dir", help="Optional report root (partitioned by output and operator)"
     )
     parser.add_argument("--ops")
+    parser.add_argument(
+        "--ops-dir",
+        default=None,
+        help="directory of per-operator baseline modules (e.g. a checked-out "
+        "target repo's baseline/). Defaults to the baseline/ dir next to this "
+        "collector package",
+    )
     parser.add_argument("--op-timeout", type=float, default=1800)
     parser.add_argument("--reference-chip", default="H800")
     parser.add_argument("--resume", action="store_true")

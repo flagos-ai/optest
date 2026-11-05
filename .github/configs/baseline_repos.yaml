@@ -1,0 +1,46 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Per-repo configuration for the nv-baseline workflow (NVIDIA-only baseline
+# collection), a sibling of repos.yaml. To onboard a new repo, add one entry
+# under `repos:`:
+#
+#   <RepoName>:
+#     image: <NV image that bundles the repo's stack + Nsight Compute (ncu)>
+#     output: op_<short>_perf_baseline.json   # produced baseline file name
+#
+# The `output` is the JSON file the collector writes and the workflow uploads.
+# `default_repo` selects the workflow input's default choice.
+
+org: flagos-ai
+default_repo: FlagGems-vllm
+
+repos:
+  FlagGems-vllm:
+    image: harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-vllm-nv-baseline-ncu-2026.3.1:0.24.0
+    output: op_vllm_perf_baseline.json
+
+  FlagGems-sglang:
+    image: harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-sglang-nv-baseline-ncu-2025.2.0:0.5.21
+    output: op_sglang_perf_baseline.json
+
+  # Images below are placeholders: replace with the real NV + ncu images once
+  # built, following the same naming as the entries above.
+  FlagGems:
+    image: harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-nv-baseline-ncu:latest
+    output: op_flaggems_perf_baseline.json
+
+  FlagTrain:
+    image: harbor.baai.ac.cn/flaggems/nv_baseline/flagtrain-nv-baseline-ncu:latest
+    output: op_flagtrain_perf_baseline.json

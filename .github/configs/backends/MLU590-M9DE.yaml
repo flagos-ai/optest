@@ -44,8 +44,7 @@ container_options: >-
   --device=/dev/cambricon_ctl
 
 # Extra environment variables injected only into the "Run ops tests" step
-test_env:
-  PIP_CACHE_DIR: /root/.cache/pip
+test_env: {}
 
 # Output base directory; ops-test appends the GitHub repository name
 output_base_dir: /data/github-outputs

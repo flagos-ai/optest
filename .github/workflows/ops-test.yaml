@@ -192,7 +192,30 @@ jobs:
               backend['base_data'] = base_data
               backend['ops_test_timeout'] = repo_timeout
               backend['op_cmd_timeout'] = op_cmd_timeout
-              backend['test_env'] = json.dumps(backend.get('test_env') or {})
+
+              # Persistent per-repo, per-vendor package cache on the runner's
+              # durable storage so large wheels (vllm, flashinfer-cubin, cupy,
+              # ...) are downloaded once and reused on later runs. The cache
+              # base follows this backend's output_base_dir, which is already
+              # durable on every runner (/data/github-outputs on all backends,
+              # /home/github-outputs on THead, which has no /data). uv keys its
+              # cache by package version + wheel URL/hash, so an unchanged
+              # version is a cache hit (no download) and a version bump (or a
+              # changed direct-URL requirement) re-downloads automatically.
+              # The venv (/flagos) and the cache live on different
+              # filesystems, so uv must copy instead of hardlink.
+              cache_env = dict(backend.get('test_env') or {})
+              vendor_key = str(backend.get('vendor', '')).strip().lower()
+              cache_base = str(backend.get('output_base_dir', '')).rstrip('/')
+              if cache_base and vendor_key:
+                  cache_env['UV_CACHE_DIR'] = (
+                      f"{cache_base}/uv-cache/{library_name}/{vendor_key}"
+                  )
+                  cache_env['PIP_CACHE_DIR'] = (
+                      f"{cache_base}/pip-cache/{library_name}/{vendor_key}"
+                  )
+                  cache_env.setdefault('UV_LINK_MODE', 'copy')
+              backend['test_env'] = json.dumps(cache_env)
               backend['test_gpus'] = str(backend.get('test_gpus') or '').strip()
               container_include.append(backend)
 

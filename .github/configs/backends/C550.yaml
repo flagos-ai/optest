@@ -49,7 +49,6 @@ container_options: >-
 
 # Extra environment variables injected only into the "Run ops tests" step
 test_env:
-  PIP_CACHE_DIR: /root/.cache/pip
   MACA_DIRECT_DISPATCH: 1
   FLAGTREE_BACKEND: metax
 

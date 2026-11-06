@@ -49,7 +49,6 @@ container_options: >-
 # Extra environment variables injected only into the "Run ops tests" step
 test_env:
   GEMS_VENDOR: amd
-  PIP_CACHE_DIR: /root/.cache/pip
 
 # Output base directory; ops-test appends the GitHub repository name
 output_base_dir: /data/github-outputs

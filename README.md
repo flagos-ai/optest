@@ -291,7 +291,7 @@ environment probing, operator accuracy/benchmark start and end, total elapsed
 time, and test completion.
 
 ```text
-[INFO] Project root ... /__w/optest/optest/target
+[INFO] Project root ... /__w/optest/optest/FlagGems
 [INFO] Test started at ... 2026-10-23 18:48:49
 [INFO] Command timeout ... 1800 seconds
 [INFO] PyTorch detected ... 2.11.0+cu130

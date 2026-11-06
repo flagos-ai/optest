@@ -129,6 +129,9 @@ repos:
   # =========================================================================
   FlagTrain:
     default_branch: main
+    # The operator suite needs the longer per-command timeout, matching
+    # FlagGems; 600s is too tight for FlagTrain's heavier operators.
+    op_cmd_timeout: 1800
     # FlagTrain uses Megatron-RL images and maintains vendor dependencies as
     # optional-dependency groups in its own pyproject.toml.
     # NVIDIA images provide the compatible torch/Triton stack. FlagTrain's

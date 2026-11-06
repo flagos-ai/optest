@@ -78,6 +78,42 @@ When changing this logic, keep it FlagGems-only so other repositories keep the
 default `--stages all` selection, and update the matching sections in
 `README.md` and `README.zh-CN.md`.
 
+## Persistent Package Cache
+
+The `build-matrix` step in `.github/workflows/ops-test.yaml` derives a durable,
+per-repository per-vendor package cache from each backend's `output_base_dir`
+and injects it into the job `test_env`. This keeps large vendor wheels (for
+example `vllm`, `flashinfer-cubin`) on the runner between runs so only version
+or URL changes trigger a re-download.
+
+- `UV_CACHE_DIR` = `<output_base_dir>/uv-cache/<repo>/<vendor>`.
+- `PIP_CACHE_DIR` = `<output_base_dir>/pip-cache/<repo>/<vendor>`.
+- `UV_LINK_MODE` defaults to `copy` so the cache and the venv can live on
+  different filesystems without hardlink failures.
+
+Notes for debugging and future changes:
+
+- `output_base_dir` comes from the backend config under
+  `.github/configs/backends/`. It is `/data/github-outputs` on most runners and
+  `/home/github-outputs` on THead/PPU-ZW810E, which lack `/data`.
+- The cache keys on package version plus wheel URL/hash. A cold (first) run
+  downloads and populates the cache; warm (later) runs reuse it and skip the
+  network. A version bump re-downloads only the changed package.
+- Both install steps ("Configure package index and install optest" and
+  "Install target repository and dependencies") run `uv pip install -v` and
+  print a `[Cache debug]` report: the `UV_CACHE_DIR`/`PIP_CACHE_DIR`/
+  `UV_LINK_MODE` values, the relevant `UV_`/`PIP_`/vendor env vars, and a
+  COLD/WARM state with the cache size and file count before and after install.
+  Grep the job log for `[Cache debug]` and `uv cache state:` to confirm a run
+  hit the local cache instead of the network.
+- Vendor-specific `test_env` variables in the backend config (for example
+  `FLAGTREE_BACKEND`, `MACA_DIRECT_DISPATCH`, `GEMS_VENDOR`, `XPU_EVENT_KL3_ENABLE`)
+  are preserved; the cache vars are merged on top without dropping them.
+
+When changing the cache derivation, keep it keyed on `output_base_dir` and
+`vendor` so every backend gets an isolated cache, and update the matching
+sections in `README.md` and `README.zh-CN.md`.
+
 ## Conventions
 
 - Preserve UTF-8 without BOM and Unix line endings.

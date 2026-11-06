@@ -25,6 +25,7 @@
 - [使用 uv 管理目标仓库依赖](#使用-uv-管理目标仓库依赖)
   - [配置测试与厂商 extra](#配置测试与厂商-extra)
   - [集中式工作流行为](#集中式工作流行为)
+  - [持久化软件包缓存](#持久化软件包缓存)
 - [仓库布局](#仓库布局)
   - [仓库配置](#仓库配置)
   - [后端配置](#后端配置)
@@ -643,6 +644,41 @@ uv pip install --python /path/to/active/python -e '.[test,nvidia]'
 `uv sync` 是有意为之：install 会保留预构建镜像中已满足的依赖，而 sync 会使整个环境
 与 uv 的解析版本保持一致，可能替换 numpy 等软件包。因此，目标专用的软件包名称和排除策略
 应保留在目标仓库的 `pyproject.toml` 中，而不是放入 `repos.yaml` 或工作流。
+
+### 持久化软件包缓存
+
+目标依赖包含体积很大的 wheel（例如 `vllm`、`flashinfer-cubin`、`cupy`，
+每个都有数百 MB）。为避免每次运行都重新下载，工作流会将 `uv` 和 `pip` 指向每个
+自托管 runner 持久存储上的缓存目录。`prepare` 作业按仓库和厂商推导出缓存位置，
+并将其注入矩阵的测试环境：
+
+```text
+UV_CACHE_DIR  = <output_base_dir>/uv-cache/<repo>/<vendor>
+PIP_CACHE_DIR = <output_base_dir>/pip-cache/<repo>/<vendor>
+UV_LINK_MODE  = copy
+```
+
+- `<output_base_dir>` 取自后端自身在 `backends/<NAME>.yaml` 中的持久输出路径：
+  每个后端默认为 `/data/github-outputs`；THead（`PPU-ZW810E`）没有 `/data`
+  挂载，因此为 `/home/github-outputs`。
+- `<repo>` 是目标仓库键（例如 `FlagGems-vllm`），`<vendor>` 是小写的
+  `FLAGOS_GPU_VENDOR`（例如 `nvidia`、`metax`、`ascend`）。因此每个仓库和厂商
+  都在自己的 runner 上保留互相隔离的缓存。
+- 需要设置 `UV_LINK_MODE=copy`，因为缓存目录与环境位于不同的文件系统；它同时也会
+  抑制 hardlink 回退的告警。
+
+跨运行的行为如下：
+
+- **首次运行（冷缓存）：** `uv` 从配置的软件包索引下载每个 wheel 一次，并存入
+  `UV_CACHE_DIR`。
+- **后续运行（热缓存）：** `uv` 直接复用已缓存的 wheel，不进行任何网络下载。
+  `uv` 以软件包版本以及 wheel 的 URL 或哈希作为缓存键，因此版本不变时始终命中缓存；
+  版本升级或直接 URL 依赖发生变化时，仅自动重新下载发生变化的 wheel，无需手动清理缓存。
+
+两个安装步骤都会使用 `uv pip install -v`，并在安装前后打印 `[Cache debug]` 报告
+（解析出的 `UV_CACHE_DIR`/`PIP_CACHE_DIR`/`UV_LINK_MODE`，以及缓存是 `COLD`
+还是 `WARM`，并附上其大小与文件数量），因此步骤日志能够清晰显示哪些 wheel 来自本地
+缓存复用、哪些是从网络下载的。
 
 ### FlagGems 各厂商算子列表
 

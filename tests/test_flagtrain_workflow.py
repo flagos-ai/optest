@@ -115,7 +115,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             if step.get("name") == "Install target repository and dependencies"
         )["run"]
         self.assertIn(
-            'uv pip install --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"',
+            'uv pip install -v --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"',
             install,
         )
 
@@ -163,6 +163,116 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     backend_names = {backend["name"] for backend in matrix["include"]}
                     self.assertNotIn("P800", backend_names)
                     self.assertNotIn("S60", backend_names)
+
+    def test_matrix_sets_persistent_per_repo_vendor_cache(self):
+        prepare_steps = self.workflow["jobs"]["prepare"]["steps"]
+        script = next(
+            step["run"] for step in prepare_steps if step.get("id") == "build-matrix"
+        )
+
+        # FlagGems-vllm enables backends across every vendor, including THead
+        # (PPU-ZW810E), which has no /data mount and therefore bases its durable
+        # output (and cache) under /home instead.
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "github-output"
+            environment = {
+                **os.environ,
+                "REPO_INPUT": "FlagGems-vllm",
+                "REF_INPUT": "",
+                "VENDORS_INPUT": "",
+                "OPS_INPUT": "",
+                "UPLOAD_LOG_INPUT": "",
+                "SEND_FEISHU_INPUT": "",
+                "GITHUB_OUTPUT": str(output),
+            }
+            completed = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                env=environment,
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            matrix_line = next(
+                line
+                for line in output.read_text(encoding="utf-8").splitlines()
+                if line.startswith("matrix_container=")
+            )
+            matrix = json.loads(matrix_line.removeprefix("matrix_container="))
+
+        self.assertTrue(matrix["include"])
+        saw_data_backend = False
+        saw_home_backend = False
+        for backend in matrix["include"]:
+            vendor_key = backend["vendor"].lower()
+            cache_base = backend["output_base_dir"].rstrip("/")
+            # test_env is serialized to a JSON string in the matrix payload.
+            test_env = json.loads(backend["test_env"])
+            self.assertEqual(
+                test_env["UV_CACHE_DIR"],
+                f"{cache_base}/uv-cache/FlagGems-vllm/{vendor_key}",
+            )
+            self.assertEqual(
+                test_env["PIP_CACHE_DIR"],
+                f"{cache_base}/pip-cache/FlagGems-vllm/{vendor_key}",
+            )
+            self.assertEqual(test_env["UV_LINK_MODE"], "copy")
+            if backend["name"] == "PPU-ZW810E":
+                saw_home_backend = True
+                self.assertTrue(test_env["UV_CACHE_DIR"].startswith("/home/"))
+            if cache_base.startswith("/data/"):
+                saw_data_backend = True
+
+        # Cover both the common /data path and the THead /home fallback.
+        self.assertTrue(saw_data_backend)
+        self.assertTrue(saw_home_backend)
+
+    def test_matrix_cache_env_preserves_existing_vendor_variables(self):
+        prepare_steps = self.workflow["jobs"]["prepare"]["steps"]
+        script = next(
+            step["run"] for step in prepare_steps if step.get("id") == "build-matrix"
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "github-output"
+            environment = {
+                **os.environ,
+                "REPO_INPUT": "FlagGems",
+                "REF_INPUT": "",
+                "VENDORS_INPUT": "Metax",
+                "OPS_INPUT": "",
+                "UPLOAD_LOG_INPUT": "",
+                "SEND_FEISHU_INPUT": "",
+                "GITHUB_OUTPUT": str(output),
+            }
+            completed = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                env=environment,
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            matrix_line = next(
+                line
+                for line in output.read_text(encoding="utf-8").splitlines()
+                if line.startswith("matrix_container=")
+            )
+            matrix = json.loads(matrix_line.removeprefix("matrix_container="))
+
+        # The Metax backend (C550) carries pre-existing test_env variables that
+        # must survive alongside the injected cache variables.
+        c550 = next(b for b in matrix["include"] if b["name"] == "C550")
+        test_env = json.loads(c550["test_env"])
+        self.assertEqual(test_env["FLAGTREE_BACKEND"], "metax")
+        self.assertEqual(test_env["MACA_DIRECT_DISPATCH"], 1)
+        self.assertIn("UV_CACHE_DIR", test_env)
+        self.assertIn("PIP_CACHE_DIR", test_env)
+        self.assertEqual(test_env["UV_LINK_MODE"], "copy")
 
     def test_per_repo_command_timeout_configuration(self):
         self.assertEqual(self.repos["defaults"]["op_cmd_timeout"], 600)
@@ -333,7 +443,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             "target repository uv installation: failed with https://pypi.tuna.tsinghua.edu.cn/simple",
             "target repository uv installation: selected https://mirrors.aliyun.com/pypi/simple/",
             "Starting: target repository uv installation via https://mirrors.aliyun.com/pypi/simple/",
-            "pip install --python",
+            "pip install -v --python",
             "--editable .[test,nvidia]",
             "Finished: target repository uv installation via https://mirrors.aliyun.com/pypi/simple/ (exit_code=0)",
         ]

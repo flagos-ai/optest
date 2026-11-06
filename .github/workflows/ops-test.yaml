@@ -16,7 +16,8 @@
 #
 # A single workflow tests ANY FlagOS library repo. The `repo` input selects a
 # repo defined in .github/configs/repos.yaml; the workflow checks out that repo
-# into ./target, installs it, and runs this repo's shared optest package against it.
+# into a per-repo directory ./<repo>, installs it, and runs this repo's shared
+# optest package against it.
 #
 # Per-repo config: .github/configs/repos.yaml  (org, default_branch, images,
 #                  backends, deps, base_data, timeout overrides)
@@ -267,19 +268,24 @@ jobs:
       REPOSITORY_NAME: ${{ needs.prepare.outputs.library_name }}
       TARGET_REPOSITORY: ${{ needs.prepare.outputs.target_repo }}
       TARGET_REF: ${{ needs.prepare.outputs.checkout_ref }}
+      # Per-repo checkout directory name for the library under test. Using the
+      # repo/library name (instead of a fixed "target") keeps each repo's
+      # working directory distinct and makes logs self-descriptive.
+      TARGET_DIR: ${{ needs.prepare.outputs.library_name }}
       TEST_OPS: ${{ needs.prepare.outputs.ops }}
       TEST_EXCLUDE_OPS: ${{ needs.prepare.outputs.exclude_ops }}
       OUTPUT_DIR: ${{ matrix.output_base_dir }}/${{ needs.prepare.outputs.library_name }}/${{ needs.prepare.outputs.date }}/logs_results_${{ needs.prepare.outputs.date }}
     steps:
       # Checkout optest itself (this repo) at workspace root: provides src/
       # and configs. `branch` input picks the optest branch; empty -> the
-      # dispatched ref. The target library is checked out separately into ./target.
+      # dispatched ref. The target library is checked out separately into the
+      # per-repo directory ./<repo> (TARGET_DIR).
       - name: Checkout optest source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
-      # Checkout the TARGET repo (the library under test) into ./target, with
+      # Checkout the TARGET repo (the library under test) into ./<repo>, with
       # the same 3-attempt retry the previous single-repo workflow used.
       - name: Checkout target repository (attempt 1)
         id: checkout-attempt-1
@@ -287,7 +293,7 @@ jobs:
         with:
           repository: ${{ needs.prepare.outputs.target_repo }}
           ref: ${{ needs.prepare.outputs.checkout_ref }}
-          path: target
+          path: ${{ needs.prepare.outputs.library_name }}
         continue-on-error: true
       - name: Wait before target checkout retry 2
         id: sleep-1
@@ -301,7 +307,7 @@ jobs:
         with:
           repository: ${{ needs.prepare.outputs.target_repo }}
           ref: ${{ needs.prepare.outputs.checkout_ref }}
-          path: target
+          path: ${{ needs.prepare.outputs.library_name }}
         continue-on-error: true
       - name: Wait before target checkout retry 3
         id: sleep-2
@@ -315,14 +321,14 @@ jobs:
         with:
           repository: ${{ needs.prepare.outputs.target_repo }}
           ref: ${{ needs.prepare.outputs.checkout_ref }}
-          path: target
+          path: ${{ needs.prepare.outputs.library_name }}
 
       - name: Fix git safe directory
         run: |
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
-          git config --global --add safe.directory "${GITHUB_WORKSPACE}/target"
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}/${TARGET_DIR}"
 
-      # Resolve the TARGET repo's actual commit from the ./target checkout.
+      # Resolve the TARGET repo's actual commit from the ./<repo> checkout.
       # The GitHub context (GITHUB_SHA/GITHUB_REF_NAME) describes the optest run,
       # not the library under test, so the Feishu notification must read the
       # commit straight from the checked-out target instead.
@@ -332,8 +338,8 @@ jobs:
         continue-on-error: true
         run: |
           SHA=""
-          if [ -d "${GITHUB_WORKSPACE}/target/.git" ]; then
-            SHA="$(git -C "${GITHUB_WORKSPACE}/target" rev-parse HEAD 2>/dev/null || echo '')"
+          if [ -d "${GITHUB_WORKSPACE}/${TARGET_DIR}/.git" ]; then
+            SHA="$(git -C "${GITHUB_WORKSPACE}/${TARGET_DIR}" rev-parse HEAD 2>/dev/null || echo '')"
           fi
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
 
@@ -724,7 +730,7 @@ jobs:
             echo "[Install dependencies] No explicit backend dependencies configured; skipping."
           fi
 
-          TARGET_METADATA=$("${ACTIVE_PYTHON}" - "${FLAGOS_GPU_VENDOR:-}" <<'PY'
+          TARGET_METADATA=$("${ACTIVE_PYTHON}" - "${FLAGOS_GPU_VENDOR:-}" "${TARGET_DIR}" <<'PY'
           import json
           import sys
 
@@ -733,9 +739,10 @@ jobs:
           except ModuleNotFoundError:
               import tomli as tomllib
 
-          with open("target/pyproject.toml", "rb") as pyproject_file:
-              pyproject = tomllib.load(pyproject_file)
           vendor = sys.argv[1]
+          target_dir = sys.argv[2]
+          with open(f"{target_dir}/pyproject.toml", "rb") as pyproject_file:
+              pyproject = tomllib.load(pyproject_file)
           extras = pyproject.get("project", {}).get("optional-dependencies", {})
           print(json.dumps({
               "test_exists": "test" in extras,
@@ -753,7 +760,7 @@ jobs:
           HAS_VENDOR=$(printf '%s' "${TARGET_METADATA}" | "${ACTIVE_PYTHON}" -c 'import json, sys; print("true" if json.load(sys.stdin)["vendor_exists"] else "false")')
           EXCLUDED_DEPENDENCIES=$(printf '%s' "${TARGET_METADATA}" | "${ACTIVE_PYTHON}" -c 'import json, sys; print(", ".join(json.load(sys.stdin)["excluded_dependencies"]) or "<none>")')
 
-          echo "[Install dependencies] Target project source: ./target/pyproject.toml"
+          echo "[Install dependencies] Target project source: ./${TARGET_DIR}/pyproject.toml"
           echo "[Install dependencies] Test extra source: [project.optional-dependencies].test"
           echo "[Install dependencies] Detected test extra: ${HAS_TEST}"
           echo "[Install dependencies] Detected GPU vendor from flagos-gpu-check: ${FLAGOS_GPU_VENDOR:-<unavailable>}"
@@ -781,7 +788,7 @@ jobs:
           echo "[Install dependencies] Target install specification: ${TARGET_PROJECT_SPEC}"
           echo "[Install dependencies] Purpose: incrementally install the target repository without upgrading already-satisfied packages"
           (
-            cd target
+            cd "${TARGET_DIR}"
             # -v makes uv log per-package cache hits vs network downloads, so
             # the step log clearly shows which wheels were reused from the
             # persistent cache and which were downloaded this run.
@@ -796,7 +803,7 @@ jobs:
       # "ops" input) runs every operator stage via --stages all; otherwise it
       # runs only the selected operators via --ops <list>.
       - name: Run ops tests
-        working-directory: target
+        working-directory: ${{ needs.prepare.outputs.library_name }}
         # Per-repo step timeout from repos.yaml (ops_test_timeout_minutes),
         # resolved in prepare. This is the real test-duration limit; the
         # job-level timeout is just a large hard cap (see note above).

@@ -125,7 +125,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             step["run"] for step in prepare_steps if step.get("id") == "build-matrix"
         )
 
-        for repo, expected_timeout in (("FlagTrain", 600), ("FlagGems", 1800)):
+        for repo, expected_timeout in (("FlagTrain", 1800), ("FlagGems", 1800)):
             with self.subTest(repo=repo), tempfile.TemporaryDirectory() as directory:
                 output = Path(directory) / "github-output"
                 environment = {
@@ -277,8 +277,8 @@ class FlagTrainWorkflowTest(unittest.TestCase):
     def test_per_repo_command_timeout_configuration(self):
         self.assertEqual(self.repos["defaults"]["op_cmd_timeout"], 600)
         self.assertEqual(self.repos["repos"]["FlagGems"]["op_cmd_timeout"], 1800)
+        self.assertEqual(self.repos["repos"]["FlagTrain"]["op_cmd_timeout"], 1800)
         for repo in (
-            "FlagTrain",
             "FlagGems-vllm",
             "FlagGems-sglang",
             "FlagAttention",
@@ -357,9 +357,11 @@ class FlagTrainWorkflowTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            target = root / "target"
-            target.mkdir()
-            (target / "pyproject.toml").write_text(
+            # The target repo is now checked out into a per-repo directory
+            # named after the library (TARGET_DIR), not a fixed "target".
+            flagtrain_dir = root / "FlagTrain"
+            flagtrain_dir.mkdir()
+            (flagtrain_dir / "pyproject.toml").write_text(
                 "[project]\n"
                 'name = "target"\n'
                 'version = "0.0.0"\n'
@@ -400,11 +402,16 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 env={
                     **common_environment,
                     "REPOSITORY_NAME": "FlagTrain",
+                    "TARGET_DIR": "FlagTrain",
                 },
                 text=True,
             )
 
-            (target / "pyproject.toml").write_text(
+            # Second run uses REPOSITORY_NAME/TARGET_DIR=FlagGems, so the target
+            # library lives in its own ./FlagGems directory.
+            flaggems_dir = root / "FlagGems"
+            flaggems_dir.mkdir()
+            (flaggems_dir / "pyproject.toml").write_text(
                 "[project]\n"
                 'name = "target"\n'
                 'version = "0.0.0"\n'
@@ -420,6 +427,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 env={
                     **common_environment,
                     "REPOSITORY_NAME": "FlagGems",
+                    "TARGET_DIR": "FlagGems",
                 },
                 text=True,
             )
@@ -431,7 +439,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             "repos.FlagTrain.deps.default + repos.FlagTrain.deps.H800",
             "Detected explicit backend dependencies: <empty>",
             "No explicit backend dependencies configured; skipping.",
-            "Target project source: ./target/pyproject.toml",
+            "Target project source: ./FlagTrain/pyproject.toml",
             "Detected test extra: true",
             "Detected GPU vendor from flagos-gpu-check: nvidia",
             "[project.optional-dependencies].nvidia",

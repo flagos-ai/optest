@@ -272,7 +272,7 @@ logs_results_YYYYMMDD_HHMM/
 重要的生命周期包括测试开始、环境探测、算子精度/基准测试开始与结束、总耗时和测试完成。
 
 ```text
-[INFO] Project root ... /__w/optest/optest/target
+[INFO] Project root ... /__w/optest/optest/FlagGems
 [INFO] Test started at ... 2026-10-23 18:48:49
 [INFO] Command timeout ... 1800 seconds
 [INFO] PyTorch detected ... 2.11.0+cu130

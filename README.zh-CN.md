@@ -649,21 +649,21 @@ uv pip install --python /path/to/active/python -e '.[test,nvidia]'
 
 目标依赖包含体积很大的 wheel（例如 `vllm`、`flashinfer-cubin`、`cupy`，
 每个都有数百 MB）。为避免每次运行都重新下载，工作流会将 `uv` 和 `pip` 指向每个
-自托管 runner 持久存储上的缓存目录。`prepare` 作业按仓库和厂商推导出缓存位置，
+自托管 runner 持久存储上的缓存目录。`prepare` 作业按厂商推导出缓存位置，
 并将其注入矩阵的测试环境：
 
 ```text
-UV_CACHE_DIR  = <output_base_dir>/uv-cache/<repo>/<vendor>
-PIP_CACHE_DIR = <output_base_dir>/pip-cache/<repo>/<vendor>
+UV_CACHE_DIR  = <output_base_dir>/uv-cache/<vendor>
+PIP_CACHE_DIR = <output_base_dir>/pip-cache/<vendor>
 UV_LINK_MODE  = copy
 ```
 
 - `<output_base_dir>` 取自后端自身在 `backends/<NAME>.yaml` 中的持久输出路径：
   每个后端默认为 `/data/github-outputs`；THead（`PPU-ZW810E`）没有 `/data`
   挂载，因此为 `/home/github-outputs`。
-- `<repo>` 是目标仓库键（例如 `FlagGems-vllm`），`<vendor>` 是小写的
-  `FLAGOS_GPU_VENDOR`（例如 `nvidia`、`metax`、`ascend`）。因此每个仓库和厂商
-  都在自己的 runner 上保留互相隔离的缓存。
+- `<vendor>` 是小写的 `FLAGOS_GPU_VENDOR`（例如 `nvidia`、`metax`、`ascend`）。
+  缓存仅按厂商区分，不按仓库区分：同一厂商上的不同目标仓库安装的厂商软件包几乎相同，
+  因此单一的按厂商缓存可让它们共享同一套 wheel，最大化复用。
 - 需要设置 `UV_LINK_MODE=copy`，因为缓存目录与环境位于不同的文件系统；它同时也会
   抑制 hardlink 回退的告警。
 

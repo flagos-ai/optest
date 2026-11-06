@@ -712,22 +712,22 @@ Target dependencies include large wheels (for example `vllm`,
 `flashinfer-cubin`, and `cupy`, hundreds of MB each). To avoid re-downloading
 them on every run, the workflow points `uv` and `pip` at a persistent cache on
 each self-hosted runner's durable storage. The `prepare` job derives the cache
-location per repository and per vendor and injects it into the matrix test
-environment:
+location per vendor and injects it into the matrix test environment:
 
 ```text
-UV_CACHE_DIR  = <output_base_dir>/uv-cache/<repo>/<vendor>
-PIP_CACHE_DIR = <output_base_dir>/pip-cache/<repo>/<vendor>
+UV_CACHE_DIR  = <output_base_dir>/uv-cache/<vendor>
+PIP_CACHE_DIR = <output_base_dir>/pip-cache/<vendor>
 UV_LINK_MODE  = copy
 ```
 
 - `<output_base_dir>` is the backend's own durable output path from
   `backends/<NAME>.yaml`: `/data/github-outputs` on every backend, and
   `/home/github-outputs` on THead (`PPU-ZW810E`), which has no `/data` mount.
-- `<repo>` is the target repository key (for example `FlagGems-vllm`) and
-  `<vendor>` is the lowercased `FLAGOS_GPU_VENDOR` (for example `nvidia`,
-  `metax`, `ascend`). Each repo and vendor therefore keeps an isolated cache on
-  its own runner.
+- `<vendor>` is the lowercased `FLAGOS_GPU_VENDOR` (for example `nvidia`,
+  `metax`, `ascend`). The cache is keyed by vendor only, not by repository:
+  different target repositories on the same vendor install nearly identical
+  vendor packages, so a single per-vendor cache lets them all share one set of
+  wheels and maximizes reuse.
 - `UV_LINK_MODE=copy` is required because the cache and the environment live on
   different filesystems; it also silences the hardlink-fallback warning.
 

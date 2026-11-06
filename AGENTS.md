@@ -81,13 +81,15 @@ default `--stages all` selection, and update the matching sections in
 ## Persistent Package Cache
 
 The `build-matrix` step in `.github/workflows/ops-test.yaml` derives a durable,
-per-repository per-vendor package cache from each backend's `output_base_dir`
-and injects it into the job `test_env`. This keeps large vendor wheels (for
-example `vllm`, `flashinfer-cubin`) on the runner between runs so only version
-or URL changes trigger a re-download.
+per-vendor package cache from each backend's `output_base_dir` and injects it
+into the job `test_env`. This keeps large vendor wheels (for example `vllm`,
+`flashinfer-cubin`) on the runner between runs so only version or URL changes
+trigger a re-download. The cache is keyed by vendor only, not by repository:
+different target repositories on the same vendor install nearly identical vendor
+packages, so a single per-vendor cache lets them share one set of wheels.
 
-- `UV_CACHE_DIR` = `<output_base_dir>/uv-cache/<repo>/<vendor>`.
-- `PIP_CACHE_DIR` = `<output_base_dir>/pip-cache/<repo>/<vendor>`.
+- `UV_CACHE_DIR` = `<output_base_dir>/uv-cache/<vendor>`.
+- `PIP_CACHE_DIR` = `<output_base_dir>/pip-cache/<vendor>`.
 - `UV_LINK_MODE` defaults to `copy` so the cache and the venv can live on
   different filesystems without hardlink failures.
 
@@ -111,8 +113,8 @@ Notes for debugging and future changes:
   are preserved; the cache vars are merged on top without dropping them.
 
 When changing the cache derivation, keep it keyed on `output_base_dir` and
-`vendor` so every backend gets an isolated cache, and update the matching
-sections in `README.md` and `README.zh-CN.md`.
+`vendor` (not repository) so vendors share one cache across repositories, and
+update the matching sections in `README.md` and `README.zh-CN.md`.
 
 ## Conventions
 

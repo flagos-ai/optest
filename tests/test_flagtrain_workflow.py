@@ -164,7 +164,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     self.assertNotIn("P800", backend_names)
                     self.assertNotIn("S60", backend_names)
 
-    def test_matrix_sets_persistent_per_repo_vendor_cache(self):
+    def test_matrix_sets_persistent_per_vendor_cache(self):
         prepare_steps = self.workflow["jobs"]["prepare"]["steps"]
         script = next(
             step["run"] for step in prepare_steps if step.get("id") == "build-matrix"
@@ -212,11 +212,11 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             test_env = json.loads(backend["test_env"])
             self.assertEqual(
                 test_env["UV_CACHE_DIR"],
-                f"{cache_base}/uv-cache/FlagGems-vllm/{vendor_key}",
+                f"{cache_base}/uv-cache/{vendor_key}",
             )
             self.assertEqual(
                 test_env["PIP_CACHE_DIR"],
-                f"{cache_base}/pip-cache/FlagGems-vllm/{vendor_key}",
+                f"{cache_base}/pip-cache/{vendor_key}",
             )
             self.assertEqual(test_env["UV_LINK_MODE"], "copy")
             if backend["name"] == "PPU-ZW810E":

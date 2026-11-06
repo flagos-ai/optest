@@ -412,6 +412,32 @@ jobs:
         env: ${{ fromJSON(matrix.test_env) }}
         shell: bash --login -e -o pipefail {0}
         run: |
+          # Package cache debug: print the resolved cache environment (set per
+          # repo+vendor by the prepare job from matrix.test_env) and whether the
+          # cache is cold or warm, so download vs cache-hit behavior is obvious.
+          print_cache_debug() {
+            local phase="$1"
+            echo "[Cache debug] ===== ${phase}: package cache configuration ====="
+            echo "[Cache debug] UV_CACHE_DIR=${UV_CACHE_DIR:-<unset>}"
+            echo "[Cache debug] PIP_CACHE_DIR=${PIP_CACHE_DIR:-<unset>}"
+            echo "[Cache debug] UV_LINK_MODE=${UV_LINK_MODE:-<unset>}"
+            echo "[Cache debug] Cache/vendor test_env variables:"
+            env | grep -E '^(UV_|PIP_|FLAGTREE_|GEMS_|XPU_|MACA_)' | sort \
+              | sed 's/^/[Cache debug]   /' || echo "[Cache debug]   <none>"
+            if [ -n "${UV_CACHE_DIR:-}" ]; then
+              if [ -d "${UV_CACHE_DIR}" ] && [ -n "$(ls -A "${UV_CACHE_DIR}" 2>/dev/null)" ]; then
+                echo "[Cache debug] uv cache state: WARM (reuse expected; downloads skipped on hit)"
+                echo "[Cache debug] uv cache path: ${UV_CACHE_DIR}"
+                echo "[Cache debug] uv cache size: $(du -sh "${UV_CACHE_DIR}" 2>/dev/null | cut -f1 || echo '?')"
+                echo "[Cache debug] uv cache files: $(find "${UV_CACHE_DIR}" -type f 2>/dev/null | wc -l | tr -d ' ')"
+              else
+                echo "[Cache debug] uv cache state: COLD (empty/absent -> wheels download from the network this run)"
+                echo "[Cache debug] uv cache path: ${UV_CACHE_DIR}"
+              fi
+            fi
+          }
+          print_cache_debug "optest install: before"
+
           run_logged_command() {
             local description="$1"
             shift
@@ -497,10 +523,12 @@ jobs:
           # packaged GPU-check command before target dependencies are resolved.
           echo "[Install dependencies] Purpose: install the optest source that provides the test and report commands"
           echo "[Install dependencies] Source: optest checkout pyproject.toml"
+          # -v makes uv log per-package cache hits vs network downloads.
           run_with_index_fallback \
             uv \
             "optest source installation" \
-            uv pip install --python "${ACTIVE_PYTHON}" .
+            uv pip install -v --python "${ACTIVE_PYTHON}" .
+          print_cache_debug "optest install: after"
 
       - name: Check GPU availability
         shell: bash --login -e -o pipefail {0}
@@ -594,6 +622,32 @@ jobs:
         env: ${{ fromJSON(matrix.test_env) }}
         shell: bash --login -e -o pipefail {0}
         run: |
+          # Package cache debug: print the resolved cache environment (set per
+          # repo+vendor by the prepare job from matrix.test_env) and whether the
+          # cache is cold or warm, so download vs cache-hit behavior is obvious.
+          print_cache_debug() {
+            local phase="$1"
+            echo "[Cache debug] ===== ${phase}: package cache configuration ====="
+            echo "[Cache debug] UV_CACHE_DIR=${UV_CACHE_DIR:-<unset>}"
+            echo "[Cache debug] PIP_CACHE_DIR=${PIP_CACHE_DIR:-<unset>}"
+            echo "[Cache debug] UV_LINK_MODE=${UV_LINK_MODE:-<unset>}"
+            echo "[Cache debug] Cache/vendor test_env variables:"
+            env | grep -E '^(UV_|PIP_|FLAGTREE_|GEMS_|XPU_|MACA_)' | sort \
+              | sed 's/^/[Cache debug]   /' || echo "[Cache debug]   <none>"
+            if [ -n "${UV_CACHE_DIR:-}" ]; then
+              if [ -d "${UV_CACHE_DIR}" ] && [ -n "$(ls -A "${UV_CACHE_DIR}" 2>/dev/null)" ]; then
+                echo "[Cache debug] uv cache state: WARM (reuse expected; downloads skipped on hit)"
+                echo "[Cache debug] uv cache path: ${UV_CACHE_DIR}"
+                echo "[Cache debug] uv cache size: $(du -sh "${UV_CACHE_DIR}" 2>/dev/null | cut -f1 || echo '?')"
+                echo "[Cache debug] uv cache files: $(find "${UV_CACHE_DIR}" -type f 2>/dev/null | wc -l | tr -d ' ')"
+              else
+                echo "[Cache debug] uv cache state: COLD (empty/absent -> wheels download from the network this run)"
+                echo "[Cache debug] uv cache path: ${UV_CACHE_DIR}"
+              fi
+            fi
+          }
+          print_cache_debug "target install: before"
+
           run_logged_command() {
             local description="$1"
             shift
@@ -665,7 +719,7 @@ jobs:
             echo "[Install dependencies] Purpose: install configured backend dependencies"
             run_uv_with_index_fallback \
               "explicit backend dependency installation" \
-              uv pip install --python "${ACTIVE_PYTHON}" "${EXTRA_DEPS_ARGS[@]}"
+              uv pip install -v --python "${ACTIVE_PYTHON}" "${EXTRA_DEPS_ARGS[@]}"
           else
             echo "[Install dependencies] No explicit backend dependencies configured; skipping."
           fi
@@ -728,10 +782,14 @@ jobs:
           echo "[Install dependencies] Purpose: incrementally install the target repository without upgrading already-satisfied packages"
           (
             cd target
+            # -v makes uv log per-package cache hits vs network downloads, so
+            # the step log clearly shows which wheels were reused from the
+            # persistent cache and which were downloaded this run.
             run_uv_with_index_fallback \
               "target repository uv installation" \
-              uv pip install --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"
+              uv pip install -v --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"
           )
+          print_cache_debug "target install: after"
 
       # Run ops tests.
       # OPS is provided by the prepare job: "all" (scheduled runs or an empty

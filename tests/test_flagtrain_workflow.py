@@ -247,9 +247,11 @@ class FlagTrainWorkflowTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            target = root / "target"
-            target.mkdir()
-            (target / "pyproject.toml").write_text(
+            # The target repo is now checked out into a per-repo directory
+            # named after the library (TARGET_DIR), not a fixed "target".
+            flagtrain_dir = root / "FlagTrain"
+            flagtrain_dir.mkdir()
+            (flagtrain_dir / "pyproject.toml").write_text(
                 "[project]\n"
                 'name = "target"\n'
                 'version = "0.0.0"\n'
@@ -290,11 +292,16 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 env={
                     **common_environment,
                     "REPOSITORY_NAME": "FlagTrain",
+                    "TARGET_DIR": "FlagTrain",
                 },
                 text=True,
             )
 
-            (target / "pyproject.toml").write_text(
+            # Second run uses REPOSITORY_NAME/TARGET_DIR=FlagGems, so the target
+            # library lives in its own ./FlagGems directory.
+            flaggems_dir = root / "FlagGems"
+            flaggems_dir.mkdir()
+            (flaggems_dir / "pyproject.toml").write_text(
                 "[project]\n"
                 'name = "target"\n'
                 'version = "0.0.0"\n'
@@ -310,6 +317,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 env={
                     **common_environment,
                     "REPOSITORY_NAME": "FlagGems",
+                    "TARGET_DIR": "FlagGems",
                 },
                 text=True,
             )
@@ -321,7 +329,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             "repos.FlagTrain.deps.default + repos.FlagTrain.deps.H800",
             "Detected explicit backend dependencies: <empty>",
             "No explicit backend dependencies configured; skipping.",
-            "Target project source: ./target/pyproject.toml",
+            "Target project source: ./FlagTrain/pyproject.toml",
             "Detected test extra: true",
             "Detected GPU vendor from flagos-gpu-check: nvidia",
             "[project.optional-dependencies].nvidia",

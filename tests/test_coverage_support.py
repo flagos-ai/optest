@@ -118,10 +118,20 @@ def test_performance_report_all_result_shapes(tmp_path):
             ],
         }
     }
-    result = performance_report.parse_perf_data("add", _write_perf(tmp_path, native))
+    native_file = _write_perf(tmp_path, native)
+    # Default speedup_source="origin": prefer the on-machine gems-vs-torch
+    # ratio, so shape1 uses speedup=2.0 (not compared_speedup=3.0). Mean over
+    # shapes is (2.0 + 1.0) / 2 = 1.5.
+    result = performance_report.parse_perf_data("add", native_file)
     assert result["status"] == "Passed"
-    assert result["data"]["fp32"]["speedup"] == 2.0
+    assert result["data"]["fp32"]["speedup"] == 1.5
     assert result["data"]["custom"]["result"] == "Unknown"
+    # Explicit nv_baseline: prefer compared_speedup=3.0 for shape1, giving a
+    # mean of (3.0 + 1.0) / 2 = 2.0.
+    result = performance_report.parse_perf_data(
+        "add", native_file, speedup_source="nv_baseline"
+    )
+    assert result["data"]["fp32"]["speedup"] == 2.0
 
     compared = {
         "add": {
@@ -133,6 +143,10 @@ def test_performance_report_all_result_shapes(tmp_path):
                     "result": [
                         {"shape_detail": [1], "compared_speedup": 2.0},
                         {"shape_detail": [2], "compared_speedup": "unknown"},
+                        # No speedup and no compared_speedup: _case_record keeps
+                        # speedup=None and records speedup_source=None. This None
+                        # is excluded from the fp16 mean below.
+                        {"shape_detail": [3]},
                     ],
                 },
                 {
@@ -150,6 +164,9 @@ def test_performance_report_all_result_shapes(tmp_path):
     }
     result = performance_report.parse_perf_data("add", _write_perf(tmp_path, compared))
     assert result["data"]["fp16"]["speedup"] == 2.0
+    # The reference-less shape carries no speedup and no source.
+    assert result["data"]["fp16"]["details"]["[3]"]["speedup"] is None
+    assert result["data"]["fp16"]["details"]["[3]"]["speedup_source"] is None
     assert result["data"]["fp32"]["speedup"] is None
     assert result["native_baseline_skip_reason"] == ("no native baseline; unsupported")
 

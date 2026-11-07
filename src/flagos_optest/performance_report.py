@@ -111,9 +111,7 @@ def parse_perf_data(op, result_file, speedup_source="origin"):
             for res in item.get("result", []):
                 shape = str(res.get("shape_detail", "Unknown")).replace(" ", "")
                 details.setdefault(shape, {})
-                record = _case_record(
-                    res, default=0.0, speedup_source=speedup_source
-                )
+                record = _case_record(res, default=0.0, speedup_source=speedup_source)
                 details[shape].update(record)
                 speedup = record["speedup"]
                 count += 1

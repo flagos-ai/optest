@@ -22,6 +22,11 @@
 #
 # The `output` is the JSON file the collector writes and the workflow uploads.
 # `default_repo` selects the workflow input's default choice.
+#
+# Note: the per-operator `label` (the framework version each operator was
+# collected against) is detected automatically by the collector from the
+# packages installed in the container, so it needs no per-repo configuration
+# here.
 
 org: flagos-ai
 default_repo: FlagGems-vllm

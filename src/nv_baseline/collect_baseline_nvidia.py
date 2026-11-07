@@ -21,9 +21,9 @@ except ImportError:
     from collection_process import run_with_cleanup
 
 try:
-    from .collection_environment import collect_environment
+    from .collection_environment import _version, collect_environment
 except ImportError:
-    from collection_environment import collect_environment
+    from collection_environment import _version, collect_environment
 
 # NCU metric names (verified on H800/Hopper; re-check with `ncu --query-metrics`
 # before switching architectures).
@@ -572,8 +572,35 @@ def _measure_latency(
         torch.cuda.synchronize()
 
 
+# Framework packages whose version is pinned per operator as a label. The
+# baseline is always collected inside the target framework's own container, so
+# whichever of these is installed identifies what the baseline tracks: vllm for
+# FlagGems-vllm, sglang for FlagGems-sglang, deepspeed for FlagTrain. torch and
+# triton are deliberately excluded as shared infrastructure, not the framework.
+# Add a package here to start labeling a new framework; detection is automatic.
+_LABEL_FRAMEWORKS = ("vllm", "sglang", "deepspeed")
+
+
+def _detect_operator_label():
+    """Probe the environment for installed framework packages, no args needed.
+
+    Returns a {framework: version} map for every candidate in _LABEL_FRAMEWORKS
+    actually installed in the collecting environment. Absent candidates are
+    omitted (not null) so the label carries only frameworks really present. An
+    empty result means no known framework is installed and the operator entry
+    gets no label.
+    """
+    detected = {}
+    for name in _LABEL_FRAMEWORKS:
+        version = _version(name)
+        if version is not None:
+            detected[name] = version
+    return detected
+
+
 def _collect_one_op_ops(
-    op_module, report_dir, results=None, output_path=None, ops_dir=None
+    op_module, report_dir, results=None, output_path=None, ops_dir=None,
+    label=None,
 ):
     if ops_dir is None:
         ops_dir = OPS_DIR
@@ -603,6 +630,10 @@ def _collect_one_op_ops(
 
     shapes = {}
     entry = {"native_api": f"ops.{mod_name}", "shapes": shapes}
+    if label:
+        # label first: pin the framework version this operator was collected
+        # against, for incremental re-collection.
+        entry = {"label": dict(label), **entry}
     if results is not None:
         results[op_name] = entry
     print(f"\ncollecting {op_name}  (module {mod_name})")
@@ -845,6 +876,9 @@ def collect_baseline(
     ops_modules = _select_ops(ops_modules, only=only)
 
     if worker:
+        # The worker runs inside the framework's own environment, so detect the
+        # label here once and attach it to every operator it collects.
+        label = _detect_operator_label()
         for _op_name, op_module in ops_modules:
             _collect_one_op_ops(
                 op_module,
@@ -852,6 +886,7 @@ def collect_baseline(
                 results=results,
                 output_path=output_path,
                 ops_dir=ops_dir,
+                label=label,
             )
         _flush_results(results, output_path)
         return

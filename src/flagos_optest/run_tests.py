@@ -1020,7 +1020,11 @@ def run_benchmark_q(gpu_id, op):
         "data_file": str(result_file.relative_to(CFG.output_dir)),
         "data": {},
     }
-    record.update(parse_perf_data(op, result_file))
+    record.update(
+        parse_perf_data(
+            op, result_file, speedup_source=getattr(CFG, "speedup_source", "origin")
+        )
+    )
     return record
 
 
@@ -1647,11 +1651,25 @@ def main():
         default=None,
         help="Optional ops-baseline JSON; matched external speedup wins in summaries.",
     )
+    parser.add_argument(
+        "--speedup-source",
+        choices=["origin", "nv_baseline"],
+        default="origin",
+        help=(
+            "Which ratio summary.json reports per shape when --base-data is set. "
+            "'origin' (default) prefers the on-machine gems-vs-torch speedup; "
+            "'nv_baseline' prefers the vs-baseline ratio and falls back to the "
+            "on-machine speedup. Without --base-data only the on-machine ratio is "
+            "available. Each shape's 'speedup_source' field records the source "
+            "actually used."
+        ),
+    )
     OPTS = parser.parse_args()
     ROOT = OPTS.directory
     os.chdir(ROOT)
     pinfo(f"Project root ... {ROOT}")
     CFG.base_data = str(Path(OPTS.base_data).resolve()) if OPTS.base_data else None
+    CFG.speedup_source = OPTS.speedup_source
     CFG.dump_output = OPTS.dump_output
     CFG.quick = OPTS.quick
     CFG.start = OPTS.start

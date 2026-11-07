@@ -23,16 +23,46 @@ else:
     from consts import DTYPE_MAP  # type: ignore[no-redef]
 
 
-def _case_record(result, default=None):
-    """Use the same comparison priority and provenance in both report paths."""
+def _case_record(result, default=None, speedup_source="origin"):
+    """Use the same comparison priority and provenance in both report paths.
+
+    Two ratios may be present per shape: "speedup" is the on-machine
+    gems-vs-torch ratio (always computed), "compared_speedup" is the
+    vs-baseline ratio (only when --base-data matched this op/shape/dtype).
+    summary.json reports a single value per shape; speedup_source selects which
+    one is preferred, the other acts as a fallback:
+      - "origin" (default): prefer the on-machine ratio (res["speedup"]), fall
+        back to compared_speedup only when speedup is missing.
+      - "nv_baseline": prefer the vs-baseline ratio (res["compared_speedup"]),
+        fall back to the on-machine ratio when compared_speedup is missing.
+    "speedup_source" records the source actually used after fallback, so each
+    shape says where its number came from.
+    """
+    measured = result.get("speedup", default)
     compared = result.get("compared_speedup")
+    used: str | None
+    if speedup_source == "nv_baseline":
+        if compared is not None:
+            speedup, used = compared, "nv_baseline"
+        else:
+            speedup, used = measured, "origin"
+    else:
+        if measured is not None:
+            speedup, used = measured, "origin"
+        else:
+            speedup, used = compared, "nv_baseline"
+    # Latency-only records (no reference on this machine) carry speedup=None;
+    # keep the None and leave the source unknown rather than counting it.
+    if speedup is None:
+        used = None
     record = {
         "base": result.get("latency_base", default),
         "gems": result.get("latency", default),
-        "speedup": compared if compared is not None else result.get("speedup", default),
+        "speedup": speedup,
+        "speedup_source": used,
     }
     if compared is not None:
-        record["native_speedup"] = result.get("speedup")
+        record["native_speedup"] = measured
     for field in (
         "compared_speedup",
         "base_raw_speedup",
@@ -47,7 +77,7 @@ def _case_record(result, default=None):
     return record
 
 
-def parse_perf_data(op, result_file):
+def parse_perf_data(op, result_file, speedup_source="origin"):
     raw_data = {}
     try:
         with result_file.open("r") as f:
@@ -81,7 +111,7 @@ def parse_perf_data(op, result_file):
             for res in item.get("result", []):
                 shape = str(res.get("shape_detail", "Unknown")).replace(" ", "")
                 details.setdefault(shape, {})
-                record = _case_record(res, default=0.0)
+                record = _case_record(res, default=0.0, speedup_source=speedup_source)
                 details[shape].update(record)
                 speedup = record["speedup"]
                 count += 1
@@ -127,7 +157,7 @@ def parse_perf_data(op, result_file):
         for res in item.get("result", []):
             shape = str(res.get("shape_detail", "Unknown")).replace(" ", "")
             details.setdefault(shape, {})
-            record = _case_record(res)
+            record = _case_record(res, speedup_source=speedup_source)
             details[shape].update(record)
             speedup = record["speedup"]
             if isinstance(speedup, (int, float)):

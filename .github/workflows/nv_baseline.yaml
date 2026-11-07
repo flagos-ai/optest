@@ -57,6 +57,11 @@ on:
         description: 'Target repository ref. Empty = the repo default branch.'
         required: false
         default: ''
+      auto_update:
+        description: 'Commit the generated baseline json into the optest data/ dir.'
+        required: false
+        type: boolean
+        default: true
 
 defaults:
   run:
@@ -114,6 +119,10 @@ jobs:
     needs: prepare
     runs-on: h800-flaggems-weekly
     timeout-minutes: 720
+    # Only the collect job needs write access, to commit the generated baseline
+    # back into data/ when auto_update is on; the top-level stays read-only.
+    permissions:
+      contents: write
     container:
       image: ${{ needs.prepare.outputs.image }}
       volumes:
@@ -139,6 +148,8 @@ jobs:
       TARGET_REPO: ${{ needs.prepare.outputs.target_repo }}
       # Empty ref -> actions/checkout uses the target repo's default branch.
       TARGET_REF: ${{ github.event.inputs.ref }}
+      # When true, the generated baseline json is committed into data/.
+      AUTO_UPDATE: ${{ github.event.inputs.auto_update }}
     steps:
       # Checkout optest itself at the workspace root: provides src/nv_baseline
       # and hardware_specs.json. The target library is checked out into ./target.
@@ -216,6 +227,39 @@ jobs:
             --device "${DEVICE}" \
             --output "${OUTPUT}" \
             --ops-dir "${OPS_DIR}"
+
+      # Commit the freshly generated baseline into the optest checkout's data/
+      # directory. Runs only when auto_update is on and the collector above
+      # succeeded (no `if: always()`), so a failed collection never overwrites
+      # a known-good baseline. Pushes to the branch optest was checked out from.
+      - name: Update baseline in data/
+        if: ${{ env.AUTO_UPDATE == 'true' }}
+        shell: bash --login -e -o pipefail {0}
+        env:
+          PUSH_BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.ref_name }}
+        run: |
+          SRC="${GITHUB_WORKSPACE}/${OUTPUT}"
+          DEST_DIR="${GITHUB_WORKSPACE}/data"
+          DEST="${DEST_DIR}/${OUTPUT}"
+          if [ ! -f "${SRC}" ]; then
+            echo "[Update] ERROR: expected baseline not found: ${SRC}"
+            exit 1
+          fi
+          mkdir -p "${DEST_DIR}"
+          cp "${SRC}" "${DEST}"
+          cd "${GITHUB_WORKSPACE}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "data/${OUTPUT}"
+          if git diff --cached --quiet; then
+            echo "[Update] data/${OUTPUT} unchanged; nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore(nv-baseline): update data/${OUTPUT} for ${TARGET_REPO}"
+          # Rebase onto the latest remote branch tip in case it moved, then push.
+          git pull --rebase origin "${PUSH_BRANCH}"
+          git push origin "HEAD:${PUSH_BRANCH}"
+          echo "[Update] Committed and pushed data/${OUTPUT} to ${PUSH_BRANCH}."
 
       - name: Upload baseline artifact
         if: always()

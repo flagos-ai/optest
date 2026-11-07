@@ -313,7 +313,8 @@ def _collect(args, *, execute=run_process):
                 "--reference-chip",
                 args.reference_chip,
             ]
-            # BASELINE_TASK_EXIT=1 让子采集返回 0/1 退出码（内部信号，经环境变量传入）。
+            # BASELINE_TASK_EXIT=1 makes the child collector return a 0/1 exit
+            # code (internal signal passed via environment variable).
             environment = dict(
                 os.environ,
                 CUDA_VISIBLE_DEVICES=device,

@@ -40,6 +40,7 @@ def _case_record(result, default=None, speedup_source="origin"):
     """
     measured = result.get("speedup", default)
     compared = result.get("compared_speedup")
+    used: str | None
     if speedup_source == "nv_baseline":
         if compared is not None:
             speedup, used = compared, "nv_baseline"

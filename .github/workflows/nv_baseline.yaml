@@ -240,11 +240,13 @@ jobs:
           rc=$?
           echo "[Collect] collector exit code: ${rc}"
 
-      # Read the produced baseline JSON and grade the run from the per-operator
-      # statuses under _collection.tasks:
+      # Grade the run from the per-operator statuses the collector records in a
+      # sidecar status file, "${OUTPUT}.work/status.json" (the published baseline
+      # JSON carries no run-time bookkeeping). status.json holds a "tasks" map
+      # (name -> {status, ...}) and an "interrupted" flag:
       #   - failed  : any operator "failed", or the run crashed/was interrupted
-      #               (JSON missing/unparseable, empty tasks, a non-terminal
-      #               status left behind, or _collection.interrupted). Exits 1,
+      #               (status.json missing/unparseable, empty tasks, a
+      #               non-terminal status left behind, or interrupted). Exits 1,
       #               so the data/ update step is skipped and the job is red.
       #   - warning : no failures but at least one "profiling_incomplete";
       #               emits a ::warning:: annotation and keeps the job green.
@@ -263,17 +265,20 @@ jobs:
 
           terminal = {"completed", "failed", "skipped", "profiling_incomplete"}
           output = pathlib.Path(os.environ["OUTPUT"])
+          status_path = pathlib.Path(f"{os.environ['OUTPUT']}.work") / "status.json"
           if not output.exists():
               print("::error::baseline output missing; collector likely crashed")
               sys.exit(1)
+          if not status_path.exists():
+              print("::error::collection status file missing; collector likely crashed")
+              sys.exit(1)
           try:
-              data = json.loads(output.read_text())
+              status = json.loads(status_path.read_text())
           except (ValueError, OSError) as exc:
-              print(f"::error::cannot parse baseline json: {exc}")
+              print(f"::error::cannot parse collection status: {exc}")
               sys.exit(1)
 
-          collection = data.get("_collection", {})
-          tasks = collection.get("tasks", {})
+          tasks = status.get("tasks", {})
           if not tasks:
               print("::error::no operator tasks recorded; collector likely crashed")
               sys.exit(1)
@@ -290,7 +295,7 @@ jobs:
               n for n, t in tasks.items() if t.get("status") not in terminal
           )
 
-          if collection.get("interrupted"):
+          if status.get("interrupted"):
               print("::error::collection was interrupted before finishing")
               result = "failed"
           elif nonterminal:
@@ -360,14 +365,18 @@ jobs:
           if-no-files-found: warn
 
       # Per-operator collection logs: the collector writes one collector.log per
-      # operator attempt under <OUTPUT>.work/<op>/<uuid>/. Uploaded on always()
-      # so skip/failure/partial reasons are available even when collection
-      # fails. Only the .log files are kept, not the NCU reports or the
-      # intermediate per-operator json, to keep the artifact small.
+      # operator attempt under <OUTPUT>.work/<op>/<uuid>/, plus the sidecar
+      # status.json that the classify step grades from. Uploaded on always() so
+      # skip/failure/partial reasons (and the final statuses) are available even
+      # when collection fails. Only the .log files and status.json are kept, not
+      # the NCU reports or the intermediate per-operator json, to keep the
+      # artifact small.
       - name: Upload collection logs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: nv-baseline-logs-${{ github.event.inputs.repo }}-${{ github.run_id }}
-          path: ${{ env.OUTPUT }}.work/**/collector.log
+          path: |
+            ${{ env.OUTPUT }}.work/**/collector.log
+            ${{ env.OUTPUT }}.work/status.json
           if-no-files-found: warn

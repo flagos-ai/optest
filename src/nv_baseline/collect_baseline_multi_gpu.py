@@ -19,7 +19,6 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,23 +72,6 @@ def select_operators(only=None, ops_dir=OPS_DIR):
     if unknown:
         raise ValueError(f"unknown operator modules: {sorted(unknown)}")
     return [n for n in names if only is None or n in only]
-
-
-def source_digest(ops_dir=OPS_DIR):
-    ops_dir = Path(ops_dir)
-    digest = hashlib.sha256()
-    paths = sorted(ops_dir.rglob("*.py"))
-    paths += sorted(ops_dir.rglob("*.json"))
-    paths += sorted(PKG_DIR.glob("*.py"))
-    paths += [PKG_DIR / "hardware_specs.json"]
-    for path in paths:
-        if not path.exists():
-            continue
-        # Paths may live outside ROOT (e.g. a target repo checkout); key the
-        # digest on the file name, which is stable across checkout locations.
-        digest.update(path.name.encode())
-        digest.update(path.read_bytes())
-    return digest.hexdigest()
 
 
 def run_process(command, environment, log_path, timeout, stop):
@@ -153,14 +135,16 @@ def report_directory(report_root, output, operator, attempt_directory):
     return Path(report_root).resolve() / namespace / operator / attempt_directory.name
 
 
-def merge_event(results, origins, name, record, data):
+def merge_event(results, origins, tasks, name, record, data):
     """Checkpoint latest task state without degrading a retained result snapshot.
 
     Running events have data=None; terminal events carry the child JSON (possibly
     empty after failure). Attempts are kept separately rather than mixing records
-    collected on different GPUs/environments into one operator entry.
+    collected on different GPUs/environments into one operator entry. Task state
+    is kept in a sidecar map (status.json), separate from the published baseline
+    `results`, which carries no run-time bookkeeping.
     """
-    previous = results["_collection"]["tasks"].get(name, {})
+    previous = tasks.get(name, {})
     history = list(previous.get("previous_attempts", []))
     if data is None and previous:
         history.append(
@@ -188,12 +172,14 @@ def merge_event(results, origins, name, record, data):
         elif name in results:
             record["retained_result"] = origins[name]
         if "_environment" in data:
-            results["_environments"][record["device"]] = data["_environment"]
+            # Each child's _environment is already reduced to a single
+            # machine-level descriptor (no per-card identity), so keep one
+            # representative rather than a per-card map.
             results.setdefault("_environment", data["_environment"])
         if "_scaling_factors" in data:
             results["_scaling_factors"] = data["_scaling_factors"]
         print(f"[{record['device']}] {name}: {record['status']}", flush=True)
-    results["_collection"]["tasks"][name] = record
+    tasks[name] = record
 
 
 _TERMINAL_STATUSES = ("completed", "failed", "skipped", "profiling_incomplete")
@@ -229,58 +215,21 @@ def _collect(args, *, execute=run_process):
         raise ValueError("no operators selected")
     output = Path(args.output).resolve()
     work = output.with_suffix(output.suffix + ".work")
-    signature = {
-        "operators": names,
-        "devices": devices,
-        "op_timeout": args.op_timeout,
-        "reference_chip": args.reference_chip,
-        "source_sha256": source_digest(ops_dir=ops_dir),
-        "report_dir": (
-            str(Path(args.report_dir).resolve())
-            if getattr(args, "report_dir", None)
-            else None
-        ),
-    }
-    if output.exists() and not args.resume:
-        raise ValueError("output exists; choose another path or use --resume")
-    if args.resume:
-        if not output.exists():
-            raise ValueError("--resume requires an existing output")
-        results = json.loads(output.read_text())
-        if results.get("_collection", {}).get("configuration") != signature:
-            raise ValueError(
-                "resume configuration/source differs from the existing run"
-            )
-    else:
-        results = {
-            "_collection": {
-                "configuration": signature,
-                "started_at_utc": datetime.now(timezone.utc).isoformat(),
-                "tasks": {},
-            },
-            "_environments": {},
-        }
-    tasks = results["_collection"]["tasks"]
-    origins = {
-        name: task.get("retained_result")
-        or {
-            "device": task.get("device"),
-            "result": task.get("result"),
-            "environment": results["_environments"].get(task.get("device")),
-        }
-        for name, task in tasks.items()
-        if name in results
-    }
+    if output.exists():
+        raise ValueError("output exists; choose another path")
+    # The published baseline carries no run-time bookkeeping; per-operator task
+    # state is tracked separately and written to a sidecar status.json under the
+    # .work dir, which the workflow reads to grade the run.
+    results = {}
+    tasks = {}
+    status_path = work / "status.json"
+    origins = {}
     pending = queue.Queue()
     for name in names:
-        if tasks.get(name, {}).get("status") != "completed":
-            pending.put(name)
+        pending.put(name)
     work.mkdir(parents=True, exist_ok=True)
-    collection = results["_collection"]
-    collection.pop("finished_at_utc", None)
-    collection["interrupted"] = False
-    collection["attempt_started_at_utc"] = datetime.now(timezone.utc).isoformat()
     atomic_json(output, results)
+    atomic_json(status_path, {"tasks": tasks})
     stop = threading.Event()
     events = queue.Queue()
 
@@ -398,12 +347,13 @@ def _collect(args, *, execute=run_process):
                         name, record, data = events.get(timeout=0.2)
                     except queue.Empty:
                         continue
-                    merge_event(results, origins, name, record, data)
+                    merge_event(results, origins, tasks, name, record, data)
                     atomic_json(output, results)
+                    atomic_json(status_path, {"tasks": tasks})
                     # Print an overall progress line on each terminal event
                     # (running events carry data=None and are skipped here).
                     if data is not None:
-                        _print_progress(results["_collection"]["tasks"], len(names))
+                        _print_progress(tasks, len(names))
                 for future in futures:
                     future.result()
             except BaseException:
@@ -414,13 +364,15 @@ def _collect(args, *, execute=run_process):
     finally:
         for signum, handler in previous.items():
             signal.signal(signum, handler)
-    results["_collection"]["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
-    results["_collection"]["interrupted"] = stop.is_set()
-    atomic_json(output, results)
-    return int(
+    # The exit status and the final task state live only in the sidecar
+    # status.json; the published baseline carries no run-time bookkeeping.
+    exit_status = int(
         stop.is_set()
         or any(tasks.get(n, {}).get("status") != "completed" for n in names)
     )
+    atomic_json(status_path, {"tasks": tasks, "interrupted": stop.is_set()})
+    atomic_json(output, results)
+    return exit_status
 
 
 def main():
@@ -442,7 +394,6 @@ def main():
     )
     parser.add_argument("--op-timeout", type=float, default=1800)
     parser.add_argument("--reference-chip", default="H800")
-    parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
     if args.op_timeout <= 0:
         parser.error("--op-timeout must be positive")

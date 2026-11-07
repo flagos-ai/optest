@@ -444,6 +444,25 @@ def _flush_results(results, output_path):
     os.replace(tmp, output_path)
 
 
+def _strip_environment_identity(environment, reference_chip):
+    """Reduce a per-card environment to a single machine-level descriptor.
+
+    The collected environment carries per-card identity (the run metadata, the
+    GPU uuid/logical index, and the CUDA_VISIBLE_DEVICES pin) that differs card
+    to card. For the baseline output we keep one representative environment, so
+    those fields are dropped and the configured reference chip is recorded at
+    the top level instead. Cards on a multi-GPU host share the same specs, so a
+    single descriptor is accurate once identity is removed.
+    """
+    environment["reference_chip"] = reference_chip
+    environment.pop("run", None)
+    gpu = environment.get("hardware", {}).get("gpu", {})
+    gpu.pop("uuid", None)
+    gpu.pop("cuda_device_index", None)
+    environment.get("environment_variables", {}).pop("CUDA_VISIBLE_DEVICES", None)
+    return environment
+
+
 def _discover_ops(ops_dir=OPS_DIR):
     if not ops_dir.is_dir():
         return []
@@ -837,17 +856,20 @@ def collect_baseline(
         _flush_results(results, output_path)
         return
 
-    results["_environment"] = collect_environment(
-        torch,
-        {
-            "device": device,
-            "op_timeout_seconds": op_timeout,
-            "reference_chip": reference_chip,
-            "only": sorted(only) if only is not None else None,
-            "latency_warmup_ms": 25,
-            "latency_rep_ms": 100,
-            "ncu_warmup_calls": 3,
-        },
+    results["_environment"] = _strip_environment_identity(
+        collect_environment(
+            torch,
+            {
+                "device": device,
+                "op_timeout_seconds": op_timeout,
+                "reference_chip": reference_chip,
+                "only": sorted(only) if only is not None else None,
+                "latency_warmup_ms": 25,
+                "latency_rep_ms": 100,
+                "ncu_warmup_calls": 3,
+            },
+        ),
+        reference_chip,
     )
     _flush_results(results, output_path)
 
@@ -913,12 +935,6 @@ if __name__ == "__main__":
         "CUDA_VISIBLE_DEVICES; default uses the default device",
     )
     parser.add_argument(
-        "--resume",
-        action="store_true",
-        help="resume a multi-card run, skipping completed operators "
-        "(requires multiple card numbers in --device)",
-    )
-    parser.add_argument(
         "--ops",
         default=None,
         help="only collect the given operators (comma-separated, e.g. "
@@ -978,10 +994,6 @@ if __name__ == "__main__":
             sys.exit(collect(args))
         except ValueError as exc:
             parser.error(str(exc))
-    if args.resume:
-        parser.error(
-            "--resume requires multiple card numbers in --device (multi-card collection)"
-        )
     if args.check:
         n_fail = check_ops(
             device=args.device,

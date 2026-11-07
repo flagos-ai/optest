@@ -209,9 +209,16 @@ jobs:
           fi
           ncu --version
 
+      # Note: the collector returns non-zero whenever any operator is not
+      # "completed" (including merely skipped or profiling_incomplete). We do
+      # NOT let that non-zero exit fail this step directly; the dedicated
+      # "Classify collection result" step below reads the produced JSON and
+      # decides the final failed/warning/pass verdict. Only the pre-flight
+      # checks here are hard failures.
       - name: Run NV baseline collection
-        shell: bash --login -e -o pipefail {0}
+        shell: bash --login -o pipefail {0}
         run: |
+          set -e
           OPS_DIR="${GITHUB_WORKSPACE}/target/baseline"
           echo "[Collect] Target repo: ${TARGET_REPO}"
           echo "[Collect] Operator dir: ${OPS_DIR}"
@@ -223,17 +230,100 @@ jobs:
             exit 1
           fi
           echo "[Collect] Command: python3 src/nv_baseline/collect_baseline_nvidia.py --device ${DEVICE} --output ${OUTPUT} --ops-dir ${OPS_DIR}"
+          # Capture the collector's exit code without failing the step; the
+          # classify step makes the final call from the produced JSON.
+          set +e
           python3 src/nv_baseline/collect_baseline_nvidia.py \
             --device "${DEVICE}" \
             --output "${OUTPUT}" \
             --ops-dir "${OPS_DIR}"
+          rc=$?
+          echo "[Collect] collector exit code: ${rc}"
+
+      # Read the produced baseline JSON and grade the run from the per-operator
+      # statuses under _collection.tasks:
+      #   - failed  : any operator "failed", or the run crashed/was interrupted
+      #               (JSON missing/unparseable, empty tasks, a non-terminal
+      #               status left behind, or _collection.interrupted). Exits 1,
+      #               so the data/ update step is skipped and the job is red.
+      #   - warning : no failures but at least one "profiling_incomplete";
+      #               emits a ::warning:: annotation and keeps the job green.
+      #   - pass    : everything "completed" (operators merely "skipped" do not
+      #               fail the run).
+      - name: Classify collection result
+        id: classify
+        if: always()
+        shell: python3 {0}
+        run: |
+          import json
+          import os
+          import pathlib
+          import sys
+          from collections import Counter
+
+          terminal = {"completed", "failed", "skipped", "profiling_incomplete"}
+          output = pathlib.Path(os.environ["OUTPUT"])
+          if not output.exists():
+              print("::error::baseline output missing; collector likely crashed")
+              sys.exit(1)
+          try:
+              data = json.loads(output.read_text())
+          except (ValueError, OSError) as exc:
+              print(f"::error::cannot parse baseline json: {exc}")
+              sys.exit(1)
+
+          collection = data.get("_collection", {})
+          tasks = collection.get("tasks", {})
+          if not tasks:
+              print("::error::no operator tasks recorded; collector likely crashed")
+              sys.exit(1)
+
+          counts = Counter(t.get("status") for t in tasks.values())
+          summary = " ".join(f"{k}={v}" for k, v in sorted(counts.items()))
+          print(f"[Classify] statuses: {summary}")
+
+          failed = sorted(n for n, t in tasks.items() if t.get("status") == "failed")
+          incomplete = sorted(
+              n for n, t in tasks.items() if t.get("status") == "profiling_incomplete"
+          )
+          nonterminal = sorted(
+              n for n, t in tasks.items() if t.get("status") not in terminal
+          )
+
+          if collection.get("interrupted"):
+              print("::error::collection was interrupted before finishing")
+              result = "failed"
+          elif nonterminal:
+              print(
+                  "::error::operator(s) left in a non-terminal state "
+                  f"(collector likely crashed): {', '.join(nonterminal)}"
+              )
+              result = "failed"
+          elif failed:
+              print(f"::error::{len(failed)} operator(s) failed: {', '.join(failed)}")
+              result = "failed"
+          elif incomplete:
+              print(
+                  f"::warning::{len(incomplete)} operator(s) profiling_incomplete: "
+                  f"{', '.join(incomplete)}"
+              )
+              result = "warning"
+          else:
+              result = "pass"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"result={result}\n")
+          print(f"[Classify] final result: {result}")
+          if result == "failed":
+              sys.exit(1)
 
       # Commit the freshly generated baseline into the optest checkout's data/
-      # directory. Runs only when auto_update is on and the collector above
-      # succeeded (no `if: always()`), so a failed collection never overwrites
-      # a known-good baseline. Pushes to the branch optest was checked out from.
+      # directory. Runs only when auto_update is on AND the classify step graded
+      # the run pass or warning (not failed), so a failed collection never
+      # overwrites a known-good baseline. A warning run (profiling_incomplete
+      # only) still updates. Pushes to the branch optest was checked out from.
       - name: Update baseline in data/
-        if: ${{ env.AUTO_UPDATE == 'true' }}
+        if: ${{ env.AUTO_UPDATE == 'true' && (steps.classify.outputs.result == 'pass' || steps.classify.outputs.result == 'warning') }}
         shell: bash --login -e -o pipefail {0}
         env:
           PUSH_BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.ref_name }}
@@ -267,4 +357,17 @@ jobs:
         with:
           name: nv-baseline-${{ github.event.inputs.repo }}-${{ github.run_id }}
           path: ${{ env.OUTPUT }}
+          if-no-files-found: warn
+
+      # Per-operator collection logs: the collector writes one collector.log per
+      # operator attempt under <OUTPUT>.work/<op>/<uuid>/. Uploaded on always()
+      # so skip/failure/partial reasons are available even when collection
+      # fails. Only the .log files are kept, not the NCU reports or the
+      # intermediate per-operator json, to keep the artifact small.
+      - name: Upload collection logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: nv-baseline-logs-${{ github.event.inputs.repo }}-${{ github.run_id }}
+          path: ${{ env.OUTPUT }}.work/**/collector.log
           if-no-files-found: warn

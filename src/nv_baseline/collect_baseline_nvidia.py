@@ -599,7 +599,11 @@ def _detect_operator_label():
 
 
 def _collect_one_op_ops(
-    op_module, report_dir, results=None, output_path=None, ops_dir=None,
+    op_module,
+    report_dir,
+    results=None,
+    output_path=None,
+    ops_dir=None,
     label=None,
 ):
     if ops_dir is None:

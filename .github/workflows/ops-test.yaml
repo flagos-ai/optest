@@ -889,11 +889,14 @@ jobs:
             EXCLUDE_OPS_ARG="--exclude-op-list-file ${OP_EXCLUDE_FILE}"
           fi
           # Optional per-repo ops baseline (repos.yaml base_data); path is
-          # relative to the target checkout. Empty = not passed.
+          # relative to the optest repo root (GITHUB_WORKSPACE), where the
+          # nv-baseline workflow commits the collected baseline under data/.
+          # This step's cwd is the target checkout, so resolve against
+          # GITHUB_WORKSPACE to reach optest's copy. Empty = not passed.
           BASE_DATA="${{ matrix.base_data }}"
           BASE_DATA_ARG=""
           if [ -n "${BASE_DATA}" ]; then
-            BASE_DATA_ARG="--base-data ${BASE_DATA}"
+            BASE_DATA_ARG="--base-data ${GITHUB_WORKSPACE}/${BASE_DATA}"
           fi
           echo "[Run ops tests] Operator arguments: ${OP_ARGS}"
           echo "[Run ops tests] Exclusion arguments: ${EXCLUDE_OPS_ARG:-<none>}"

@@ -79,10 +79,12 @@ repos:
   # =========================================================================
   FlagGems-vllm:
     default_branch: main
-    # Optional ops-baseline JSON (relative to the target repo checkout). Only
-    # FlagGems-vllm wires an external baseline today; other repos leave this
-    # unset so --base-data is not passed.
-    base_data: tools/op_vllm_perf_baseline.json
+    # Optional ops-baseline JSON (relative to the optest repo root, i.e.
+    # GITHUB_WORKSPACE). Points at the baseline the nv-baseline workflow commits
+    # into optest's data/ dir, so ops-test consumes the freshly collected
+    # baseline. Only FlagGems-vllm wires an external baseline today; other repos
+    # leave this unset so --base-data is not passed.
+    base_data: data/op_vllm_perf_baseline.json
     # Uses the shared backend images (vllm), no override needed.
     backends:
       H800: {enabled: true}

@@ -226,15 +226,21 @@ jobs:
           fi
           echo "[Deps] CUDA (cu13) root: ${CU13_ROOT}"
           CU13_LIB="${CU13_ROOT}/lib"
-          # The linker wants libcudart.so; the wheel ships only libcudart.so.NN.
-          if [ -d "${CU13_LIB}" ] && [ ! -e "${CU13_LIB}/libcudart.so" ]; then
-            CUDART="$(ls "${CU13_LIB}"/libcudart.so.* 2>/dev/null | head -1 || true)"
-            if [ -n "${CUDART}" ]; then
-              ln -sf "${CUDART}" "${CU13_LIB}/libcudart.so"
-              echo "[Deps] Linked ${CU13_LIB}/libcudart.so -> ${CUDART}"
-            else
-              echo "[Deps] WARNING: no libcudart.so.* found under ${CU13_LIB}"
-            fi
+          # The linker wants unversioned libFOO.so, but the cu13 wheel ships
+          # only libFOO.so.NN. Different extensions link different CUDA libs
+          # (-lcudart, -lcurand, -lcublas, ...), so create the missing
+          # unversioned symlink for every versioned lib under cu13/lib.
+          if [ -d "${CU13_LIB}" ]; then
+            for versioned in "${CU13_LIB}"/lib*.so.*; do
+              [ -e "${versioned}" ] || continue
+              base="$(basename "${versioned}")"
+              # Strip everything from the first ".so" onward -> libFOO.so
+              unversioned="${base%%.so.*}.so"
+              if [ ! -e "${CU13_LIB}/${unversioned}" ]; then
+                ln -sf "${versioned}" "${CU13_LIB}/${unversioned}"
+                echo "[Deps] Linked ${unversioned} -> ${base}"
+              fi
+            done
           fi
           {
             echo "CUDA_HOME=${CU13_ROOT}"
@@ -266,8 +272,21 @@ jobs:
             git clone --depth 1 https://github.com/NVIDIA/Megatron-LM.git "${WORK}/Megatron-LM"
           fi
           python3 -m pip install -e "${WORK}/Megatron-LM"
+          # NVIDIA Apex with CUDA extensions: Megatron's fused softmax baselines
+          # (scaled_masked_softmax_cuda, scaled_upper_triang_masked_softmax_cuda)
+          # are provided by Apex's compiled extensions, not Megatron itself. Build
+          # from source with the C++/CUDA extensions enabled (slow). Relies on the
+          # cu13 toolchain env + symlinks set above.
+          if [ ! -d "${WORK}/apex" ]; then
+            git clone --depth 1 https://github.com/NVIDIA/apex.git "${WORK}/apex"
+          fi
+          python3 -m pip install -v --no-build-isolation \
+            --config-settings "--build-option=--cpp_ext" \
+            --config-settings "--build-option=--cuda_ext" \
+            "${WORK}/apex"
           echo "[Deps] Verifying imports"
           python3 -c "import deepspeed, megatron.core; print('deepspeed', deepspeed.__version__); print('megatron.core OK')"
+          python3 -c "import scaled_masked_softmax_cuda, scaled_upper_triang_masked_softmax_cuda; print('apex softmax extensions OK')"
 
       - name: Check NVIDIA GPU and profiler
         shell: bash --login -e -o pipefail {0}

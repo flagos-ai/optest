@@ -196,6 +196,38 @@ jobs:
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
           git config --global --add safe.directory "${GITHUB_WORKSPACE}/target"
 
+      # FlagTrain only: its baseline modules hard-depend on DeepSpeed and
+      # Megatron-LM (native() raises if missing, no torch fallback), so install
+      # them per baseline/README.md before collection. Other repos ship their
+      # stack in the image and skip this step.
+      - name: Install FlagTrain baseline dependencies
+        if: ${{ github.event.inputs.repo == 'FlagTrain' }}
+        shell: bash --login -e -o pipefail {0}
+        run: |
+          echo "[Deps] Installing FlagTrain baseline dependencies"
+          WORK="${GITHUB_WORKSPACE}/flagtrain_deps"
+          mkdir -p "${WORK}"
+          # FlagTrain reuses the vllm image; remove vllm so it cannot interfere
+          # with the DeepSpeed / Megatron stack this baseline needs.
+          python3 -m pip uninstall -y vllm || true
+          # Prebuilt wheels: DeepSpeed kernels, CUTLASS ops, NVIDIA resiliency ext.
+          python3 -m pip install \
+            deepspeed-kernels==0.0.1 \
+            nvidia-cutlass==3.8.0.0 \
+            nvidia-resiliency-ext==0.6.0
+          # DeepSpeed from source (main).
+          if [ ! -d "${WORK}/DeepSpeed" ]; then
+            git clone --depth 1 https://github.com/deepspeedai/DeepSpeed.git "${WORK}/DeepSpeed"
+          fi
+          python3 -m pip install -e "${WORK}/DeepSpeed"
+          # Megatron-LM from source (main), provides megatron.core.
+          if [ ! -d "${WORK}/Megatron-LM" ]; then
+            git clone --depth 1 https://github.com/NVIDIA/Megatron-LM.git "${WORK}/Megatron-LM"
+          fi
+          python3 -m pip install -e "${WORK}/Megatron-LM"
+          echo "[Deps] Verifying imports"
+          python3 -c "import deepspeed, megatron.core; print('deepspeed', deepspeed.__version__); print('megatron.core OK')"
+
       - name: Check NVIDIA GPU and profiler
         shell: bash --login -e -o pipefail {0}
         run: |

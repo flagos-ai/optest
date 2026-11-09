@@ -40,12 +40,15 @@ repos:
     image: harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-sglang-nv-baseline-ncu-2025.2.0:0.5.21
     output: op_sglang_perf_baseline.json
 
-  # Images below are placeholders: replace with the real NV + ncu images once
-  # built, following the same naming as the entries above.
+  # Placeholder image: replace with the real NV + ncu image once built,
+  # following the same naming as the entries above.
   FlagGems:
     image: harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-nv-baseline-ncu:latest
     output: op_flaggems_perf_baseline.json
 
+  # FlagTrain reuses the vllm baseline image, then the workflow uninstalls vllm
+  # and installs DeepSpeed / Megatron-LM (see baseline/README.md) before
+  # collection, since its baseline modules hard-depend on them.
   FlagTrain:
-    image: harbor.baai.ac.cn/flaggems/nv_baseline/flagtrain-nv-baseline-ncu:latest
+    image: harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-vllm-nv-baseline-ncu-2026.3.1:0.24.0
     output: op_flagtrain_perf_baseline.json

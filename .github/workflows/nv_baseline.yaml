@@ -29,6 +29,8 @@
 #     --device 7 --output op_vllm_perf_baseline.json \
 #     --ops-dir target/baseline
 name: nv-baseline
+# Per-run title in the Actions list, e.g. "nv-baseline-FlagTrain".
+run-name: nv-baseline-${{ github.event.inputs.repo }}
 
 permissions:
   contents: read

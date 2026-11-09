@@ -212,6 +212,43 @@ jobs:
           # FlagTrain reuses the vllm image; remove vllm so it cannot interfere
           # with the DeepSpeed / Megatron stack this baseline needs.
           python3 -m pip uninstall -y vllm || true
+
+          # DeepSpeed / Megatron ship CUDA C++ extensions that are JIT-compiled
+          # at collection time. This image provides CUDA via the pip package
+          # nvidia/cu13, which is not on the compiler/linker search path, so the
+          # JIT build fails with "ld: cannot find -lcudart". Resolve the cu13
+          # root, create the unversioned libcudart.so symlink the linker needs,
+          # and export the toolchain env to GITHUB_ENV so the later GPU-check and
+          # collection steps (where the JIT build actually runs) inherit it.
+          CU13_ROOT="$(python3 -c 'import importlib.util, os; s=importlib.util.find_spec("nvidia.cu13"); print(os.path.dirname(s.origin) if s and s.origin else "")')"
+          if [ -z "${CU13_ROOT}" ] || [ ! -d "${CU13_ROOT}" ]; then
+            CU13_ROOT="/flagos/lib/python3.12/site-packages/nvidia/cu13"
+          fi
+          echo "[Deps] CUDA (cu13) root: ${CU13_ROOT}"
+          CU13_LIB="${CU13_ROOT}/lib"
+          # The linker wants libcudart.so; the wheel ships only libcudart.so.NN.
+          if [ -d "${CU13_LIB}" ] && [ ! -e "${CU13_LIB}/libcudart.so" ]; then
+            CUDART="$(ls "${CU13_LIB}"/libcudart.so.* 2>/dev/null | head -1 || true)"
+            if [ -n "${CUDART}" ]; then
+              ln -sf "${CUDART}" "${CU13_LIB}/libcudart.so"
+              echo "[Deps] Linked ${CU13_LIB}/libcudart.so -> ${CUDART}"
+            else
+              echo "[Deps] WARNING: no libcudart.so.* found under ${CU13_LIB}"
+            fi
+          fi
+          {
+            echo "CUDA_HOME=${CU13_ROOT}"
+            echo "CUDA_PATH=${CU13_ROOT}"
+            echo "PATH=${CU13_ROOT}/bin:${PATH}"
+            echo "LD_LIBRARY_PATH=${CU13_LIB}:${LD_LIBRARY_PATH:-}"
+            echo "LIBRARY_PATH=${CU13_LIB}:${LIBRARY_PATH:-}"
+          } >> "$GITHUB_ENV"
+          # Apply to this step too (GITHUB_ENV only affects subsequent steps).
+          export CUDA_HOME="${CU13_ROOT}" CUDA_PATH="${CU13_ROOT}"
+          export PATH="${CU13_ROOT}/bin:${PATH}"
+          export LD_LIBRARY_PATH="${CU13_LIB}:${LD_LIBRARY_PATH:-}"
+          export LIBRARY_PATH="${CU13_LIB}:${LIBRARY_PATH:-}"
+
           # Prebuilt wheels: DeepSpeed kernels, CUTLASS ops, NVIDIA resiliency ext.
           # deepspeed-kernels has no plain 0.0.1 on PyPI (only 0.0.1.devNNNN
           # prereleases), so pin the latest dev build explicitly.

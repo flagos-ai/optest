@@ -211,8 +211,10 @@ jobs:
           # with the DeepSpeed / Megatron stack this baseline needs.
           python3 -m pip uninstall -y vllm || true
           # Prebuilt wheels: DeepSpeed kernels, CUTLASS ops, NVIDIA resiliency ext.
+          # deepspeed-kernels has no plain 0.0.1 on PyPI (only 0.0.1.devNNNN
+          # prereleases), so pin the latest dev build explicitly.
           python3 -m pip install \
-            deepspeed-kernels==0.0.1 \
+            deepspeed-kernels==0.0.1.dev1698255861 \
             nvidia-cutlass==3.8.0.0 \
             nvidia-resiliency-ext==0.6.0
           # DeepSpeed from source (main).

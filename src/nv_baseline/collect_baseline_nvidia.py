@@ -95,18 +95,20 @@ def _empty_result():
     }
 
 
-def _build_profile_script_ops(ops_dir, op_module, binding, dtype_str, warmup):
+def _build_profile_script_ops(module_dir, op_module, binding, dtype_str, warmup):
     """Build a self-contained temp script run by the NCU subprocess.
 
-    It imports the operator module from ops_dir, rebuilds inputs via build_inputs,
-    warms up, then wraps the single target call in the "kiro_target" NVTX range so
-    NCU can pin exactly its kernels. Inputs are rebuilt before the sampled call so
-    in-place operators are not polluted by warmup accumulation.
+    It imports the operator module from module_dir (the module's own directory,
+    which may be a per-library subdir of the ops dir), rebuilds inputs via
+    build_inputs, warms up, then wraps the single target call in the
+    "kiro_target" NVTX range so NCU can pin exactly its kernels. Inputs are
+    rebuilt before the sampled call so in-place operators are not polluted by
+    warmup accumulation.
     """
     return f"""import sys
 import torch
 
-sys.path.insert(0, {str(ops_dir)!r})
+sys.path.insert(0, {str(module_dir)!r})
 import {op_module} as opmod
 
 dtype = {dtype_str}
@@ -463,12 +465,21 @@ def _strip_environment_identity(environment, reference_chip):
     return environment
 
 
+def _iter_op_files(ops_dir):
+    """Operator modules live directly under ops_dir, or one level down in
+    per-library subdirs (e.g. FlagTrain's baseline/deepspeed, baseline/megatron).
+    Return the *.py files from both, excluding dunder files."""
+    files = [p for p in ops_dir.glob("*.py") if not p.stem.startswith("__")]
+    for sub in sorted(ops_dir.iterdir()):
+        if sub.is_dir() and not sub.name.startswith("__"):
+            files += [p for p in sub.glob("*.py") if not p.stem.startswith("__")]
+    return sorted(files)
+
+
 def _discover_ops(ops_dir=OPS_DIR):
+    ops_dir = Path(ops_dir)
     if not ops_dir.is_dir():
         return []
-    # Let `import <op>` find modules under ops_dir (subprocess scripts use it too).
-    if str(ops_dir) not in sys.path:
-        sys.path.insert(0, str(ops_dir))
     required = (
         "OP_NAME",
         "DTYPES",
@@ -479,9 +490,13 @@ def _discover_ops(ops_dir=OPS_DIR):
         "key_shape",
     )
     discovered = []
-    for path in sorted(ops_dir.glob("*.py")):
-        if path.stem == "__init__":
-            continue
+    for path in _iter_op_files(ops_dir):
+        # Let `import <stem>` find this module (subprocess scripts rely on the
+        # same path insertion). Modules are self-contained and keyed by OP_NAME,
+        # so the containing dir (ops_dir or a subdir) is put on sys.path.
+        parent = str(path.parent)
+        if parent not in sys.path:
+            sys.path.insert(0, parent)
         try:
             mod = importlib.import_module(path.stem)
         except Exception as e:  # noqa: BLE001 - one bad module must not abort the run
@@ -670,8 +685,11 @@ def _collect_one_op_ops(
             # large-E MoE does not OOM from holding two copies at once.
             del args, kwargs
             torch.cuda.empty_cache()
+            # Import the module from its own directory (a per-library subdir
+            # like baseline/megatron resolves here, not just the top ops_dir).
+            module_dir = str(Path(op_module.__file__).resolve().parent)
             script = _build_profile_script_ops(
-                ops_dir, mod_name, binding, dtype_str, warmup=3
+                module_dir, mod_name, binding, dtype_str, warmup=3
             )
             ncu = profile_with_ncu(
                 op_name, script, shape, dtype_str, report_dir=report_dir

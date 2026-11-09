@@ -63,11 +63,21 @@ def name_list(value):
     return {s for line in content.splitlines() if (s := line.split("#")[0].strip())}
 
 
+def _iter_op_stems(ops_dir):
+    """Operator module stems directly under ops_dir, plus one level down in
+    per-library subdirs (e.g. FlagTrain's baseline/deepspeed, baseline/megatron)."""
+    stems = [p.stem for p in ops_dir.glob("*.py") if not p.stem.startswith("__")]
+    for sub in ops_dir.iterdir():
+        if sub.is_dir() and not sub.name.startswith("__"):
+            stems += [p.stem for p in sub.glob("*.py") if not p.stem.startswith("__")]
+    return stems
+
+
 def select_operators(only=None, ops_dir=OPS_DIR):
     ops_dir = Path(ops_dir)
     if not ops_dir.is_dir():
         raise ValueError(f"operator directory not found: {ops_dir}")
-    names = sorted(p.stem for p in ops_dir.glob("*.py") if p.stem != "__init__")
+    names = sorted(set(_iter_op_stems(ops_dir)))
     unknown = (only or set()) - set(names)
     if unknown:
         raise ValueError(f"unknown operator modules: {sorted(unknown)}")

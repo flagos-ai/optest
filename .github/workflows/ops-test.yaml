@@ -158,6 +158,9 @@ jobs:
           images = rc.get('container_images', {})
           deps_cfg = rc.get('deps', {}) or {}
           base_data = (rc.get('base_data') or '').strip()
+          speedup_source = rc.get('speedup_source', 'origin')
+          if speedup_source not in {'origin', 'nv_baseline'}:
+              raise SystemExit(f"Invalid speedup_source: {speedup_source!r}")
 
           # Parse optional vendor filter (case-insensitive). Empty -> all.
           vendors_filter = {
@@ -191,6 +194,7 @@ jobs:
               backend['deps'] = ' '.join(merged_deps)
 
               backend['base_data'] = base_data
+              backend['speedup_source'] = speedup_source
               backend['ops_test_timeout'] = repo_timeout
               backend['op_cmd_timeout'] = op_cmd_timeout
 
@@ -892,27 +896,25 @@ jobs:
           # relative to the optest repo root (GITHUB_WORKSPACE), where the
           # nv-baseline workflow commits the collected baseline under data/.
           # This step's cwd is the target checkout, so resolve against
-          # GITHUB_WORKSPACE to reach optest's copy. Empty = not passed.
+          # GITHUB_WORKSPACE to reach optest's copy. A newly onboarded
+          # repository can run tests before its first artifact is published.
           BASE_DATA="${{ matrix.base_data }}"
-          BASE_DATA_ARG=""
-          if [ -n "${BASE_DATA}" ]; then
-            BASE_DATA_ARG="--base-data ${GITHUB_WORKSPACE}/${BASE_DATA}"
+          OPTEST_CMD=(flagos-optest --gpus "${AVAILABLE_GPUS}" ${OP_ARGS} ${EXCLUDE_OPS_ARG})
+          if [ -n "${BASE_DATA}" ] && [ -f "${GITHUB_WORKSPACE}/${BASE_DATA}" ]; then
+            OPTEST_CMD+=(--base-data "${GITHUB_WORKSPACE}/${BASE_DATA}" --speedup-source "${{ matrix.speedup_source }}")
+          elif [ -n "${BASE_DATA}" ]; then
+            echo "::warning::External baseline ${BASE_DATA} is not published; using local timings."
           fi
           echo "[Run ops tests] Operator arguments: ${OP_ARGS}"
           echo "[Run ops tests] Exclusion arguments: ${EXCLUDE_OPS_ARG:-<none>}"
           echo "[Run ops tests] Base data: ${BASE_DATA:-<none>}"
-          echo "[Run ops tests] Base-data arguments: ${BASE_DATA_ARG:-<none>}"
           # Run from the target checkout so the installed scheduler discovers
           # its conf/operators.yaml, tests/ and benchmark/ from the cwd.
-          echo "[Run ops tests] Command: flagos-optest --gpus \"${AVAILABLE_GPUS}\" ${OP_ARGS} ${EXCLUDE_OPS_ARG} ${BASE_DATA_ARG} --timeout \"${{ matrix.op_cmd_timeout }}\" --dump-output --output-dir \"${OUTPUT_DIR}\""
-          flagos-optest \
-            --gpus "${AVAILABLE_GPUS}" \
-            ${OP_ARGS} \
-            ${EXCLUDE_OPS_ARG} \
-            ${BASE_DATA_ARG} \
-            --timeout "${{ matrix.op_cmd_timeout }}" \
-            --dump-output \
-            --output-dir "${OUTPUT_DIR}"
+          OPTEST_CMD+=(--timeout "${{ matrix.op_cmd_timeout }}" --dump-output --output-dir "${OUTPUT_DIR}")
+          printf '[Run ops tests] Command:'
+          printf ' %q' "${OPTEST_CMD[@]}"
+          printf '\n'
+          "${OPTEST_CMD[@]}"
           # process the test results to generate summary files
           echo "[Run ops tests] Command: flagos-add-labels \"${OUTPUT_DIR}\""
           flagos-add-labels "${OUTPUT_DIR}"

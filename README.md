@@ -808,7 +808,8 @@ form the GitHub checkout target. Each repository entry can define:
 | `container_images.<backend>` | Repository-specific image override for a backend. |
 | `deps.default` | Explicit fallback packages installed for every enabled backend. Prefer target `pyproject.toml` vendor extras. |
 | `deps.<backend>` | Explicit fallback packages installed only for one backend. Prefer target `pyproject.toml` vendor extras. |
-| `base_data` | Optional performance-baseline JSON path in the target checkout. |
+| `base_data` | Optional performance-baseline JSON path relative to the optest checkout. If it has not been published yet, the workflow warns and uses local timings. |
+| `speedup_source` | Preferred ratio when the baseline file is present: `origin` (default) or `nv_baseline`. Check each result's actual source after fallback. |
 | `op_cmd_timeout` | Timeout in seconds for each accuracy or performance subprocess. Inherits `defaults.op_cmd_timeout`. |
 | `ops_test_timeout_minutes` | Per-repository timeout for the operator-test step. |
 

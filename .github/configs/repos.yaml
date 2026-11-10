@@ -31,6 +31,7 @@
 #
 # To onboard a new repo: add one block under `repos:` with its default_branch,
 # enabled backends, and (optionally) container_images / deps / base_data /
+# speedup_source /
 # timeout overrides. Also add its (import_name, display_name) pair to _KNOWN_LIBS
 # in src/flagos_optest/run_tests.py so runtime metadata reaches summary.json.
 # ---------------------------------------------------------------------------
@@ -82,8 +83,7 @@ repos:
     # Optional ops-baseline JSON (relative to the optest repo root, i.e.
     # GITHUB_WORKSPACE). Points at the baseline the nv-baseline workflow commits
     # into optest's data/ dir, so ops-test consumes the freshly collected
-    # baseline. Only FlagGems-vllm wires an external baseline today; other repos
-    # leave this unset so --base-data is not passed.
+    # baseline.
     base_data: data/op_vllm_perf_baseline.json
     # Uses the shared backend images (vllm), no override needed.
     backends:
@@ -103,6 +103,10 @@ repos:
   # =========================================================================
   FlagGems-sglang:
     default_branch: master
+    # Produced by nv-baseline from FlagGems-sglang's baseline/ modules.
+    # Until the first artifact is published, the test run uses local timings.
+    base_data: data/op_sglang_perf_baseline.json
+    speedup_source: nv_baseline
     # sglang ships its own images per backend, so this repo OVERRIDES the shared
     # backend defaults. Keep only backends enabled below.
     container_images:

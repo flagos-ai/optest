@@ -734,7 +734,8 @@ src/flagos_optest/        Python 软件包、调度器、报告和 GPU 检查
 | `container_images.<backend>` | 某个后端的仓库专用镜像覆盖项。 |
 | `deps.default` | 为每个已启用后端安装的显式回退软件包。优先使用目标 `pyproject.toml` 中的厂商 extra。 |
 | `deps.<backend>` | 只为某个后端安装的显式回退软件包。优先使用目标 `pyproject.toml` 中的厂商 extra。 |
-| `base_data` | 目标 checkout 中可选的性能基线 JSON 路径。 |
+| `base_data` | 相对于 optest checkout 的可选性能基线 JSON 路径。文件尚未发布时，工作流告警并使用本机计时。 |
+| `speedup_source` | 基线文件存在时优先使用的比值：`origin`（默认）或 `nv_baseline`。回退后的实际来源按结果记录。 |
 | `op_cmd_timeout` | 每个精度或性能子进程的超时时间（秒）。继承 `defaults.op_cmd_timeout`。 |
 | `ops_test_timeout_minutes` | 每个仓库的算子测试步骤超时时间。 |
 

@@ -18,7 +18,7 @@
 # collector, checks out the selected target repo into ./target for its
 # baseline/ operator modules, runs inside that repo's NV container image, and
 # executes the baseline collector (src/nv_baseline/collect_baseline_nvidia.py)
-# on a single card against target/baseline. Unlike ops-test.yaml there is no
+# across the configured H800 devices against target/baseline. Unlike ops-test.yaml there is no
 # multi-backend matrix, no reporting, upload, or Feishu steps.
 #
 # Per-repo image + output json name live in .github/configs/baseline_repos.yaml;

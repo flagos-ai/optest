@@ -125,7 +125,11 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             step["run"] for step in prepare_steps if step.get("id") == "build-matrix"
         )
 
-        for repo, expected_timeout in (("FlagTrain", 1800), ("FlagGems", 1800)):
+        for repo, expected_timeout in (
+            ("FlagTrain", 1800),
+            ("FlagGems", 1800),
+            ("FlagGems-sglang", 600),
+        ):
             with self.subTest(repo=repo), tempfile.TemporaryDirectory() as directory:
                 output = Path(directory) / "github-output"
                 environment = {
@@ -158,6 +162,13 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 for backend in matrix["include"]:
                     self.assertNotIn("vendor_pip_args", backend)
                     self.assertEqual(backend["op_cmd_timeout"], expected_timeout)
+                    if repo == "FlagGems-sglang":
+                        self.assertEqual(
+                            backend["base_data"], "data/op_sglang_perf_baseline.json"
+                        )
+                        self.assertEqual(backend["speedup_source"], "nv_baseline")
+                    else:
+                        self.assertEqual(backend["speedup_source"], "origin")
 
                 if repo == "FlagTrain":
                     backend_names = {backend["name"] for backend in matrix["include"]}

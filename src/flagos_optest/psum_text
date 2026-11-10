@@ -62,6 +62,31 @@ def _format_metric_change(
     return change
 
 
+def _format_speedup(record, default):
+    value = record.get("speedup", default)
+    text = _format_metric(value)
+    source = record.get("speedup_source")
+    return f"{text} ({source})" if source and value is not None else text
+
+
+def _format_speedup_change(
+    before, after, default1, default2, *, bold=False, compact_before=False
+):
+    source1 = before.get("speedup_source")
+    source2 = after.get("speedup_source")
+    if source1 != source2 and "nv_baseline" in (source1, source2):
+        values = f"{_format_speedup(before, None)} / {_format_speedup(after, None)}"
+        return f"**{values}**" if bold else values
+    change = _format_metric_change(
+        before.get("speedup", default1),
+        after.get("speedup", default2),
+        bold=bold,
+        colorize=True,
+        compact_before=compact_before,
+    )
+    return f"{change} (nv_baseline)" if source1 == "nv_baseline" else change
+
+
 def load_data(data_path):
     try:
         with data_path.open("r") as f:
@@ -329,16 +354,22 @@ def parse_single_performance():
         lines.append("*No performance data collected!*")
         return lines
 
-    for label, data in (("Before: " if ARGS.compare else "", perf_data1), ("After: ", perf_data2)):
+    has_external_speedup = False
+    for label, data in (
+        ("Before: " if ARGS.compare else "", perf_data1),
+        ("After: ", perf_data2),
+    ):
         note = speedup_report_note(data)
         if note:
+            has_external_speedup = True
             lines.extend([f"*{label}{note}.*", ""])
 
-    lines.append("| Dtype  | Speedup | Base | Gems  | Shape |")
+    lines.append("| Dtype  | Speedup | Local base | Gems  | Shape |")
     lines.append("|--------|---------|------|-------|-------|")
     has_nullable_metrics = bool(
         op_data1.get("native_baseline_skip_reason")
         or op_data2.get("native_baseline_skip_reason")
+        or has_external_speedup
         or any(
             dtype.get("speedup") is None
             or any(
@@ -436,30 +467,28 @@ def parse_single_performance():
 
     for dtype, ddata1 in perf_data1.items():
         ddata2 = perf_data2.get(dtype, {})
-        speedup1 = ddata1.get("speedup", missing_metric1)
         if ARGS.compare:
-            speedup2 = ddata2.get("speedup", missing_metric2)
-            spd_str = _format_metric_change(
-                speedup1, speedup2, bold=True, colorize=True
+            spd_str = _format_speedup_change(
+                ddata1, ddata2, missing_metric1, missing_metric2, bold=True
             )
 
             line = f"| {dtype} | {spd_str} | - | - | - |"
         else:
-            line = f"| {dtype} | **{_format_metric(speedup1)}** | - | - | - |"
+            line = f"| {dtype} | **{_format_speedup(ddata1, missing_metric1)}** | - | - | - |"
         lines.append(line)
 
         for shp, res1 in ddata1.get("details", {}).items():
-            s1 = res1.get("speedup", missing_metric1)
             b1 = res1.get("base", missing_metric1)
             g1 = res1.get("gems", missing_metric1)
 
             if ARGS.compare and shp in ddata2.get("details", {}):
                 res2 = ddata2.get("details").get(shp)
-                s2 = res2.get("speedup", missing_metric2)
                 b2 = res2.get("base", missing_metric2)
                 g2 = res2.get("gems", missing_metric2)
 
-                spd_str = _format_metric_change(s1, s2, colorize=True)
+                spd_str = _format_speedup_change(
+                    res1, res2, missing_metric1, missing_metric2
+                )
 
                 line = (
                     f"| | {spd_str} |"
@@ -469,7 +498,7 @@ def parse_single_performance():
                 )
             else:
                 line = (
-                    f"| | {_format_metric(s1):>6} | {_format_metric(b1):>6} |"
+                    f"| | {_format_speedup(res1, missing_metric1):>6} | {_format_metric(b1):>6} |"
                     f" {_format_metric(g1):>6} | `{shp}` |"
                 )
 
@@ -480,11 +509,10 @@ def parse_single_performance():
             for shp, res2 in ddata2.get("details", {}).items():
                 if shp in ddata1.get("details", {}):
                     continue
-                s2 = res2.get("speedup", missing_metric2)
                 b2 = res2.get("base", missing_metric2)
                 g2 = res2.get("gems", missing_metric2)
                 line = (
-                    f"| | {_format_metric_change(missing_metric1, s2, compact_before=True)} |"
+                    f"| | {_format_speedup_change({}, res2, missing_metric1, missing_metric2, compact_before=True)} |"
                     f" {_format_metric_change(missing_metric1, b2, compact_before=True)} |"
                     f" {_format_metric_change(missing_metric1, g2, compact_before=True)} |"
                     f" `{shp}` |"
@@ -496,23 +524,22 @@ def parse_single_performance():
         for dtype, ddata2 in perf_data2.items():
             if dtype in perf_data1:
                 continue
-            speedup2 = ddata2.get("speedup", missing_metric2)
-            spd_str = _format_metric_change(
+            spd_str = _format_speedup_change(
+                {},
+                ddata2,
                 missing_metric1,
-                speedup2,
+                missing_metric2,
                 bold=True,
-                colorize=True,
                 compact_before=True,
             )
             line = f"| {dtype} | {spd_str} | - | - | - |"
             lines.append(line)
 
             for shp, res2 in ddata2.get("details", {}).items():
-                s2 = res2.get("speedup", missing_metric2)
                 b2 = res2.get("base", missing_metric2)
                 g2 = res2.get("gems", missing_metric2)
                 line = (
-                    f"| | {_format_metric_change(missing_metric1, s2, compact_before=True)} |"
+                    f"| | {_format_speedup_change({}, res2, missing_metric1, missing_metric2, compact_before=True)} |"
                     f" {_format_metric_change(missing_metric1, b2, compact_before=True)} |"
                     f" {_format_metric_change(missing_metric1, g2, compact_before=True)} |"
                     f" `{shp}` |"
@@ -594,13 +621,17 @@ def parse_lines():
                     fields.append(f"{metric:.3f}")
                     metric_list.append(metric)
 
-            if metric_list and (ARGS.metric != "speedup" or not has_mixed_speedup(perf_data)):
+            if metric_list and (
+                ARGS.metric != "speedup" or not has_mixed_speedup(perf_data)
+            ):
                 metric_avg = sum(metric_list) / len(metric_list)
                 fields.append(f"{metric_avg:.3f}")
             else:
                 fields.append("")
             # The note column
-            fields.append(speedup_report_note(perf_data) if ARGS.metric == "speedup" else "")
+            fields.append(
+                speedup_report_note(perf_data) if ARGS.metric == "speedup" else ""
+            )
 
         lines.append(format_record(fields))
 

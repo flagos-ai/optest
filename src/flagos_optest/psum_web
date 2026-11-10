@@ -129,7 +129,7 @@ def convert_summary(data_dir, platform, compiler):
             for reason in details.get("skipped", {}):
                 note = reason.split("\n")[0]
                 break
-        row["note"] = note or speedup_report_note(perf_data)
+        row["note"] = " / ".join(filter(None, (note, speedup_report_note(perf_data))))
 
         operators.append(row)
 

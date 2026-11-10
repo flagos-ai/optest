@@ -741,7 +741,8 @@ src/flagos_optest/        Python 软件包、调度器、报告和 GPU 检查
 
 FlagGems-sglang 的旧 ref 缺少 `baseline/optest-v1.json` 时，工作流使用本机计时。
 NVIDIA 采集工作流会逐项核对清单中的 shape、dtype、计时协议和 kernel profile，
-全部通过后才更新基线。报表分别统计本机和 NVIDIA 基线比值。同一 dtype 有两种来源时，
+全部通过后才更新基线。更新必须保留已发布的用例键和已标注的计时协议。
+报表分别统计本机和 NVIDIA 基线比值。同一 dtype 有两种来源时，
 `summary.json` 提供 `speedup_by_source`，并留空合计比值。算子级平均值也会在来源混合时留空。
 
 不同层级的镜像键有意采用不同形式：

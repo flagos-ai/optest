@@ -816,6 +816,7 @@ form the GitHub checkout target. Each repository entry can define:
 FlagGems-sglang refs without `baseline/optest-v1.json` use local timings.
 The NVIDIA collection workflow checks every shape, dtype, timing protocol,
 and kernel profile declared in that manifest before updating the baseline.
+An update must also retain published workload keys and their tagged protocols.
 Reports keep local and NVIDIA ratios separate. When a dtype has both
 sources, `summary.json` provides `speedup_by_source` and leaves the combined
 speedup empty. Reports also omit an operator average across mixed sources.

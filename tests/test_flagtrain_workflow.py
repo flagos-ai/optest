@@ -147,6 +147,41 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     )
                     self.assertEqual(output.read_text().strip(), f"result={expected}")
 
+            (root / "data").mkdir()
+            published = root / "data/baseline.json"
+            for older_record, error in (
+                (row, "publication would remove"),
+                ({**row, "timing_protocol": "newer"}, "publication would change"),
+            ):
+                previous_shape = "[1, 8192]" if older_record == row else "[1, 4096]"
+                published.write_text(
+                    json.dumps(
+                        {
+                            op: {
+                                "shapes": {
+                                    previous_shape: {"torch.float32": older_record}
+                                }
+                            }
+                        }
+                    )
+                )
+                status.write_text(json.dumps({"tasks": {op: {"status": "completed"}}}))
+                completed = subprocess.run(
+                    [sys.executable, "-c", script],
+                    cwd=root,
+                    env={
+                        **os.environ,
+                        "GITHUB_OUTPUT": str(output),
+                        "OUTPUT": "baseline.json",
+                        "TARGET_REPO": "flagos-ai/FlagGems-sglang",
+                        "AUTO_UPDATE": "true",
+                    },
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(completed.returncode, 1)
+                self.assertIn(error, completed.stdout)
+
     def test_backend_gpu_configuration_uses_dynamic_detection_by_default(self):
         self.assertNotIn("server", self.repos)
 

@@ -454,6 +454,21 @@ jobs:
                               raise ValueError(f"{op} {shape} has no kernel profile")
                           if record.get("timing_protocol") != spec["timing_protocol"]:
                               raise ValueError(f"{op} {shape} has an unexpected timing protocol")
+                  published = pathlib.Path("data") / output.name
+                  if os.environ.get("AUTO_UPDATE") == "true" and published.is_file():
+                      previous = json.loads(published.read_text())
+                      for op, entry in previous.items():
+                          if op.startswith("_"):
+                              continue
+                          new_shapes = baseline.get(op, {}).get("shapes", {})
+                          for shape, records in entry["shapes"].items():
+                              for dtype, record in records.items():
+                                  replacement = new_shapes.get(shape, {}).get(dtype)
+                                  if replacement is None:
+                                      raise ValueError(f"publication would remove {op} {shape} {dtype}")
+                                  protocol = record.get("timing_protocol")
+                                  if protocol and replacement["timing_protocol"] != protocol:
+                                      raise ValueError(f"publication would change the protocol for {op} {shape} {dtype}")
               except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
                   print(f"::error::SGLang baseline coverage check failed: {exc}")
                   result = "failed"

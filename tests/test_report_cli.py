@@ -97,6 +97,68 @@ class AddLabelsDirectoryTest(unittest.TestCase):
 
 
 class ReportDirectoryTest(unittest.TestCase):
+    def test_comparison_and_web_preserve_speedup_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for side, ratio, source in (
+                ("before", 1, "origin"),
+                ("after", 2, "nv_baseline"),
+            ):
+                folder = root / side
+                folder.mkdir()
+                record = {"speedup": ratio, "speedup_source": source}
+                (folder / "summary.json").write_text(
+                    json.dumps(
+                        {
+                            "env": {"os_name": "Linux", "os_release": "test"},
+                            "result": {
+                                "add": {
+                                    "accuracy": {
+                                        "status": "Failed",
+                                        "passed": 0,
+                                        "failed": 1,
+                                        "skipped": 0,
+                                        "details": {"failed": {"case failed": []}},
+                                    },
+                                    "performance": {
+                                        "status": "Passed",
+                                        "data": {
+                                            "fp32": {
+                                                **record,
+                                                "details": {
+                                                    "[1]": {
+                                                        **record,
+                                                        "base": 1,
+                                                        "gems": 1,
+                                                    }
+                                                },
+                                            }
+                                        },
+                                    },
+                                }
+                            },
+                        }
+                    )
+                )
+            report = self.run_report(
+                "psum_text", root, "--format", "markdown", "--single", "--compare"
+            )
+            self.assertEqual(report.returncode, 0, report.stderr)
+            self.assertEqual(
+                report.stdout.count("1.000 (origin) / 2.000 (nv_baseline)"), 2
+            )
+            self.assertNotIn("1.000 -> 2.000", report.stdout)
+            (root / "after").rename(root / "H800-20261110")
+            (root / "before/summary.json").unlink()
+            report = self.run_report(
+                "psum_web", root, "--raw-dir", root, "--output-dir", root / "web"
+            )
+            self.assertEqual(report.returncode, 0, report.stderr)
+            web = json.loads((root / "web/H800.json").read_text())
+            self.assertEqual(
+                web["operators"][0]["note"], "case failed / Speedup vs NVIDIA baseline"
+            )
+
     def test_mixed_speedups_keep_separate_denominators(self):
         native = {"shape_detail": [2], "speedup": 10, "latency": 0.1}
         external = {"shape_detail": [1], "compared_speedup": 2, "latency": 0.2}

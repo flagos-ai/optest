@@ -74,17 +74,17 @@ def _format_speedup_change(
 ):
     source1 = before.get("speedup_source")
     source2 = after.get("speedup_source")
-    if source1 != source2 and "nv_baseline" in (source1, source2):
+    # Reports do not carry the identity of the published NVIDIA snapshot.
+    if "nv_baseline" in (source1, source2):
         values = f"{_format_speedup(before, None)} / {_format_speedup(after, None)}"
         return f"**{values}**" if bold else values
-    change = _format_metric_change(
+    return _format_metric_change(
         before.get("speedup", default1),
         after.get("speedup", default2),
         bold=bold,
         colorize=True,
         compact_before=compact_before,
     )
-    return f"{change} (nv_baseline)" if source1 == "nv_baseline" else change
 
 
 def load_data(data_path):

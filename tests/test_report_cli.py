@@ -148,6 +148,20 @@ class ReportDirectoryTest(unittest.TestCase):
                 report.stdout.count("1.000 (origin) / 2.000 (nv_baseline)"), 2
             )
             self.assertNotIn("1.000 -> 2.000", report.stdout)
+            before = root / "before/summary.json"
+            data = json.loads(before.read_text())
+            dtype = data["result"]["add"]["performance"]["data"]["fp32"]
+            dtype["speedup_source"] = "nv_baseline"
+            dtype["details"]["[1]"]["speedup_source"] = "nv_baseline"
+            before.write_text(json.dumps(data))
+            report = self.run_report(
+                "psum_text", root, "--format", "markdown", "--single", "--compare"
+            )
+            self.assertEqual(report.returncode, 0, report.stderr)
+            self.assertEqual(
+                report.stdout.count("1.000 (nv_baseline) / 2.000 (nv_baseline)"), 2
+            )
+            self.assertNotIn("1.000 -> 2.000", report.stdout)
             (root / "after").rename(root / "H800-20261110")
             (root / "before/summary.json").unlink()
             report = self.run_report(

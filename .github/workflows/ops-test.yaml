@@ -900,7 +900,9 @@ jobs:
           # repository can run tests before its first artifact is published.
           BASE_DATA="${{ matrix.base_data }}"
           OPTEST_CMD=(flagos-optest --gpus "${AVAILABLE_GPUS}" ${OP_ARGS} ${EXCLUDE_OPS_ARG})
-          if [ -n "${BASE_DATA}" ] && [ -f "${GITHUB_WORKSPACE}/${BASE_DATA}" ]; then
+          if [ -n "${BASE_DATA}" ] && [ "${REPOSITORY_NAME}" = FlagGems-sglang ] && [ ! -s baseline/optest-v1.json ]; then
+            echo "::warning::This FlagGems-sglang ref lacks optest timing support; using local timings."
+          elif [ -n "${BASE_DATA}" ] && [ -f "${GITHUB_WORKSPACE}/${BASE_DATA}" ]; then
             OPTEST_CMD+=(--base-data "${GITHUB_WORKSPACE}/${BASE_DATA}" --speedup-source "${{ matrix.speedup_source }}")
           elif [ -n "${BASE_DATA}" ]; then
             echo "::warning::External baseline ${BASE_DATA} is not published; using local timings."

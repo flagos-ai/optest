@@ -21,6 +21,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from performance_report import has_mixed_speedup, speedup_report_note
+
 DTYPE_MAP = {
     "torch.float16": "fp16",
     "torch.float32": "fp32",
@@ -327,13 +329,28 @@ def parse_single_performance():
         lines.append("*No performance data collected!*")
         return lines
 
+    for label, data in (("Before: " if ARGS.compare else "", perf_data1), ("After: ", perf_data2)):
+        note = speedup_report_note(data)
+        if note:
+            lines.extend([f"*{label}{note}.*", ""])
+
     lines.append("| Dtype  | Speedup | Base | Gems  | Shape |")
     lines.append("|--------|---------|------|-------|-------|")
-    has_native_skip = bool(
+    has_nullable_metrics = bool(
         op_data1.get("native_baseline_skip_reason")
         or op_data2.get("native_baseline_skip_reason")
+        or any(
+            dtype.get("speedup") is None
+            or any(
+                case.get(field, 0) is None
+                for case in dtype.get("details", {}).values()
+                for field in ("speedup", "base", "gems")
+            )
+            for data in (perf_data1, perf_data2)
+            for dtype in data.values()
+        )
     )
-    if not has_native_skip:
+    if not has_nullable_metrics:
         for dtype, ddata1 in perf_data1.items():
             ddata2 = perf_data2.get(dtype, {})
             speedup1 = ddata1.get("speedup", 0)
@@ -577,13 +594,13 @@ def parse_lines():
                     fields.append(f"{metric:.3f}")
                     metric_list.append(metric)
 
-            if len(metric_list) > 0:
+            if metric_list and (ARGS.metric != "speedup" or not has_mixed_speedup(perf_data)):
                 metric_avg = sum(metric_list) / len(metric_list)
                 fields.append(f"{metric_avg:.3f}")
             else:
                 fields.append("")
             # The note column
-            fields.append("")
+            fields.append(speedup_report_note(perf_data) if ARGS.metric == "speedup" else "")
 
         lines.append(format_record(fields))
 

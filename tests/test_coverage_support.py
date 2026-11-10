@@ -126,12 +126,21 @@ def test_performance_report_all_result_shapes(tmp_path):
     assert result["status"] == "Passed"
     assert result["data"]["fp32"]["speedup"] == 1.5
     assert result["data"]["custom"]["result"] == "Unknown"
-    # Explicit nv_baseline: prefer compared_speedup=3.0 for shape1, giving a
-    # mean of (3.0 + 1.0) / 2 = 2.0.
+    # Explicit nv_baseline uses 3.0 for shape1, and the local 1.0 for shape2.
     result = performance_report.parse_perf_data(
         "add", native_file, speedup_source="nv_baseline"
     )
-    assert result["data"]["fp32"]["speedup"] == 2.0
+    fp32 = result["data"]["fp32"]
+    assert fp32["speedup"] is None
+    assert fp32["speedup_by_source"] == {"nv_baseline": 3.0, "origin": 1.0}
+    assert "fp32=mixed" in performance_report.speedup_report_note(result["data"])
+    assert (
+        performance_report.speedup_report_note({"fp32": {"speedup_source": "origin"}})
+        == ""
+    )
+    assert performance_report.speedup_report_note(
+        {"fp32": {"speedup_source": "nv_baseline"}}
+    ) == ("Speedup vs NVIDIA baseline")
 
     compared = {
         "add": {
@@ -147,6 +156,7 @@ def test_performance_report_all_result_shapes(tmp_path):
                         # speedup=None and records speedup_source=None. This None
                         # is excluded from the fp16 mean below.
                         {"shape_detail": [3]},
+                        {"shape_detail": [4], "speedup": 1.0, "compared_speedup": 2.0},
                     ],
                 },
                 {
@@ -163,7 +173,10 @@ def test_performance_report_all_result_shapes(tmp_path):
         }
     }
     result = performance_report.parse_perf_data("add", _write_perf(tmp_path, compared))
-    assert result["data"]["fp16"]["speedup"] == 2.0
+    assert result["data"]["fp16"]["speedup_by_source"] == {
+        "nv_baseline": 2.0,
+        "origin": 1.0,
+    }
     # The reference-less shape carries no speedup and no source.
     assert result["data"]["fp16"]["details"]["[3]"]["speedup"] is None
     assert result["data"]["fp16"]["details"]["[3]"]["speedup_source"] is None

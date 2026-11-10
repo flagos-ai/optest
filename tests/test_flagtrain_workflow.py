@@ -76,6 +76,77 @@ class FlagTrainWorkflowTest(unittest.TestCase):
 
         self.assertLessEqual(configured_repos, probed_repos)
 
+    def test_sglang_publication_requires_complete_profiled_workloads(self):
+        workflow = yaml.safe_load(
+            (ROOT / ".github/workflows/nv_baseline.yaml").read_text()
+        )
+        script = next(
+            step["run"]
+            for job in workflow["jobs"].values()
+            for step in job["steps"]
+            if step.get("id") == "classify"
+        )
+        op = "softcap_inplace_logits"
+        protocol = "reset-outside"
+        row = {"latency_ms": 0.02, "num_kernels": 1, "timing_protocol": protocol}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "target" / "baseline"
+            target.mkdir(parents=True)
+            (target / "optest-v1.json").write_text(
+                json.dumps(
+                    {
+                        op: {
+                            "dtype": "torch.float32",
+                            "shapes": [[1, 4096]],
+                            "timing_protocol": protocol,
+                        }
+                    }
+                )
+            )
+            (root / "baseline.json.work").mkdir()
+            status = root / "baseline.json.work/status.json"
+            output = root / "github-output"
+            for state, record, repo, expected in (
+                ("completed", row, "FlagGems-sglang", "pass"),
+                ("skipped", row, "FlagGems-sglang", "failed"),
+                ("profiling_incomplete", row, "FlagGems-sglang", "failed"),
+                ("completed", None, "FlagGems-sglang", "failed"),
+                (
+                    "completed",
+                    {**row, "timing_protocol": "legacy"},
+                    "FlagGems-sglang",
+                    "failed",
+                ),
+                ("completed", {**row, "num_kernels": 0}, "FlagGems-sglang", "failed"),
+                ("profiling_incomplete", row, "FlagGems-vllm", "warning"),
+            ):
+                with self.subTest(state=state, record=record, repo=repo):
+                    status.write_text(json.dumps({"tasks": {op: {"status": state}}}))
+                    shapes = {"[1, 4096]": {"torch.float32": record}} if record else {}
+                    (root / "baseline.json").write_text(
+                        json.dumps({op: {"shapes": shapes}})
+                    )
+                    output.write_text("")
+                    completed = subprocess.run(
+                        [sys.executable, "-c", script],
+                        cwd=root,
+                        env={
+                            **os.environ,
+                            "GITHUB_OUTPUT": str(output),
+                            "OUTPUT": "baseline.json",
+                            "TARGET_REPO": f"flagos-ai/{repo}",
+                        },
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(
+                        completed.returncode,
+                        int(expected == "failed"),
+                        completed.stderr,
+                    )
+                    self.assertEqual(output.read_text().strip(), f"result={expected}")
+
     def test_backend_gpu_configuration_uses_dynamic_detection_by_default(self):
         self.assertNotIn("server", self.repos)
 

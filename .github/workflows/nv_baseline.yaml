@@ -360,12 +360,14 @@ jobs:
       #               emits a ::warning:: annotation and keeps the job green.
       #   - pass    : everything "completed" (operators merely "skipped" do not
       #               fail the run).
+      # SGLang additionally requires exact, profiled coverage before publishing.
       - name: Classify collection result
         id: classify
         if: always()
         shell: python3 {0}
         run: |
           import json
+          import math
           import os
           import pathlib
           import sys
@@ -423,6 +425,38 @@ jobs:
               result = "warning"
           else:
               result = "pass"
+
+          if os.environ["TARGET_REPO"] == "flagos-ai/FlagGems-sglang" and result != "failed":
+              try:
+                  manifest_path = pathlib.Path("target/baseline/optest-v1.json")
+                  manifest = json.loads(manifest_path.read_text())
+                  baseline = json.loads(output.read_text())
+                  if not manifest or set(tasks) != set(manifest):
+                      raise ValueError("operator tasks differ from the workload manifest")
+                  if {op for op in baseline if not op.startswith("_")} != set(manifest):
+                      raise ValueError("baseline operators differ from the workload manifest")
+                  for op, spec in manifest.items():
+                      if tasks[op]["status"] != "completed":
+                          raise ValueError(f"{op} did not complete profiling")
+                      shapes = baseline[op]["shapes"]
+                      expected = {str(shape) for shape in spec["shapes"]}
+                      if not expected or shapes.keys() != expected:
+                          raise ValueError(f"{op} shape coverage differs from the workload manifest")
+                      dtype = spec["dtype"]
+                      for shape, per_dtype in shapes.items():
+                          if per_dtype.keys() != {dtype}:
+                              raise ValueError(f"{op} {shape} has unexpected dtype coverage")
+                          record = per_dtype[dtype]
+                          latency = record["latency_ms"]
+                          if not math.isfinite(latency) or latency <= 0:
+                              raise ValueError(f"{op} {shape} has invalid latency")
+                          if record.get("num_kernels", 0) <= 0:
+                              raise ValueError(f"{op} {shape} has no kernel profile")
+                          if record.get("timing_protocol") != spec["timing_protocol"]:
+                              raise ValueError(f"{op} {shape} has an unexpected timing protocol")
+              except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+                  print(f"::error::SGLang baseline coverage check failed: {exc}")
+                  result = "failed"
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
               fh.write(f"result={result}\n")

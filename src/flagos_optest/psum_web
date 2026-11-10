@@ -21,6 +21,8 @@ import re
 import sys
 from pathlib import Path
 
+from performance_report import speedup_report_note
+
 STATUS_NORMALIZE = {
     "pass": "Passed",
     "passed": "Passed",
@@ -127,7 +129,7 @@ def convert_summary(data_dir, platform, compiler):
             for reason in details.get("skipped", {}):
                 note = reason.split("\n")[0]
                 break
-        row["note"] = note
+        row["note"] = note or speedup_report_note(perf_data)
 
         operators.append(row)
 

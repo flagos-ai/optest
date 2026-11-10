@@ -228,8 +228,8 @@ class NotifyFeishuRefTest(unittest.TestCase):
             "Operator arguments: ${OP_ARGS}",
             "Excluded ops: ${TEST_EXCLUDE_OPS:-<none>}",
             "Exclusion arguments: ${EXCLUDE_OPS_ARG:-<none>}",
-            "Base-data arguments: ${BASE_DATA_ARG:-<none>}",
-            "Command: flagos-optest",
+            "Base data: ${BASE_DATA:-<none>}",
+            "printf '[Run ops tests] Command:'",
             "Command: flagos-add-labels",
             "Command: flagos-psum-text",
             "Command: flagos-psum-html",
@@ -238,7 +238,8 @@ class NotifyFeishuRefTest(unittest.TestCase):
             with self.subTest(entry=entry):
                 self.assertIn(entry, script)
         self.assertIn('EXCLUDE_OPS_ARG="--exclude-ops ${TEST_EXCLUDE_OPS}"', script)
-        self.assertIn("${OP_ARGS} ${EXCLUDE_OPS_ARG} ${BASE_DATA_ARG}", script)
+        self.assertIn("OPTEST_CMD=(flagos-optest", script)
+        self.assertIn('"${OPTEST_CMD[@]}"', script)
 
     def test_workflow_names_checkouts_and_install_commands(self):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))

@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 import consts
+from performance_report import has_mixed_speedup, speedup_report_note
 
 DATA: dict[str, Any] = {}
 DATA_DIR = None
@@ -134,14 +135,14 @@ def parse_lines():
                 else:
                     fields.append("")
             # Compute OPAverageSpeedUp
-            if speedup_values:
+            if speedup_values and not has_mixed_speedup(perf_data):
                 avg_speedup = sum(speedup_values) / len(speedup_values)
                 op_avg_field = f"{avg_speedup:6.3f}"
             else:
                 op_avg_field = ""
             # Insert OPAverageSpeedUp right after PerfRes (before dtype columns)
             fields.insert(4, op_avg_field)
-            fields.append("")  # note
+            fields.append(speedup_report_note(perf_data))
 
         lines.append(_build_html_row_with_logs(op, fields))
 

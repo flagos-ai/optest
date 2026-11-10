@@ -15,6 +15,7 @@
 """Pure benchmark report parsing, shared by the scheduler and host tests."""
 
 import json
+from collections import defaultdict
 from typing import Any
 
 if __package__:
@@ -77,6 +78,43 @@ def _case_record(result, default=None, speedup_source="origin"):
     return record
 
 
+def _speedup_summary(records, empty=None):
+    values_by_source = defaultdict(list)
+    for record in records:
+        if isinstance(record["speedup"], (int, float)):
+            values_by_source[record["speedup_source"]].append(record["speedup"])
+    means = {
+        source: sum(values) / len(values) for source, values in values_by_source.items()
+    }
+    if len(means) > 1:
+        return {"speedup": None, "speedup_source": "mixed", "speedup_by_source": means}
+    source = next(iter(means), None)
+    return {"speedup": means.get(source, empty), "speedup_source": source}
+
+
+def _speedup_sources(data):
+    return {entry.get("speedup_source") for entry in data.values()} - {None}
+
+
+def has_mixed_speedup(data):
+    sources = _speedup_sources(data)
+    return "mixed" in sources or len(sources) > 1
+
+
+def speedup_report_note(data):
+    """Describe external ratios and flag an operator with mixed denominators."""
+    if has_mixed_speedup(data):
+        labels = [
+            f"{dtype}={entry['speedup_source']}"
+            for dtype, entry in data.items()
+            if entry.get("speedup_source")
+        ]
+        return "Mixed speedup sources (" + " / ".join(labels) + ")"
+    if _speedup_sources(data) == {"nv_baseline"}:
+        return "Speedup vs NVIDIA baseline"
+    return ""
+
+
 def parse_perf_data(op, result_file, speedup_source="origin"):
     raw_data = {}
     try:
@@ -106,28 +144,25 @@ def parse_perf_data(op, result_file, speedup_source="origin"):
         for item in records:
             dtype = DTYPE_MAP.get(item["dtype"], item["dtype"])
             details: dict[str, dict[str, Any]] = {}
-            total = 0.0
-            count = 0
+            case_records = []
             for res in item.get("result", []):
                 shape = str(res.get("shape_detail", "Unknown")).replace(" ", "")
                 details.setdefault(shape, {})
                 record = _case_record(res, default=0.0, speedup_source=speedup_source)
                 details[shape].update(record)
-                speedup = record["speedup"]
-                count += 1
-                total += speedup
+                case_records.append(record)
 
             if details:
                 bench_res[dtype] = {
                     "result": "OK",
                     "details": details,
-                    "speedup": total / count,
+                    **_speedup_summary(case_records),
                 }
             else:
                 bench_res[dtype] = {
                     "result": "Unknown",
                     "details": {},
-                    "speedup": 0,
+                    "speedup": None,
                 }
 
         return {
@@ -137,8 +172,7 @@ def parse_perf_data(op, result_file, speedup_source="origin"):
         }
 
     native_baseline_skip_reasons: list[str] = []
-    speedup_totals: dict[str, float] = {}
-    speedup_counts: dict[str, int] = {}
+    case_records_by_dtype = defaultdict(list)
 
     for item in records:
         dtype = DTYPE_MAP.get(item["dtype"], item["dtype"])
@@ -159,19 +193,13 @@ def parse_perf_data(op, result_file, speedup_source="origin"):
             details.setdefault(shape, {})
             record = _case_record(res, speedup_source=speedup_source)
             details[shape].update(record)
-            speedup = record["speedup"]
-            if isinstance(speedup, (int, float)):
-                speedup_counts[dtype] = speedup_counts.get(dtype, 0) + 1
-                speedup_totals[dtype] = speedup_totals.get(dtype, 0.0) + speedup
+            case_records_by_dtype[dtype].append(record)
 
         if details:
             dtype_result["result"] = "OK"
 
     for dtype, dtype_result in bench_res.items():
-        count = speedup_counts.get(dtype, 0)
-        dtype_result["speedup"] = (
-            speedup_totals.get(dtype, 0.0) / count if count else None
-        )
+        dtype_result.update(_speedup_summary(case_records_by_dtype[dtype]))
 
     parsed_result = {
         "status": result.title(),

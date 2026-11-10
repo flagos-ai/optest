@@ -813,6 +813,13 @@ form the GitHub checkout target. Each repository entry can define:
 | `op_cmd_timeout` | Timeout in seconds for each accuracy or performance subprocess. Inherits `defaults.op_cmd_timeout`. |
 | `ops_test_timeout_minutes` | Per-repository timeout for the operator-test step. |
 
+FlagGems-sglang refs without `baseline/optest-v1.json` use local timings.
+The NVIDIA collection workflow checks every shape, dtype, timing protocol,
+and kernel profile declared in that manifest before updating the baseline.
+Reports keep local and NVIDIA ratios separate. When a dtype has both
+sources, `summary.json` provides `speedup_by_source` and leaves the combined
+speedup empty. Reports also omit an operator average across mixed sources.
+
 The image keys intentionally differ by level:
 
 ```yaml

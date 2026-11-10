@@ -23,6 +23,7 @@ from pathlib import Path
 from unittest import mock
 
 from flagos_optest import add_labels
+from flagos_optest.performance_report import parse_perf_data
 
 PACKAGE_DIR = Path(add_labels.__file__).resolve().parent
 
@@ -96,6 +97,88 @@ class AddLabelsDirectoryTest(unittest.TestCase):
 
 
 class ReportDirectoryTest(unittest.TestCase):
+    def test_mixed_speedups_keep_separate_denominators(self):
+        native = {"shape_detail": [2], "speedup": 10, "latency": 0.1}
+        external = {"shape_detail": [1], "compared_speedup": 2, "latency": 0.2}
+        with tempfile.TemporaryDirectory() as directory:
+            results = Path(directory)
+            raw = results / "benchmark.json"
+            for skip_reason in ({}, {"native_baseline_skip_reason": "unavailable"}):
+                with self.subTest(skip_reason=skip_reason):
+                    raw.write_text(
+                        json.dumps(
+                            {
+                                "add": {
+                                    "result": "passed",
+                                    "details": [
+                                        {
+                                            "dtype": "torch.float32",
+                                            "result": [external, native],
+                                            **skip_reason,
+                                        },
+                                        {
+                                            "dtype": "torch.bfloat16",
+                                            "result": [external],
+                                        },
+                                        {"dtype": "torch.float16", "result": [native]},
+                                    ],
+                                }
+                            }
+                        )
+                    )
+                    perf = parse_perf_data("add", raw, "nv_baseline")
+                    fp32 = perf["data"]["fp32"]
+                    self.assertIsNone(fp32["speedup"])
+                    self.assertEqual(fp32["speedup_source"], "mixed")
+                    self.assertEqual(
+                        fp32["speedup_by_source"], {"nv_baseline": 2, "origin": 10}
+                    )
+                    self.assertEqual(fp32["details"]["[2]"]["speedup_source"], "origin")
+
+            accuracy = {"status": "Passed", "passed": 1, "failed": 0, "skipped": 0}
+            for dtype_data in (
+                perf["data"],
+                {k: v for k, v in perf["data"].items() if k != "fp32"},
+            ):
+                (results / "summary.json").write_text(
+                    json.dumps(
+                        {
+                            "env": {"os_name": "Linux", "os_release": "test"},
+                            "result": {
+                                "add": {
+                                    "accuracy": accuracy,
+                                    "performance": {
+                                        "status": "Passed",
+                                        "data": dtype_data,
+                                    },
+                                }
+                            },
+                        }
+                    )
+                )
+                for script, output in (
+                    ("psum_text", "report.csv"),
+                    ("psum_html", "report.html"),
+                ):
+                    report = self.run_report(script, results, "-o", output)
+                    self.assertEqual(report.returncode, 0, report.stderr)
+                    content = (results / output).read_text()
+                    self.assertIn("Mixed speedup sources", content)
+                    self.assertNotIn("6.000", content)
+                report = self.run_report(
+                    "psum_text",
+                    results,
+                    "--format",
+                    "markdown",
+                    "--single",
+                    "-o",
+                    "report.md",
+                )
+                self.assertEqual(report.returncode, 0, report.stderr)
+                self.assertIn(
+                    "Mixed speedup sources", (results / "report.md").read_text()
+                )
+
     def create_summary(self, directory):
         (directory / "summary.json").write_text(
             json.dumps(

@@ -280,6 +280,22 @@ jobs:
           if [ ! -d "${WORK}/apex" ]; then
             git clone --depth 1 https://github.com/NVIDIA/apex.git "${WORK}/apex"
           fi
+          # Apex's setup.py calls check_cuda_torch_binary_vs_bare_metal(), which
+          # raises when nvcc's version does not exactly match the CUDA torch was
+          # built with. This image's nvcc is 13.2 but torch is +cu130 (13.0), a
+          # minor mismatch Apex's own comment calls safe but still rejects. No
+          # bypass flag exists, so comment out the check before building.
+          python3 - <<'PATCH'
+          from pathlib import Path
+          p = Path("${WORK}/apex/setup.py")
+          src = p.read_text()
+          line = "check_cuda_torch_binary_vs_bare_metal(CUDA_HOME)"
+          if line in src and not src.startswith("# ") and src.count(line) == 1:
+              p.write_text(src.replace(line, "# " + line + "  # patched: nvcc 13.2 vs torch cu130"))
+              print("[Deps] Patched apex setup.py: disabled CUDA version check")
+          else:
+              print("[Deps] apex setup.py check already patched or line not found; leaving as-is")
+          PATCH
           python3 -m pip install -v --no-build-isolation \
             --config-settings "--build-option=--cpp_ext" \
             --config-settings "--build-option=--cuda_ext" \

@@ -20,6 +20,9 @@ vendor: THead
 # Runner labels for this backends (self-hosted)
 runner_labels: 810e-flaggems-weekly
 
+test_env:
+  UV_SKIP_WHEEL_FILENAME_CHECK: "1"
+
 # Container image for this backend (DEFAULT).
 # Priority: repos.yaml `images.<BACKEND>` for the selected repo OVERRIDES
 # this value; when that repo has no override here, this default is used.

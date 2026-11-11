@@ -91,6 +91,65 @@ def _fake_torch(*, cuda_error=False, count=1):
     return types.SimpleNamespace(__version__="1.0", cuda=cuda)
 
 
+@pytest.mark.parametrize("distribution_name", run_tests._FLAGTREE_DISTRIBUTIONS)
+def test_probe_flagtree_distributions(distribution_name, monkeypatch):
+    version = "0.7.0" if distribution_name == "flagtree" else "0.7.1.dev20261015"
+    project_urls = (
+        []
+        if distribution_name == "flagtree"
+        else [
+            "Documentation, https://flagos-ai.github.io/flagtree/",
+            "Source-Commit, "
+            "https://github.com/flagos-ai/flagtree/commit/ABCDEF1234567890",
+        ]
+    )
+
+    def get_version(candidate):
+        if candidate == distribution_name:
+            return version
+        raise run_tests.metadata.PackageNotFoundError(candidate)
+
+    package_metadata = mock.Mock()
+    package_metadata.get_all.return_value = project_urls
+    monkeypatch.setattr(run_tests.metadata, "version", get_version)
+    monkeypatch.setattr(run_tests.metadata, "metadata", lambda _name: package_metadata)
+
+    assert run_tests._probe_flagtree_distribution() == (
+        distribution_name,
+        version if distribution_name == "flagtree" else f"{version}_ABCDEF12",
+    )
+
+
+def test_probe_flagtree_ignores_missing_commit_metadata(monkeypatch):
+    monkeypatch.setattr(
+        run_tests.metadata,
+        "version",
+        lambda name: "0.7.1.dev20261015"
+        if name == "flagtree-nvidia"
+        else (_ for _ in ()).throw(run_tests.metadata.PackageNotFoundError(name)),
+    )
+    monkeypatch.setattr(
+        run_tests.metadata,
+        "metadata",
+        mock.Mock(side_effect=ValueError("invalid metadata")),
+    )
+
+    assert run_tests._probe_flagtree_distribution() == (
+        "flagtree-nvidia",
+        "0.7.1.dev20261015",
+    )
+
+
+def test_probe_flagtree_returns_none_when_no_distribution_is_installed(monkeypatch):
+    monkeypatch.setattr(
+        run_tests.metadata,
+        "version",
+        mock.Mock(side_effect=run_tests.metadata.PackageNotFoundError),
+    )
+
+    assert run_tests._probe_flagtree_distribution() is None
+
+
 def test_probe_torch_triton_frameworks_and_environment(monkeypatch):
     env = {}
     monkeypatch.setattr(run_tests, "ENV_INFO", env)

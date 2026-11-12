@@ -59,9 +59,9 @@ new libraries are represented in test results.
 
 First determine whether the change adds hardware for an already-supported
 vendor or introduces a genuinely new vendor. A new hardware backend for an
-existing vendor normally reuses the vendor key, GPU probe, metadata parser, and
-FlagTree distribution already registered for that vendor; do not duplicate
-those entries.
+existing vendor normally reuses the vendor key, GPU probe, and metadata parser;
+do not duplicate those entries. It may still have a distinct FlagTree daily
+distribution when its backend or toolchain differs.
 
 For every new hardware backend:
 
@@ -74,7 +74,17 @@ For every new hardware backend:
 3. Ensure the target repository exposes an optional-dependency group whose name
    matches the lowercase vendor key reported by `flagos-gpu-check`. The workflow
    selects that group automatically.
-4. Update the backend inventory in `README.md` and `README.zh-CN.md`. If the
+4. Check FlagTree's `packaging/flagtree/backends.yaml` for a backend-specific
+   daily wheel distribution. If it introduces a distribution name not already
+   present, add that exact name to `_FLAGTREE_DISTRIBUTIONS` in
+   `src/flagos_optest/run_tests.py`; backend names, vendor keys, and Python
+   import names are not interchangeable here. The probe reports the wheel
+   version and, when `Project-URL` contains a valid `Source-Commit` URL, appends
+   the first eight commit characters as `<version>_<sha8>`. Release wheels named
+   `flagtree`, or daily wheels without that metadata, retain the plain
+   distribution version. Update `tests/test_run_tests_coverage.py` whenever the
+   distribution list or metadata behavior changes.
+5. Update the backend inventory in `README.md` and `README.zh-CN.md`. If the
    hardware participates in NVIDIA baseline comparisons, also update
    `src/nv_baseline/hardware_specs.json` and its focused tests.
 
@@ -88,22 +98,14 @@ For a genuinely new vendor, also update all vendor registries and probes:
 2. In `src/flagos_optest/gpu_metadata.py`, add the normalized display name,
    management command, runtime roots/environment variables, model pattern, and
    any vendor-specific driver or runtime-version parsing.
-3. In `src/flagos_optest/run_tests.py`, add the upstream FlagTree daily wheel
-   distribution name to `_FLAGTREE_DISTRIBUTIONS`. Use the exact distribution
-   name from FlagTree's `packaging/flagtree/backends.yaml`; backend names and
-   Python import names are not interchangeable here. The probe reports the
-   wheel version and, when `Project-URL` contains a valid `Source-Commit` URL,
-   appends the first eight commit characters as `<version>_<sha8>`. Release
-   wheels named `flagtree`, or daily wheels without that metadata, retain the
-   plain distribution version.
-4. Add or update unit coverage in `tests/test_gpu_check.py`,
+3. Add or update unit coverage in `tests/test_gpu_check.py`,
    `tests/test_gpu_check_coverage.py`, `tests/test_run_tests_coverage.py`, and
    metadata-focused tests as applicable. Capture sanitized output from real
    hardware in `tests/fixtures/gpu_check/<vendor>.json`, register it in the
    fixture README, and let `tests/test_gpu_check_live.py` replay it. If hardware
    access is not yet available, document that limitation and keep synthetic
    parser coverage until a live capture can be added.
-5. Update the supported-vendor, runtime, metadata, and backend tables in both
+4. Update the supported-vendor, runtime, metadata, and backend tables in both
    READMEs, plus any maintained vendor inventory comments in
    `.github/workflows/ops-test.yaml`.
 

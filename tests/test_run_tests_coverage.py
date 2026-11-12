@@ -124,9 +124,11 @@ def test_probe_flagtree_ignores_missing_commit_metadata(monkeypatch):
     monkeypatch.setattr(
         run_tests.metadata,
         "version",
-        lambda name: "0.7.1.dev20261015"
-        if name == "flagtree-nvidia"
-        else (_ for _ in ()).throw(run_tests.metadata.PackageNotFoundError(name)),
+        lambda name: (
+            "0.7.1.dev20261015"
+            if name == "flagtree-nvidia"
+            else (_ for _ in ()).throw(run_tests.metadata.PackageNotFoundError(name))
+        ),
     )
     monkeypatch.setattr(
         run_tests.metadata,

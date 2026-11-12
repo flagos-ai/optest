@@ -697,6 +697,15 @@ jobs:
           echo "[FlagTree] Index: ${FLAGTREE_INDEX_URL}"
           print_cache_debug "FlagTree install: before"
 
+          # Capture the image's current distribution state before moving the
+          # /opt/flagtree source tree. Some images provide only that source tree
+          # and no matching distribution metadata, so a missing package is
+          # useful debug output rather than a reason to stop the upgrade.
+          run_logged_command \
+            "show installed ${FLAGTREE_PACKAGE_NAME} before upgrade" \
+            uv pip show --python "${ACTIVE_PYTHON}" "${FLAGTREE_PACKAGE_NAME}" \
+            || true
+
           if [ -e /opt/flagtree_backup ] || [ -L /opt/flagtree_backup ]; then
             echo "[FlagTree] ERROR: /opt/flagtree_backup already exists; refusing to overwrite it."
             exit 1

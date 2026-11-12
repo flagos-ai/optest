@@ -288,6 +288,12 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         self.assertIn("uv pip show", upgrade["run"])
         self.assertIn('print_cache_debug "FlagTree install: before"', upgrade["run"])
         self.assertIn('print_cache_debug "FlagTree install: after"', upgrade["run"])
+        self.assertLess(
+            upgrade["run"].index(
+                '"show installed ${FLAGTREE_PACKAGE_NAME} before upgrade"'
+            ),
+            upgrade["run"].index("mv /opt/flagtree /opt/flagtree_backup"),
+        )
 
     def test_flagtree_upgrade_moves_source_and_installs_exact_daily_wheel(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]
@@ -362,6 +368,12 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             self.assertTrue(install_log.startswith("UV_DEFAULT_INDEX= ARGS="))
             self.assertIn("pip show --python", commands)
             self.assertIn("flagtree-nvidia", commands)
+            daily_show_commands = [
+                line
+                for line in commands.splitlines()
+                if "pip show" in line and "flagtree-nvidia" in line
+            ]
+            self.assertEqual(len(daily_show_commands), 2)
 
     def test_matrix_resolves_command_timeout_without_dependency_policy(self):
         prepare_steps = self.workflow["jobs"]["prepare"]["steps"]

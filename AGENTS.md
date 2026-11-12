@@ -55,6 +55,68 @@ library and record its name, version, vendor, and device metadata under `env`
 in `summary.json`. Keep the repository configuration and probe list in sync so
 new libraries are represented in test results.
 
+## Vendor and Backend Onboarding
+
+First determine whether the change adds hardware for an already-supported
+vendor or introduces a genuinely new vendor. A new hardware backend for an
+existing vendor normally reuses the vendor key, GPU probe, and metadata parser;
+do not duplicate those entries. It may still have a distinct FlagTree daily
+distribution when its backend or toolchain differs.
+
+For every new hardware backend:
+
+1. Add `.github/configs/backends/<hardware>.yaml` with the normalized `vendor`,
+   runner label, container configuration, device access, `test_env`,
+   `output_base_dir`, and any exceptional hardware-level dependencies.
+2. Add the backend under `backends` for each applicable repository in
+   `.github/configs/repos.yaml`, plus repository-specific image overrides only
+   when the shared backend image is unsuitable.
+3. Ensure the target repository exposes an optional-dependency group whose name
+   matches the lowercase vendor key reported by `flagos-gpu-check`. The workflow
+   selects that group automatically.
+4. Check FlagTree's `packaging/flagtree/backends.yaml` for a backend-specific
+   daily wheel distribution. If it introduces a distribution name not already
+   present, add that exact name to `_FLAGTREE_DISTRIBUTIONS` in
+   `src/flagos_optest/run_tests.py`; backend names, vendor keys, and Python
+   import names are not interchangeable here. The probe reports the wheel
+   version and, when `Project-URL` contains a valid `Source-Commit` URL, appends
+   the first eight commit characters as `<version>_<sha8>`. Release wheels named
+   `flagtree`, or daily wheels without that metadata, retain the plain
+   distribution version. Update `tests/test_run_tests_coverage.py` whenever the
+   distribution list or metadata behavior changes.
+5. Update the backend inventory in `README.md` and `README.zh-CN.md`. If the
+   hardware participates in NVIDIA baseline comparisons, also update
+   `src/nv_baseline/hardware_specs.json` and its focused tests.
+
+For a genuinely new vendor, also update all vendor registries and probes:
+
+1. In `src/flagos_optest/gpu_check.py`, add the vendor-specific environment,
+   detect and memory-sampling implementations, the `VENDORS` entry, a verified
+   `/dev`-node rule in `_device_present`, and the correct position in
+   `VENDOR_ORDER`. Check command and device-node collisions before choosing the
+   order; several vendor stacks provide NVIDIA- or ROCm-compatible shims.
+2. In `src/flagos_optest/gpu_metadata.py`, add the normalized display name,
+   management command, runtime roots/environment variables, model pattern, and
+   any vendor-specific driver or runtime-version parsing.
+3. Add or update unit coverage in `tests/test_gpu_check.py`,
+   `tests/test_gpu_check_coverage.py`, `tests/test_run_tests_coverage.py`, and
+   metadata-focused tests as applicable. Capture sanitized output from real
+   hardware in `tests/fixtures/gpu_check/<vendor>.json`, register it in the
+   fixture README, and let `tests/test_gpu_check_live.py` replay it. If hardware
+   access is not yet available, document that limitation and keep synthetic
+   parser coverage until a live capture can be added.
+4. Update the supported-vendor, runtime, metadata, and backend tables in both
+   READMEs, plus any maintained vendor inventory comments in
+   `.github/workflows/ops-test.yaml`.
+
+The FlagGems runner-local operator-list paths and persistent package-cache paths
+are derived from the normalized vendor key, so they normally require no code
+branch for a new vendor. Verify that the runner supplies
+`/data/flaggems/<vendor>/ops_include.txt` and/or `ops_exclude.txt` when those
+lists are desired, and that its backend `output_base_dir` is durable. Run the
+full test suite after onboarding; this repository requires 100% statement and
+branch coverage.
+
 ## FlagGems Per-Vendor Operator Lists
 
 The operator-test step in `.github/workflows/ops-test.yaml` probes runner-local

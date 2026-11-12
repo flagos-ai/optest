@@ -123,6 +123,7 @@ import json
 import os
 import platform
 import queue as queue_module
+import re
 import shlex
 import shutil
 import signal
@@ -165,6 +166,29 @@ _KNOWN_LIBS = [
 
 # Extra frameworks probed for version reporting only (shown if importable).
 _EXTRA_FRAMEWORKS = ["vllm", "sglang"]
+
+# FlagTree release and per-backend daily wheel distribution names. All of the
+# distributions provide the same ``flagtree`` import package.
+_FLAGTREE_DISTRIBUTIONS = (
+    "flagtree",
+    "flagtree-nvidia",
+    "flagtree-iluvatar",
+    "flagtree-metax",
+    "flagtree-enflame",
+    "flagtree-sunrise",
+    "flagtree-hcu",
+    "flagtree-tsingmicro",
+    "flagtree-mthreads",
+    "flagtree-kunlunxin",
+    "flagtree-ascend-cann9.0.0",
+    "flagtree-ascend-cann9.2.1",
+    "flagtree-ascend-cann8.5.0",
+)
+_FLAGTREE_SOURCE_COMMIT_RE = re.compile(
+    r"\s*Source-Commit\s*,\s*"
+    r"https?://github\.com/flagos-ai/flagtree/commit/([0-9a-f]{8,40})/?\s*",
+    re.IGNORECASE,
+)
 
 getcontext().prec = 18
 RED = "\033[31m"
@@ -509,16 +533,43 @@ def _probe_torch():
         pass
 
 
+def _probe_flagtree_distribution() -> tuple[str, str] | None:
+    """Return the installed FlagTree distribution and its report version."""
+    for distribution_name in _FLAGTREE_DISTRIBUTIONS:
+        try:
+            version = metadata.version(distribution_name)
+        except Exception:
+            continue
+
+        try:
+            project_urls = (
+                metadata.metadata(distribution_name).get_all("Project-URL") or []
+            )
+        except Exception:
+            project_urls = []
+
+        for project_url in project_urls:
+            commit_match = _FLAGTREE_SOURCE_COMMIT_RE.fullmatch(project_url)
+            if commit_match:
+                version = f"{version}_{commit_match.group(1)[:8]}"
+                break
+
+        return distribution_name, version
+
+    return None
+
+
 def _probe_triton():
-    try:
-        version = metadata.version("flagtree")
+    flagtree = _probe_flagtree_distribution()
+    if flagtree:
+        distribution_name, version = flagtree
         ENV_INFO["flagtree"] = version
-        pinfo(f"FlagTree (flagtree) detected ... {version}")
+        pinfo(f"FlagTree ({distribution_name}) detected ... {version}")
         has_flagtree = True
-    except Exception:
+    else:
         has_flagtree = False
         ENV_INFO["flagtree"] = None
-        pwarn("FlagTree (flagtree) not installed, testing Triton ...")
+        pwarn("FlagTree not installed, testing Triton ...")
 
     try:
         import triton

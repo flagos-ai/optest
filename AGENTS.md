@@ -132,12 +132,13 @@ input accepts either another full daily version or `YYYYMMDD`; the date form
 keeps each backend's configured version base, which is important for Ascend
 CANN distributions whose base can differ from other backends.
 
-The step moves `/opt/flagtree` to `/opt/flagtree_backup`, conditionally
-uninstalls the release distribution named `flagtree`, installs the exact daily
-wheel with `uv pip install -v --upgrade`, and verifies it with `uv pip show`.
-It inherits the per-vendor `UV_CACHE_DIR` but keeps the FlagTree daily index
-command-local. Never move `/opt/flagtree` on a backend without a configured
-daily wheel, because that backend must retain the image-provided source tree.
+The step installs the exact daily wheel with `uv pip install -v --no-deps
+--target /opt/flagtree.new`, verifies the staging directory with `uv pip show`,
+and only then replaces `/opt/flagtree`, which is already first on the images'
+`PYTHONPATH`. It inherits the per-vendor `UV_CACHE_DIR` but keeps the FlagTree
+daily index command-local. Never remove `/opt/flagtree` before staging succeeds,
+or on a backend without a configured daily wheel, because those cases must
+retain the image-provided source tree.
 
 Repository exceptions belong in `.github/configs/repos.yaml`:
 

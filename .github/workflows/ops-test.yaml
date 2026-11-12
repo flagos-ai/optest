@@ -690,6 +690,8 @@ jobs:
           FLAGTREE_VERSION="${{ matrix.flagtree_version }}"
           FLAGTREE_INDEX_URL="${{ matrix.flagtree_index_url }}"
           FLAGTREE_REQUIREMENT="${FLAGTREE_PACKAGE_NAME}==${FLAGTREE_VERSION}"
+          FLAGTREE_INSTALL_DIR=/opt/flagtree
+          FLAGTREE_STAGING_DIR=/opt/flagtree.new
 
           echo "[FlagTree] Backend: ${{ matrix.name }}"
           echo "[FlagTree] Package: ${FLAGTREE_PACKAGE_NAME}"
@@ -697,7 +699,7 @@ jobs:
           echo "[FlagTree] Index: ${FLAGTREE_INDEX_URL}"
           print_cache_debug "FlagTree install: before"
 
-          # Capture the image's current distribution state before moving the
+          # Capture the image's current distribution state before replacing the
           # /opt/flagtree source tree. Some images provide only that source tree
           # and no matching distribution metadata, so a missing package is
           # useful debug output rather than a reason to stop the upgrade.
@@ -706,45 +708,41 @@ jobs:
             uv pip show --python "${ACTIVE_PYTHON}" "${FLAGTREE_PACKAGE_NAME}" \
             || true
 
-          if [ -e /opt/flagtree_backup ] || [ -L /opt/flagtree_backup ]; then
-            echo "[FlagTree] ERROR: /opt/flagtree_backup already exists; refusing to overwrite it."
-            exit 1
-          fi
-          if [ -e /opt/flagtree ] || [ -L /opt/flagtree ]; then
-            echo "[FlagTree] Moving /opt/flagtree to /opt/flagtree_backup"
-            run_logged_command \
-              "back up image-provided FlagTree" \
-              mv /opt/flagtree /opt/flagtree_backup
-          else
-            echo "[FlagTree] /opt/flagtree is absent; no source tree needs to be moved."
-          fi
-
-          # The release distribution and vendor daily distributions all expose
-          # the same `flagtree` import package. Remove the release wheel when it
-          # exists before installing the selected backend-specific daily wheel.
-          if uv pip show --python "${ACTIVE_PYTHON}" flagtree >/dev/null 2>&1; then
-            run_logged_command \
-              "remove the FlagTree release distribution" \
-              uv pip uninstall --python "${ACTIVE_PYTHON}" flagtree
-          else
-            echo "[FlagTree] Release distribution 'flagtree' is not installed."
-          fi
-
           # Keep the daily index command-local: it must resolve FlagTree from
           # the FlagOS daily repository without changing later package installs.
-          # The inherited UV_CACHE_DIR still makes the wheel persist per vendor.
+          # Install into a staging directory first, leaving the image-provided
+          # /opt/flagtree intact if resolution or installation fails. Unlike the
+          # former pip command, uv intentionally uses the inherited UV_CACHE_DIR.
           run_logged_command \
-            "install ${FLAGTREE_REQUIREMENT}" \
+            "remove stale FlagTree staging directory" \
+            rm -rf -- "${FLAGTREE_STAGING_DIR}"
+          run_logged_command \
+            "install ${FLAGTREE_REQUIREMENT} into staging directory" \
             env -u UV_INDEX -u UV_DEFAULT_INDEX -u UV_INDEX_URL \
             uv pip install -v \
               --python "${ACTIVE_PYTHON}" \
-              --upgrade \
+              --no-deps \
+              --target "${FLAGTREE_STAGING_DIR}" \
               --index-url "${FLAGTREE_INDEX_URL}" \
               "${FLAGTREE_REQUIREMENT}"
 
           run_logged_command \
+            "show staged ${FLAGTREE_PACKAGE_NAME}" \
+            uv pip show --target "${FLAGTREE_STAGING_DIR}" "${FLAGTREE_PACKAGE_NAME}"
+
+          # /opt/flagtree is first on PYTHONPATH in the runtime images. Replace
+          # it only after the exact daily wheel has installed and passed the
+          # metadata check in the staging directory.
+          run_logged_command \
+            "remove image-provided FlagTree directory" \
+            rm -rf -- "${FLAGTREE_INSTALL_DIR}"
+          run_logged_command \
+            "activate staged FlagTree directory" \
+            mv "${FLAGTREE_STAGING_DIR}" "${FLAGTREE_INSTALL_DIR}"
+
+          run_logged_command \
             "show installed ${FLAGTREE_PACKAGE_NAME}" \
-            uv pip show --python "${ACTIVE_PYTHON}" "${FLAGTREE_PACKAGE_NAME}"
+            uv pip show --target "${FLAGTREE_INSTALL_DIR}" "${FLAGTREE_PACKAGE_NAME}"
           print_cache_debug "FlagTree install: after"
 
       - name: Check GPU availability

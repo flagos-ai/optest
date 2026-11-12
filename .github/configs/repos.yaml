@@ -31,8 +31,11 @@
 #
 # To onboard a new repo: add one block under `repos:` with its default_branch,
 # enabled backends, and (optionally) container_images / deps / base_data /
-# timeout overrides. Also add its (import_name, display_name) pair to _KNOWN_LIBS
-# in src/flagos_optest/run_tests.py so runtime metadata reaches summary.json.
+# timeout overrides. Set `skip_flagtree_upgrade: true` only when the whole repo
+# must retain image-provided FlagTree, or provide a backend list such as
+# `skip_flagtree_upgrade: [H800, 910B]` for targeted exceptions. Also add its
+# (import_name, display_name) pair to _KNOWN_LIBS in
+# src/flagos_optest/run_tests.py so runtime metadata reaches summary.json.
 # ---------------------------------------------------------------------------
 
 # GitHub organization that owns every target repo. Combined with the repo key
@@ -201,4 +204,17 @@ repos:
 # Backend-level `deps` and `container_image` in backends/<NAME>.yaml act as
 # defaults; the per-repo `deps` here EXTEND them and `container_images` here
 # OVERRIDE the image.
+#
+# Optional FlagTree upgrade exclusions (omit by default):
+#
+#   repos:
+#     WholeRepoException:
+#       skip_flagtree_upgrade: true
+#     BackendExceptions:
+#       skip_flagtree_upgrade: [H800, 910B]
+#
+# The boolean form skips the "Upgrade Flagtree" step on every backend for that
+# repository. The list form skips only the named backends. Backends without a
+# `flagtree` block in .github/configs/backends/<NAME>.yaml also skip the step
+# automatically and retain the image-provided /opt/flagtree tree.
 # ---------------------------------------------------------------------------

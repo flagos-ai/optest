@@ -146,6 +146,9 @@ class NotifyFeishuRefTest(unittest.TestCase):
         self.assertIn(
             "Empty = exclude none", dispatch_inputs["exclude_ops"]["description"]
         )
+        self.assertIn("flagtree_version", dispatch_inputs)
+        self.assertEqual(dispatch_inputs["flagtree_version"]["default"], "")
+        self.assertIn("YYYYMMDD", dispatch_inputs["flagtree_version"]["description"])
         prepare_steps = workflow["jobs"]["prepare"]["steps"]
         build_matrix = next(
             step for step in prepare_steps if step.get("id") == "build-matrix"
@@ -266,6 +269,9 @@ class NotifyFeishuRefTest(unittest.TestCase):
             for step in steps
             if step.get("name") == "Install target repository and dependencies"
         )
+        upgrade_flagtree = next(
+            step for step in steps if step.get("name") == "Upgrade Flagtree"
+        )
         gpu_check = next(
             step for step in steps if step.get("name") == "Check GPU availability"
         )
@@ -327,10 +333,10 @@ class NotifyFeishuRefTest(unittest.TestCase):
         )
         self.assertNotIn("flagos-install-target-deps", install_target["run"])
         self.assertNotIn("vendor_pip_args", install_target["run"])
-        # Both install steps emit the package-cache debug report so runs make
+        # All three install steps emit the package-cache debug report so runs make
         # the cold/warm cache behavior and the resolved cache environment
         # obvious in the logs.
-        for cache_step in (install_optest, install_target):
+        for cache_step in (install_optest, upgrade_flagtree, install_target):
             self.assertIn("print_cache_debug()", cache_step["run"])
             self.assertIn("[Cache debug] UV_CACHE_DIR=", cache_step["run"])
             self.assertIn("[Cache debug] PIP_CACHE_DIR=", cache_step["run"])

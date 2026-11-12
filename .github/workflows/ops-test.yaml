@@ -719,7 +719,7 @@ jobs:
           run_logged_command \
             "install ${FLAGTREE_REQUIREMENT} into staging directory" \
             env -u UV_INDEX -u UV_DEFAULT_INDEX -u UV_INDEX_URL \
-            uv pip install -v \
+            uv pip install \
               --python "${ACTIVE_PYTHON}" \
               --no-deps \
               --target "${FLAGTREE_STAGING_DIR}" \
@@ -739,9 +739,6 @@ jobs:
           run_logged_command \
             "show installed ${FLAGTREE_PACKAGE_NAME} in target directory" \
             uv pip show --target "${FLAGTREE_INSTALL_DIR}" "${FLAGTREE_PACKAGE_NAME}"
-          run_logged_command \
-            "show installed ${FLAGTREE_PACKAGE_NAME} through uv environment" \
-            uv pip show "${FLAGTREE_PACKAGE_NAME}"
           run_logged_command \
             "show installed ${FLAGTREE_PACKAGE_NAME} through pip environment" \
             pip show "${FLAGTREE_PACKAGE_NAME}"

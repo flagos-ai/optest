@@ -741,15 +741,15 @@ daily index.
 
 The `Upgrade Flagtree` step runs only when the selected backend has this block.
 Because `/opt/flagtree` precedes site-packages on `PYTHONPATH`, the step installs
-the exact vendor wheel with `uv pip install -v --no-deps --target
+the exact vendor wheel with `uv pip install --no-deps --target
 /opt/flagtree.new` and only after installation succeeds removes the old
 `/opt/flagtree` and moves the staged directory into its place. A failed
 resolution or installation therefore leaves the original tree intact. The
 command inherits the persistent per-vendor `UV_CACHE_DIR`;
 unlike the previous manual pip flow, it does not disable the package cache.
 The step prints release metadata before replacement and, afterward, shows the
-backend distribution through its target directory, the uv environment, and
-the pip environment for debug.
+backend distribution through its target directory and the pip environment for
+debug.
 Backends with no `flagtree` block skip the step and retain the image-provided
 tree; this currently applies to T-Head, Cambricon, and AMD.
 
@@ -803,8 +803,9 @@ How this behaves across runs:
   changed direct-URL requirement re-downloads only the changed wheel
   automatically. No manual cache invalidation is needed.
 
-The optest, FlagTree, and target-dependency install steps run
-`uv pip install -v` and print a `[Cache debug]` report
+The optest and target-dependency install steps run `uv pip install -v`; the
+FlagTree target-directory install uses normal `uv pip install` output. All
+three print a `[Cache debug]` report
 (the resolved `UV_CACHE_DIR`/`PIP_CACHE_DIR`/`UV_LINK_MODE`, and whether the
 cache is `COLD` or `WARM` with its size and file count) before and after
 installing, so the step log clearly shows which wheels were reused from the

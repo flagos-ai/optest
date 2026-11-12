@@ -674,12 +674,12 @@ distribution 使用 `0.7.1.devYYYYMMDD`。
 
 只有所选后端存在 `flagtree` 配置时，`Upgrade Flagtree` 步骤才会运行。由于
 `/opt/flagtree` 在 `PYTHONPATH` 中位于 site-packages 之前，该步骤通过
-`uv pip install -v --no-deps --target /opt/flagtree.new` 将精确的厂商 daily wheel
+`uv pip install --no-deps --target /opt/flagtree.new` 将精确的厂商 daily wheel
 安装到 staging 目录，安装成功后才删除原来的 `/opt/flagtree` 并将 staging 目录移动到
 该路径。因此解析或安装失败时，镜像原有目录保持不变。安装命令继承按厂商持久化的
 `UV_CACHE_DIR`；与之前的手工 pip 流程不同，不会禁用软件包缓存。步骤会在替换前输出
-release 元数据，替换后分别通过 target 目录、uv 环境和 pip 环境输出后端 distribution
-信息用于 debug。没有 `flagtree` 配置的后端会跳过该步骤并保留镜像自带目录；目前
+release 元数据，替换后分别通过 target 目录和 pip 环境输出后端 distribution 信息用于
+debug。没有 `flagtree` 配置的后端会跳过该步骤并保留镜像自带目录；目前
 T-Head、Cambricon 和 AMD 使用此行为。
 
 目标仓库可以在不修改共享后端默认值的情况下选择跳过升级：
@@ -726,8 +726,8 @@ UV_LINK_MODE  = copy
   `uv` 以软件包版本以及 wheel 的 URL 或哈希作为缓存键，因此版本不变时始终命中缓存；
   版本升级或直接 URL 依赖发生变化时，仅自动重新下载发生变化的 wheel，无需手动清理缓存。
 
-optest、FlagTree 和目标依赖三个安装步骤都会使用 `uv pip install -v`，并在安装前后
-打印 `[Cache debug]` 报告
+optest 和目标依赖安装步骤使用 `uv pip install -v`，FlagTree target 目录安装使用正常的
+`uv pip install` 输出。三个步骤都会在安装前后打印 `[Cache debug]` 报告
 （解析出的 `UV_CACHE_DIR`/`PIP_CACHE_DIR`/`UV_LINK_MODE`，以及缓存是 `COLD`
 还是 `WARM`，并附上其大小与文件数量），因此步骤日志能够清晰显示哪些 wheel 来自本地
 缓存复用、哪些是从网络下载的。

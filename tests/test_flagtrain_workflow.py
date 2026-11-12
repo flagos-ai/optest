@@ -283,7 +283,8 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         self.assertEqual(upgrade["env"], "${{ fromJSON(matrix.test_env) }}")
         self.assertNotIn("flagtree_backup", upgrade["run"])
         self.assertNotIn("uv pip uninstall", upgrade["run"])
-        self.assertIn("uv pip install -v", upgrade["run"])
+        self.assertIn("uv pip install", upgrade["run"])
+        self.assertNotIn("uv pip install -v", upgrade["run"])
         self.assertIn("--no-deps", upgrade["run"])
         self.assertIn('--target "${FLAGTREE_STAGING_DIR}"', upgrade["run"])
         self.assertIn('--index-url "${FLAGTREE_INDEX_URL}"', upgrade["run"])
@@ -305,7 +306,10 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             'uv pip show --target "${FLAGTREE_INSTALL_DIR}" "${FLAGTREE_PACKAGE_NAME}"',
             upgrade["run"],
         )
-        self.assertIn('uv pip show "${FLAGTREE_PACKAGE_NAME}"', upgrade["run"])
+        self.assertNotIn(
+            '"show installed ${FLAGTREE_PACKAGE_NAME} through uv environment"',
+            upgrade["run"],
+        )
         self.assertIn('pip show "${FLAGTREE_PACKAGE_NAME}"', upgrade["run"])
         self.assertLess(
             upgrade["run"].index('"show installed flagtree before upgrade"'),
@@ -387,7 +391,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             self.assertFalse(staging.exists())
             commands = uv_log.read_text(encoding="utf-8")
             self.assertIn(
-                "pip install -v --python ",
+                "pip install --python ",
                 commands,
             )
             self.assertIn(
@@ -416,7 +420,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 for line in commands.splitlines()
                 if "pip show" in line and "flagtree-nvidia" in line
             ]
-            self.assertEqual(len(daily_show_commands), 2)
+            self.assertEqual(len(daily_show_commands), 1)
             self.assertEqual(
                 pip_log.read_text(encoding="utf-8"),
                 "ARGS=show flagtree-nvidia\n",

@@ -271,7 +271,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             if step.get("name") == "Install target repository and dependencies"
         )["run"]
         self.assertIn(
-            'uv pip install -v --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"',
+            'uv pip install --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"',
             install,
         )
 
@@ -812,7 +812,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             "target repository uv installation: failed with https://pypi.tuna.tsinghua.edu.cn/simple",
             "target repository uv installation: selected https://mirrors.aliyun.com/pypi/simple/",
             "Starting: target repository uv installation via https://mirrors.aliyun.com/pypi/simple/",
-            "pip install -v --python",
+            "pip install --python",
             "--editable .[test,nvidia]",
             "Finished: target repository uv installation via https://mirrors.aliyun.com/pypi/simple/ (exit_code=0)",
         ]

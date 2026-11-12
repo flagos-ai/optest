@@ -803,9 +803,8 @@ How this behaves across runs:
   changed direct-URL requirement re-downloads only the changed wheel
   automatically. No manual cache invalidation is needed.
 
-The optest and target-dependency install steps run `uv pip install -v`; the
-FlagTree target-directory install uses normal `uv pip install` output. All
-three print a `[Cache debug]` report
+The optest, FlagTree, and target-dependency install steps use normal
+`uv pip install` output. All three print a `[Cache debug]` report
 (the resolved `UV_CACHE_DIR`/`PIP_CACHE_DIR`/`UV_LINK_MODE`, and whether the
 cache is `COLD` or `WARM` with its size and file count) before and after
 installing, so the step log clearly shows which wheels were reused from the

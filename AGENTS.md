@@ -196,9 +196,9 @@ Notes for debugging and future changes:
 - The cache keys on package version plus wheel URL/hash. A cold (first) run
   downloads and populates the cache; warm (later) runs reuse it and skip the
   network. A version bump re-downloads only the changed package.
-- The optest and target-dependency install steps run `uv pip install -v`; the
-  FlagTree target-directory install uses normal `uv pip install` output. All
-  three print a `[Cache debug]` report: the `UV_CACHE_DIR`/`PIP_CACHE_DIR`/
+- The optest, FlagTree, and target-dependency install steps use normal
+  `uv pip install` output. All three print a `[Cache debug]` report: the
+  `UV_CACHE_DIR`/`PIP_CACHE_DIR`/
   `UV_LINK_MODE` values, the relevant `UV_`/`PIP_`/vendor env vars, and a
   COLD/WARM state with the cache size and file count before and after install.
   Grep the job log for `[Cache debug]` and `uv cache state:` to confirm a run

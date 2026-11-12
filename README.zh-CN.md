@@ -726,8 +726,8 @@ UV_LINK_MODE  = copy
   `uv` 以软件包版本以及 wheel 的 URL 或哈希作为缓存键，因此版本不变时始终命中缓存；
   版本升级或直接 URL 依赖发生变化时，仅自动重新下载发生变化的 wheel，无需手动清理缓存。
 
-optest 和目标依赖安装步骤使用 `uv pip install -v`，FlagTree target 目录安装使用正常的
-`uv pip install` 输出。三个步骤都会在安装前后打印 `[Cache debug]` 报告
+optest、FlagTree 和目标依赖安装步骤都使用正常的 `uv pip install` 输出。三个步骤都会在
+安装前后打印 `[Cache debug]` 报告
 （解析出的 `UV_CACHE_DIR`/`PIP_CACHE_DIR`/`UV_LINK_MODE`，以及缓存是 `COLD`
 还是 `WARM`，并附上其大小与文件数量），因此步骤日志能够清晰显示哪些 wheel 来自本地
 缓存复用、哪些是从网络下载的。

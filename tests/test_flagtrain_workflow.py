@@ -297,10 +297,18 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         self.assertIn("uv pip show", upgrade["run"])
         self.assertIn('print_cache_debug "FlagTree install: before"', upgrade["run"])
         self.assertIn('print_cache_debug "FlagTree install: after"', upgrade["run"])
+        self.assertIn(
+            'uv pip show --python "${ACTIVE_PYTHON}" flagtree', upgrade["run"]
+        )
+        self.assertNotIn('"show staged ${FLAGTREE_PACKAGE_NAME}"', upgrade["run"])
+        self.assertIn(
+            'uv pip show --target "${FLAGTREE_INSTALL_DIR}" "${FLAGTREE_PACKAGE_NAME}"',
+            upgrade["run"],
+        )
+        self.assertIn('uv pip show "${FLAGTREE_PACKAGE_NAME}"', upgrade["run"])
+        self.assertIn('pip show "${FLAGTREE_PACKAGE_NAME}"', upgrade["run"])
         self.assertLess(
-            upgrade["run"].index(
-                '"show installed ${FLAGTREE_PACKAGE_NAME} before upgrade"'
-            ),
+            upgrade["run"].index('"show installed flagtree before upgrade"'),
             upgrade["run"].index('rm -rf -- "${FLAGTREE_INSTALL_DIR}"'),
         )
 
@@ -348,6 +356,13 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 encoding="utf-8",
             )
             uv.chmod(0o755)
+            pip_log = root / "pip.log"
+            pip = root / "pip"
+            pip.write_text(
+                '#!/bin/sh\nprintf "ARGS=%s\\n" "$*" >> "$PIP_LOG"\n',
+                encoding="utf-8",
+            )
+            pip.chmod(0o755)
             completed = subprocess.run(
                 ["bash", "-e", "-o", "pipefail", "-c", script],
                 cwd=ROOT,
@@ -359,6 +374,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     "UV_CACHE_DIR": str(root / "uv-cache"),
                     "UV_DEFAULT_INDEX": "https://pypi.example/simple",
                     "UV_LOG": str(uv_log),
+                    "PIP_LOG": str(pip_log),
                 },
                 text=True,
             )
@@ -388,8 +404,11 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     f"UV_CACHE_DIR={root / 'uv-cache'} UV_DEFAULT_INDEX= ARGS="
                 )
             )
-            self.assertIn("pip show --python", commands)
-            self.assertIn(f"pip show --target {staging}", commands)
+            pre_upgrade_show = next(
+                line for line in commands.splitlines() if "pip show --python" in line
+            )
+            self.assertTrue(pre_upgrade_show.endswith(" flagtree"))
+            self.assertNotIn(f"pip show --target {staging}", commands)
             self.assertIn(f"pip show --target {source}", commands)
             self.assertIn("flagtree-nvidia", commands)
             daily_show_commands = [
@@ -397,7 +416,11 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 for line in commands.splitlines()
                 if "pip show" in line and "flagtree-nvidia" in line
             ]
-            self.assertEqual(len(daily_show_commands), 3)
+            self.assertEqual(len(daily_show_commands), 2)
+            self.assertEqual(
+                pip_log.read_text(encoding="utf-8"),
+                "ARGS=show flagtree-nvidia\n",
+            )
 
     def test_flagtree_upgrade_preserves_image_tree_when_staging_fails(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]

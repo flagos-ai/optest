@@ -704,8 +704,8 @@ jobs:
           # and no matching distribution metadata, so a missing package is
           # useful debug output rather than a reason to stop the upgrade.
           run_logged_command \
-            "show installed ${FLAGTREE_PACKAGE_NAME} before upgrade" \
-            uv pip show --python "${ACTIVE_PYTHON}" "${FLAGTREE_PACKAGE_NAME}" \
+            "show installed flagtree before upgrade" \
+            uv pip show --python "${ACTIVE_PYTHON}" flagtree \
             || true
 
           # Keep the daily index command-local: it must resolve FlagTree from
@@ -726,13 +726,9 @@ jobs:
               --index-url "${FLAGTREE_INDEX_URL}" \
               "${FLAGTREE_REQUIREMENT}"
 
-          run_logged_command \
-            "show staged ${FLAGTREE_PACKAGE_NAME}" \
-            uv pip show --target "${FLAGTREE_STAGING_DIR}" "${FLAGTREE_PACKAGE_NAME}"
-
           # /opt/flagtree is first on PYTHONPATH in the runtime images. Replace
-          # it only after the exact daily wheel has installed and passed the
-          # metadata check in the staging directory.
+          # it only after the exact daily wheel has installed successfully in
+          # the staging directory.
           run_logged_command \
             "remove image-provided FlagTree directory" \
             rm -rf -- "${FLAGTREE_INSTALL_DIR}"
@@ -741,8 +737,14 @@ jobs:
             mv "${FLAGTREE_STAGING_DIR}" "${FLAGTREE_INSTALL_DIR}"
 
           run_logged_command \
-            "show installed ${FLAGTREE_PACKAGE_NAME}" \
+            "show installed ${FLAGTREE_PACKAGE_NAME} in target directory" \
             uv pip show --target "${FLAGTREE_INSTALL_DIR}" "${FLAGTREE_PACKAGE_NAME}"
+          run_logged_command \
+            "show installed ${FLAGTREE_PACKAGE_NAME} through uv environment" \
+            uv pip show "${FLAGTREE_PACKAGE_NAME}"
+          run_logged_command \
+            "show installed ${FLAGTREE_PACKAGE_NAME} through pip environment" \
+            pip show "${FLAGTREE_PACKAGE_NAME}"
           print_cache_debug "FlagTree install: after"
 
       - name: Check GPU availability

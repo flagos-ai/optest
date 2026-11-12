@@ -742,12 +742,14 @@ daily index.
 The `Upgrade Flagtree` step runs only when the selected backend has this block.
 Because `/opt/flagtree` precedes site-packages on `PYTHONPATH`, the step installs
 the exact vendor wheel with `uv pip install -v --no-deps --target
-/opt/flagtree.new`, verifies the staged distribution with `uv pip show`, and
-only then removes the old `/opt/flagtree` and moves the staged directory into
-its place. A failed resolution or installation therefore leaves the original
-tree intact. The command inherits the persistent per-vendor `UV_CACHE_DIR`;
+/opt/flagtree.new` and only after installation succeeds removes the old
+`/opt/flagtree` and moves the staged directory into its place. A failed
+resolution or installation therefore leaves the original tree intact. The
+command inherits the persistent per-vendor `UV_CACHE_DIR`;
 unlike the previous manual pip flow, it does not disable the package cache.
-The step also prints package metadata before and after replacement for debug.
+The step prints release metadata before replacement and, afterward, shows the
+backend distribution through its target directory, the uv environment, and
+the pip environment for debug.
 Backends with no `flagtree` block skip the step and retain the image-provided
 tree; this currently applies to T-Head, Cambricon, and AMD.
 

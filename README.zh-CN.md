@@ -675,11 +675,12 @@ distribution 使用 `0.7.1.devYYYYMMDD`。
 只有所选后端存在 `flagtree` 配置时，`Upgrade Flagtree` 步骤才会运行。由于
 `/opt/flagtree` 在 `PYTHONPATH` 中位于 site-packages 之前，该步骤通过
 `uv pip install -v --no-deps --target /opt/flagtree.new` 将精确的厂商 daily wheel
-安装到 staging 目录，使用 `uv pip show` 校验成功后，才删除原来的 `/opt/flagtree`
-并将 staging 目录移动到该路径。因此解析或安装失败时，镜像原有目录保持不变。安装命令
-继承按厂商持久化的 `UV_CACHE_DIR`；与之前的手工 pip 流程不同，不会禁用软件包缓存。
-步骤还会在替换前后输出软件包元数据用于 debug。没有 `flagtree` 配置的后端会跳过该步骤
-并保留镜像自带目录；目前 T-Head、Cambricon 和 AMD 使用此行为。
+安装到 staging 目录，安装成功后才删除原来的 `/opt/flagtree` 并将 staging 目录移动到
+该路径。因此解析或安装失败时，镜像原有目录保持不变。安装命令继承按厂商持久化的
+`UV_CACHE_DIR`；与之前的手工 pip 流程不同，不会禁用软件包缓存。步骤会在替换前输出
+release 元数据，替换后分别通过 target 目录、uv 环境和 pip 环境输出后端 distribution
+信息用于 debug。没有 `flagtree` 配置的后端会跳过该步骤并保留镜像自带目录；目前
+T-Head、Cambricon 和 AMD 使用此行为。
 
 目标仓库可以在不修改共享后端默认值的情况下选择跳过升级：
 

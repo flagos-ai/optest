@@ -133,12 +133,13 @@ keeps each backend's configured version base, which is important for Ascend
 CANN distributions whose base can differ from other backends.
 
 The step installs the exact daily wheel with `uv pip install -v --no-deps
---target /opt/flagtree.new`, verifies the staging directory with `uv pip show`,
-and only then replaces `/opt/flagtree`, which is already first on the images'
-`PYTHONPATH`. It inherits the per-vendor `UV_CACHE_DIR` but keeps the FlagTree
-daily index command-local. Never remove `/opt/flagtree` before staging succeeds,
-or on a backend without a configured daily wheel, because those cases must
-retain the image-provided source tree.
+--target /opt/flagtree.new` and only then replaces `/opt/flagtree`, which is
+already first on the images' `PYTHONPATH`. It inherits the per-vendor
+`UV_CACHE_DIR` but keeps the FlagTree daily index command-local. After
+replacement, keep the target-directory `uv pip show`, environment `uv pip
+show`, and direct `pip show` diagnostics. Never remove `/opt/flagtree` before
+staging succeeds, or on a backend without a configured daily wheel, because
+those cases must retain the image-provided source tree.
 
 Repository exceptions belong in `.github/configs/repos.yaml`:
 

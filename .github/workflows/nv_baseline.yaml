@@ -265,18 +265,56 @@ jobs:
               fi
             done
           fi
+
+          # Apex's Megatron fused-softmax extensions
+          # (scaled_[upper_triang_]masked_softmax_cuda.cu) #include
+          # <cuda_profiler_api.h>, but the slim cu13 wheel's include dir does
+          # not ship that header, so nvcc fails with "cuda_profiler_api.h: No
+          # such file or directory". Locate a real copy anywhere under the
+          # installed nvidia wheels and add its dir to CPATH; if none exists,
+          # drop a minimal stub into the cu13 include dir (the header only
+          # declares cudaProfilerStart/Stop, whose symbols come from cudart at
+          # link time, so a stub is enough to build).
+          CU13_INC="${CU13_ROOT}/include"
+          SITE_PKGS="$(dirname "$(dirname "${CU13_ROOT}")")"
+          PROF_HDR="$(find "${SITE_PKGS}/nvidia" -name cuda_profiler_api.h -print -quit 2>/dev/null || true)"
+          if [ -n "${PROF_HDR}" ]; then
+            PROF_INC="$(dirname "${PROF_HDR}")"
+            echo "[Deps] Found cuda_profiler_api.h in ${PROF_INC}"
+            CPATH="${PROF_INC}:${CPATH:-}"
+          elif [ ! -e "${CU13_INC}/cuda_profiler_api.h" ]; then
+            echo "[Deps] cuda_profiler_api.h not found; writing a minimal stub to ${CU13_INC}"
+            mkdir -p "${CU13_INC}"
+            cat > "${CU13_INC}/cuda_profiler_api.h" <<'HDR'
+          #ifndef CUDA_PROFILER_API_H
+          #define CUDA_PROFILER_API_H
+          #include <cuda_runtime_api.h>
+          #ifdef __cplusplus
+          extern "C" {
+          #endif
+          extern cudaError_t cudaProfilerStart(void);
+          extern cudaError_t cudaProfilerStop(void);
+          #ifdef __cplusplus
+          }
+          #endif
+          #endif /* CUDA_PROFILER_API_H */
+          HDR
+          fi
+
           {
             echo "CUDA_HOME=${CU13_ROOT}"
             echo "CUDA_PATH=${CU13_ROOT}"
             echo "PATH=${CU13_ROOT}/bin:${PATH}"
             echo "LD_LIBRARY_PATH=${CU13_LIB}:${LD_LIBRARY_PATH:-}"
             echo "LIBRARY_PATH=${CU13_LIB}:${LIBRARY_PATH:-}"
+            echo "CPATH=${CU13_INC}:${CPATH:-}"
           } >> "$GITHUB_ENV"
           # Apply to this step too (GITHUB_ENV only affects subsequent steps).
           export CUDA_HOME="${CU13_ROOT}" CUDA_PATH="${CU13_ROOT}"
           export PATH="${CU13_ROOT}/bin:${PATH}"
           export LD_LIBRARY_PATH="${CU13_LIB}:${LD_LIBRARY_PATH:-}"
           export LIBRARY_PATH="${CU13_LIB}:${LIBRARY_PATH:-}"
+          export CPATH="${CU13_INC}:${CPATH:-}"
 
           # Prebuilt wheels: DeepSpeed kernels, CUTLASS ops, NVIDIA resiliency ext.
           # deepspeed-kernels has no plain 0.0.1 on PyPI (only 0.0.1.devNNNN

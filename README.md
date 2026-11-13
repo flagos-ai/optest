@@ -210,8 +210,17 @@ logs_results_YYYYMMDD_HHMM/
 `summary.json` contains the run timestamp and duration, `total_ops` (the number
 of operators successfully aggregated into `result`), operator-level
 `accuracy_counts` and `performance_counts`, an `env` object, and
-the per-operator accuracy and performance results. Status counts include zero
-values for `passed`, `failed`, `skipped`, `not_found`, `error`, and `timeout`.
+the per-operator accuracy and performance results. Each operator entry also
+carries a `customized` flag and a `labels` list. `labels` merges the manifest
+labels from `conf/operators.yaml` (applied by `flagos-add-labels`) with any
+labels detected during the run. In particular it includes `"tle"` when the
+implementation this chip actually dispatches to uses Triton experimental
+language extensions (its source file, or a kernel submodule it imports, imports
+`triton.experimental.tle.language`). The `"tle"` entry is resolved from the live
+operator, so a vendor kernel that uses TLE is tagged on that vendor while a
+generic TLE path is tagged everywhere; it is therefore per-chip. Status counts
+include zero values for `passed`, `failed`, `skipped`, `not_found`, `error`, and
+`timeout`.
 The `env` object centralizes the test-critical environment and dependency
 versions detected by the scheduler:
 

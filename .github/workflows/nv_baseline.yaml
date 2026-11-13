@@ -80,6 +80,7 @@ jobs:
       image: ${{ steps.resolve.outputs.image }}
       output: ${{ steps.resolve.outputs.output }}
       target_repo: ${{ steps.resolve.outputs.target_repo }}
+      vllm_version: ${{ steps.resolve.outputs.vllm_version }}
     steps:
       - name: Checkout optest workflow source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -110,11 +111,15 @@ jobs:
           if not image or not output:
               raise SystemExit(f"repo '{repo}' must set both 'image' and 'output'")
           org = cfg.get('org', 'flagos-ai')
+          # Optional vllm version override (FlagGems-vllm only). YAML may parse an
+          # unquoted value as a number, so coerce to str before stripping.
+          vllm_version = str(rc.get('vllm_version', '') or '').strip()
 
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write(f"image={image}\n")
               out.write(f"output={output}\n")
               out.write(f"target_repo={org}/{repo}\n")
+              out.write(f"vllm_version={vllm_version}\n")
 
   collect:
     name: nv-baseline (H800)
@@ -152,6 +157,16 @@ jobs:
       TARGET_REF: ${{ github.event.inputs.ref }}
       # When true, the generated baseline json is committed into data/.
       AUTO_UPDATE: ${{ github.event.inputs.auto_update }}
+      # Optional vllm version to install before collection (FlagGems-vllm only);
+      # empty keeps the baseline image's bundled vllm.
+      VLLM_VERSION: ${{ needs.prepare.outputs.vllm_version }}
+      # Do not auto-load torch device-backend extensions. The image's FlagCX
+      # (cross-chip comm) extension registers itself as a torch backend and is
+      # loaded on `import torch`, but its prebuilt _C.so is pinned to the image's
+      # original torch ABI. A vllm upgrade can pull in a newer torch, after which
+      # FlagCX fails with an undefined c10 symbol and breaks `import vllm`.
+      # NV single-card baseline collection does not use FlagCX, so skip it.
+      TORCH_DEVICE_BACKEND_AUTOLOAD: '0'
     steps:
       # Checkout optest itself at the workspace root: provides src/nv_baseline
       # and hardware_specs.json. The target library is checked out into ./target.
@@ -198,6 +213,21 @@ jobs:
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
           git config --global --add safe.directory "${GITHUB_WORKSPACE}/target"
 
+      # FlagGems-vllm only: the baseline image bundles a fixed vllm (its tag,
+      # e.g. :0.24.0). When baseline_repos.yaml sets vllm_version, install that
+      # exact release here so the collection runs against it without rebuilding
+      # the image. Skipped (no-op) when vllm_version is empty.
+      - name: Upgrade vllm for baseline collection
+        if: ${{ github.event.inputs.repo == 'FlagGems-vllm' && needs.prepare.outputs.vllm_version != '' }}
+        shell: bash --login -e -o pipefail {0}
+        run: |
+          echo "[vllm] Requested vllm version: ${VLLM_VERSION}"
+          echo "[vllm] Currently installed:"
+          python3 -m pip show vllm 2>/dev/null | grep -i '^Version:' || echo "  (vllm not installed)"
+          python3 -m pip install "vllm==${VLLM_VERSION}"
+          echo "[vllm] After install:"
+          python3 -c "import vllm; print('[vllm] vllm', vllm.__version__)"
+
       # FlagTrain only: its baseline modules hard-depend on DeepSpeed and
       # Megatron-LM (native() raises if missing, no torch fallback), so install
       # them per baseline/README.md before collection. Other repos ship their
@@ -242,18 +272,56 @@ jobs:
               fi
             done
           fi
+
+          # Apex's Megatron fused-softmax extensions
+          # (scaled_[upper_triang_]masked_softmax_cuda.cu) #include
+          # <cuda_profiler_api.h>, but the slim cu13 wheel's include dir does
+          # not ship that header, so nvcc fails with "cuda_profiler_api.h: No
+          # such file or directory". Locate a real copy anywhere under the
+          # installed nvidia wheels and add its dir to CPATH; if none exists,
+          # drop a minimal stub into the cu13 include dir (the header only
+          # declares cudaProfilerStart/Stop, whose symbols come from cudart at
+          # link time, so a stub is enough to build).
+          CU13_INC="${CU13_ROOT}/include"
+          SITE_PKGS="$(dirname "$(dirname "${CU13_ROOT}")")"
+          PROF_HDR="$(find "${SITE_PKGS}/nvidia" -name cuda_profiler_api.h -print -quit 2>/dev/null || true)"
+          if [ -n "${PROF_HDR}" ]; then
+            PROF_INC="$(dirname "${PROF_HDR}")"
+            echo "[Deps] Found cuda_profiler_api.h in ${PROF_INC}"
+            CPATH="${PROF_INC}:${CPATH:-}"
+          elif [ ! -e "${CU13_INC}/cuda_profiler_api.h" ]; then
+            echo "[Deps] cuda_profiler_api.h not found; writing a minimal stub to ${CU13_INC}"
+            mkdir -p "${CU13_INC}"
+            cat > "${CU13_INC}/cuda_profiler_api.h" <<'HDR'
+          #ifndef CUDA_PROFILER_API_H
+          #define CUDA_PROFILER_API_H
+          #include <cuda_runtime_api.h>
+          #ifdef __cplusplus
+          extern "C" {
+          #endif
+          extern cudaError_t cudaProfilerStart(void);
+          extern cudaError_t cudaProfilerStop(void);
+          #ifdef __cplusplus
+          }
+          #endif
+          #endif /* CUDA_PROFILER_API_H */
+          HDR
+          fi
+
           {
             echo "CUDA_HOME=${CU13_ROOT}"
             echo "CUDA_PATH=${CU13_ROOT}"
             echo "PATH=${CU13_ROOT}/bin:${PATH}"
             echo "LD_LIBRARY_PATH=${CU13_LIB}:${LD_LIBRARY_PATH:-}"
             echo "LIBRARY_PATH=${CU13_LIB}:${LIBRARY_PATH:-}"
+            echo "CPATH=${CU13_INC}:${CPATH:-}"
           } >> "$GITHUB_ENV"
           # Apply to this step too (GITHUB_ENV only affects subsequent steps).
           export CUDA_HOME="${CU13_ROOT}" CUDA_PATH="${CU13_ROOT}"
           export PATH="${CU13_ROOT}/bin:${PATH}"
           export LD_LIBRARY_PATH="${CU13_LIB}:${LD_LIBRARY_PATH:-}"
           export LIBRARY_PATH="${CU13_LIB}:${LIBRARY_PATH:-}"
+          export CPATH="${CU13_INC}:${CPATH:-}"
 
           # Prebuilt wheels: DeepSpeed kernels, CUTLASS ops, NVIDIA resiliency ext.
           # deepspeed-kernels has no plain 0.0.1 on PyPI (only 0.0.1.devNNNN
@@ -285,12 +353,13 @@ jobs:
           # built with. This image's nvcc is 13.2 but torch is +cu130 (13.0), a
           # minor mismatch Apex's own comment calls safe but still rejects. No
           # bypass flag exists, so comment out the check before building.
-          python3 - <<'PATCH'
+          WORK="${WORK}" python3 - <<'PATCH'
+          import os
           from pathlib import Path
-          p = Path("${WORK}/apex/setup.py")
+          p = Path(os.environ["WORK"]) / "apex" / "setup.py"
           src = p.read_text()
           line = "check_cuda_torch_binary_vs_bare_metal(CUDA_HOME)"
-          if line in src and not src.startswith("# ") and src.count(line) == 1:
+          if line in src and src.count(line) == 1:
               p.write_text(src.replace(line, "# " + line + "  # patched: nvcc 13.2 vs torch cu130"))
               print("[Deps] Patched apex setup.py: disabled CUDA version check")
           else:
@@ -302,7 +371,12 @@ jobs:
             "${WORK}/apex"
           echo "[Deps] Verifying imports"
           python3 -c "import deepspeed, megatron.core; print('deepspeed', deepspeed.__version__); print('megatron.core OK')"
-          python3 -c "import scaled_masked_softmax_cuda, scaled_upper_triang_masked_softmax_cuda; print('apex softmax extensions OK')"
+          # Import torch first: these apex extensions link against libc10.so,
+          # and torch's lib dir is not on LD_LIBRARY_PATH, so libc10 must already
+          # be loaded into the process (which `import torch` does) before the
+          # extensions can resolve it. Real collection always imports torch via
+          # the baseline modules first, so this only affects this check.
+          python3 -c "import torch; import scaled_masked_softmax_cuda, scaled_upper_triang_masked_softmax_cuda; print('apex softmax extensions OK')"
 
       - name: Check NVIDIA GPU and profiler
         shell: bash --login -e -o pipefail {0}
@@ -337,14 +411,19 @@ jobs:
             echo "[Collect] The target repo must provide a baseline/ directory."
             exit 1
           fi
-          echo "[Collect] Command: python3 src/nv_baseline/collect_baseline_nvidia.py --device ${DEVICE} --output ${OUTPUT} --ops-dir ${OPS_DIR}"
+          # Per-operator subprocess timeout in seconds (guards against CUDA
+          # hangs); 3600 = 1h. Overrides the collector's 1800s default.
+          OP_TIMEOUT=3600
+          echo "[Collect] Per-op timeout: ${OP_TIMEOUT}s"
+          echo "[Collect] Command: python3 src/nv_baseline/collect_baseline_nvidia.py --device ${DEVICE} --output ${OUTPUT} --ops-dir ${OPS_DIR} --op-timeout ${OP_TIMEOUT}"
           # Capture the collector's exit code without failing the step; the
           # classify step makes the final call from the produced JSON.
           set +e
           python3 src/nv_baseline/collect_baseline_nvidia.py \
             --device "${DEVICE}" \
             --output "${OUTPUT}" \
-            --ops-dir "${OPS_DIR}"
+            --ops-dir "${OPS_DIR}" \
+            --op-timeout "${OP_TIMEOUT}"
           rc=$?
           echo "[Collect] collector exit code: ${rc}"
 

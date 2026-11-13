@@ -125,11 +125,17 @@ def main():
         perror("No labels loaded from operators.yaml")
         sys.exit(1)
 
-    # Inject labels into each operator entry
+    # Merge operators.yaml labels into each entry. The operator-test run may
+    # already have attached detected labels (e.g. "tle"); keep those by merging
+    # rather than overwriting. Manifest labels come first, then any extra labels
+    # already present, de-duplicated and order-preserving.
     updated = 0
     for op_id, op_entry in op_data.items():
-        labels = op_labels.get(op_id, [])
-        op_entry["labels"] = labels
+        merged = list(op_labels.get(op_id, []))
+        for label in op_entry.get("labels", []):
+            if label not in merged:
+                merged.append(label)
+        op_entry["labels"] = merged
         updated += 1
 
     # Write back

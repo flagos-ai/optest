@@ -119,6 +119,7 @@ Examples
 import argparse
 import datetime
 import importlib
+import inspect
 import json
 import os
 import platform
@@ -1079,6 +1080,103 @@ def run_benchmark_q(gpu_id, op):
     return record
 
 
+# Textual marker of a Triton experimental language-extension (TLE) dependency.
+# A FlagOS operator whose dispatched source imports ``triton.experimental.tle``
+# (``...language``) is tagged with the "tle" label.
+_TLE_IMPORT_MARKER = "triton.experimental.tle"
+
+
+# Generic operator submodules of a FlagOS library, used only as an on-disk
+# fallback when an operator cannot be resolved to a live callable.
+_PUBLIC_OP_SUBMODULES = ("ops", "fused", "experimental_ops")
+
+
+def _op_source_files(op):
+    """Resolve the source files of the implementation ``op`` dispatches to.
+
+    The operator is looked up on the top-level library module. On a vendor build
+    this is the per-backend implementation, because ``SpecOpRegistrar.apply()``
+    overrides the generic name in the library globals at import time; where there
+    is no override it is the generic implementation. So the files reflect what
+    actually runs on this chip, and the "tle" label is per-chip: a vendor kernel
+    that uses TLE is tagged on that vendor, a generic TLE path is tagged
+    everywhere. ``inspect.getfile`` resolves name/file mismatches (``dgeglu`` ->
+    ``geglu.py``). The op's own file is returned together with the files of the
+    sibling **submodules it imports as modules** (e.g. ``from . import regular,
+    ring`` kernel helpers), one level deep and within the same top-level package;
+    plain function imports (``from ...topk import topk``) are not followed, so an
+    operator that merely calls a TLE operator is not tagged for the callee's use.
+    Falls back to the conventional ``<submodule>/<op>.py`` path when the callable
+    cannot be resolved. Returns a list of existing ``Path`` objects.
+    """
+    files: list[Path] = []
+    target = getattr(GEMS_MODULE, op, None) if GEMS_MODULE is not None else None
+
+    impl_module = inspect.getmodule(target) if target is not None else None
+    if impl_module is not None:
+        top = impl_module.__name__.split(".", 1)[0]
+        modules = [impl_module]
+        # Follow one level: only values bound as modules (kernel helpers the op
+        # imports), within the same top-level package. Functions are skipped.
+        for value in vars(impl_module).values():
+            if (
+                inspect.ismodule(value)
+                and value is not impl_module
+                and value.__name__.split(".", 1)[0] == top
+            ):
+                modules.append(value)
+        for module in modules:
+            try:
+                path = Path(inspect.getfile(module))
+            except TypeError:
+                continue
+            if path.is_file() and path not in files:
+                files.append(path)
+
+    if not files and GEMS_MODULE is not None:
+        try:
+            package_dir = Path(inspect.getfile(GEMS_MODULE)).parent
+        except TypeError:
+            package_dir = None
+        if package_dir is not None:
+            for sub in _PUBLIC_OP_SUBMODULES:
+                candidate = package_dir / sub / f"{op}.py"
+                if candidate.is_file():
+                    files.append(candidate)
+                    break
+    return files
+
+
+def _file_uses_tle(path):
+    """Return True if ``path`` references the TLE import marker."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return _TLE_IMPORT_MARKER in text
+
+
+def detect_tle_ops(ops):
+    """Return the subset of ``ops`` whose dispatched implementation uses TLE.
+
+    Detection is static and resolves each operator to the implementation that
+    actually runs on this chip (vendor override if present, else generic): an
+    operator is tagged when its source file, or a kernel submodule it imports one
+    level deep, imports ``triton.experimental.tle.language``. The result is
+    therefore per-chip. A static scan is used because the library imports the TLE
+    probe eagerly at load time, so a runtime ``sys.modules`` check cannot
+    attribute TLE to a specific operator.
+    """
+    tle_ops = set()
+    for op in ops:
+        try:
+            if any(_file_uses_tle(path) for path in _op_source_files(op)):
+                tle_ops.add(op)
+        except Exception:  # noqa: BLE001 - detection must never abort a run
+            continue
+    return tle_ops
+
+
 def worker_proc(gpu_id, work_queue, display_queue):
     # Redirect stdout/stderr to /dev/null to avoid file handle issues in subprocesses.
     # Open file handles in forked processes can cause deadlocks.
@@ -1167,10 +1265,17 @@ def worker_proc(gpu_id, work_queue, display_queue):
                     ]
                 except Exception:
                     pass
+                # Static labels for this operator (e.g. "tle" when its
+                # implementation depends on Triton experimental language
+                # extensions). Precomputed once in main() and inherited by the
+                # forked worker via CFG; default empty so a missing attribute
+                # never breaks the op.
+                labels = ["tle"] if op in getattr(CFG, "tle_ops", frozenset()) else []
                 result = {
                     "customized": op in customized_ops,
                     "accuracy": acc,
                     "performance": perf,
+                    "labels": labels,
                 }
                 worker_result.setdefault(op, result)
 
@@ -1818,6 +1923,12 @@ def main():
     CFG.accuracy_marks, CFG.benchmark_marks = collect_marks(ops)
 
     CFG.ops = ops
+
+    # Static operator labels, computed once after probe_env() has imported the
+    # library and before workers fork so every worker inherits the result.
+    CFG.tle_ops = detect_tle_ops(ops)
+    if CFG.tle_ops:
+        pinfo(f"TLE operators ... {len(CFG.tle_ops)} tagged")
 
     if OPTS.output_dir is None:
         output_dir = Path(

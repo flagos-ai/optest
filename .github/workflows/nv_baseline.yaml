@@ -371,7 +371,12 @@ jobs:
             "${WORK}/apex"
           echo "[Deps] Verifying imports"
           python3 -c "import deepspeed, megatron.core; print('deepspeed', deepspeed.__version__); print('megatron.core OK')"
-          python3 -c "import scaled_masked_softmax_cuda, scaled_upper_triang_masked_softmax_cuda; print('apex softmax extensions OK')"
+          # Import torch first: these apex extensions link against libc10.so,
+          # and torch's lib dir is not on LD_LIBRARY_PATH, so libc10 must already
+          # be loaded into the process (which `import torch` does) before the
+          # extensions can resolve it. Real collection always imports torch via
+          # the baseline modules first, so this only affects this check.
+          python3 -c "import torch; import scaled_masked_softmax_cuda, scaled_upper_triang_masked_softmax_cuda; print('apex softmax extensions OK')"
 
       - name: Check NVIDIA GPU and profiler
         shell: bash --login -e -o pipefail {0}

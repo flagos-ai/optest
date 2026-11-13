@@ -197,7 +197,14 @@ logs_results_YYYYMMDD_HHMM/
 
 `summary.json` 包含运行时间戳和持续时间、`total_ops`（成功聚合到 `result`
 中的算子数量）、算子级别的 `accuracy_counts` 和 `performance_counts`、
-一个 `env` 对象，以及每个算子的精度与性能结果。状态计数包含
+一个 `env` 对象，以及每个算子的精度与性能结果。每个算子条目还带有
+`customized` 标记和 `labels` 列表。`labels` 合并了来自 `conf/operators.yaml`
+的清单标签（由 `flagos-add-labels` 写入）与运行时检测到的标签。其中,当该芯片
+实际 dispatch 到的实现使用了 Triton 实验语言扩展（其源码文件、或它导入的 kernel
+子模块 import 了 `triton.experimental.tle.language`）时,会包含 `"tle"`。
+`"tle"` 从实际运行的算子解析得到：厂商自己的 kernel 用了 tle 就只在该厂商芯片上标注,
+公共实现用了 tle 则所有芯片都标注,因此按芯片区分。
+状态计数包含
 `passed`、`failed`、`skipped`、`not_found`、`error` 和 `timeout`，即使值为零也会保留。
 `env` 对象集中记录调度器检测到的关键测试环境和依赖版本：
 

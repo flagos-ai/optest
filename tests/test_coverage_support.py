@@ -196,8 +196,12 @@ def test_add_labels_error_and_success_paths(tmp_path, monkeypatch, capsys):
             add_labels.main()
         assert message in capsys.readouterr().out
 
+    # "add" already carries a detected "tle" label plus a duplicate of the
+    # manifest label ("pointwise"); "mul" has none. The injection must merge,
+    # keep "tle", and de-duplicate "pointwise" rather than overwrite.
     (result_dir / "summary.json").write_text(
-        json.dumps({"result": {"add": {}, "mul": {}}}), encoding="utf-8"
+        json.dumps({"result": {"add": {"labels": ["pointwise", "tle"]}, "mul": {}}}),
+        encoding="utf-8",
     )
     with mock.patch.object(add_labels, "load_op_labels", return_value={}):
         with (
@@ -214,7 +218,8 @@ def test_add_labels_error_and_success_paths(tmp_path, monkeypatch, capsys):
     ):
         add_labels.main()
     summary = json.loads((result_dir / "summary.json").read_text(encoding="utf-8"))
-    assert summary["result"]["add"]["labels"] == ["pointwise"]
+    # Manifest label first, then the preserved detected "tle".
+    assert summary["result"]["add"]["labels"] == ["pointwise", "tle"]
     assert summary["result"]["mul"]["labels"] == []
     assert "Updated 2 operators" in capsys.readouterr().out
 

@@ -962,6 +962,7 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys)
         mock.patch.object(run_tests, "get_ops_to_test", return_value=["add"]),
         mock.patch.object(run_tests, "check_shared_memory"),
         mock.patch.object(run_tests, "collect_marks", return_value=({"add"}, {"add"})),
+        mock.patch.object(run_tests, "detect_tle_ops", return_value={"add"}),
         mock.patch.object(run_tests, "Process", FakeProcess),
         mock.patch.object(run_tests, "display_loop"),
         mock.patch.object(run_tests, "WORKER_PROCESSES", []),
@@ -980,6 +981,7 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys)
         ),
     ):
         run_tests.main()
+    assert "TLE operators ... 1 tagged" in capsys.readouterr().out
     incomplete_summary = json.loads(
         (output / "summary.json").read_text(encoding="utf-8")
     )
@@ -1037,3 +1039,180 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys)
     assert "[INFO] Performance operators ... not_found=1" in output_text
     assert "failed=0" not in output_text
     assert "[INFO] Total elapsed time ... 0:00:00 (0.0s)" in output_text
+
+
+def _make_module(tmp_path, name, source=None):
+    """Build a real, file-backed module object registered in sys.modules.
+
+    ``inspect.getmodule``/``getfile`` resolve a function to its module by its
+    ``__module__`` name and the module's ``__file__``, so the backing file must
+    exist for these helpers to work in tests.
+    """
+    module = types.ModuleType(name)
+    if source is not None:
+        path = tmp_path / f"{name.replace('.', '_')}.py"
+        path.write_text(source, encoding="utf-8")
+        module.__file__ = str(path)
+    sys.modules[name] = module
+    return module
+
+
+def test_op_source_files_dispatched_and_module_follow(tmp_path, monkeypatch):
+    # Resolved via the TOP-LEVEL name (the per-chip dispatched implementation).
+    # A sibling kernel helper imported AS A MODULE is followed one level; a
+    # function import is NOT followed; a foreign-package module and a module
+    # without a file are skipped.
+    impl = _make_module(tmp_path, "fakelib.ops.bmm", "x = 1\n")
+    kernel = _make_module(
+        tmp_path, "fakelib.ops.bmm_ring", "import triton.experimental.tle.language\n"
+    )
+    foreign = _make_module(tmp_path, "other.mod", "y = 2\n")
+    nofile = types.ModuleType("fakelib.ops.nofile")  # no __file__ -> getfile raises
+    sys.modules["fakelib.ops.nofile"] = nofile
+    ghost = types.ModuleType("fakelib.ops.ghost")  # __file__ to a missing path
+    ghost.__file__ = str(tmp_path / "does_not_exist.py")
+    sys.modules["fakelib.ops.ghost"] = ghost
+
+    def bmm():
+        pass
+
+    bmm.__module__ = "fakelib.ops.bmm"
+
+    def topk_fn():  # a FUNCTION bound in impl's namespace -> must NOT be followed
+        pass
+
+    topk_fn.__module__ = "fakelib.ops.topk"
+
+    impl.ring = kernel  # module import -> followed
+    impl.foreign = foreign  # different top package -> ignored
+    impl.nofile = nofile  # module without file -> skipped
+    impl.ghost = ghost  # module whose file is missing -> skipped
+    impl.self_ref = impl
+    impl.gems_topk = topk_fn  # function -> not followed
+
+    gems = types.ModuleType("fakelib")
+    gems.__file__ = str(tmp_path / "fakelib" / "__init__.py")
+    gems.bmm = bmm  # top-level dispatched name
+    monkeypatch.setattr(run_tests, "GEMS_MODULE", gems)
+
+    names = {p.name for p in run_tests._op_source_files("bmm")}
+    assert "fakelib_ops_bmm.py" in names
+    assert "fakelib_ops_bmm_ring.py" in names  # followed module helper
+    assert "fakelib_ops_topk.py" not in names  # function import not followed
+    assert not any("other" in n for n in names)
+
+
+def test_op_source_files_name_mismatch(tmp_path, monkeypatch):
+    # dgeglu lives in geglu.py; top-level getattr + getfile resolves it.
+    impl = _make_module(tmp_path, "flaggems.ops.geglu", "z = 1\n")
+
+    def dgeglu():
+        pass
+
+    dgeglu.__module__ = "flaggems.ops.geglu"
+    gems = types.ModuleType("flaggems")
+    gems.__file__ = str(tmp_path / "flaggems" / "__init__.py")
+    gems.dgeglu = dgeglu
+    monkeypatch.setattr(run_tests, "GEMS_MODULE", gems)
+    assert run_tests._op_source_files("dgeglu") == [Path(impl.__file__)]
+
+
+def test_op_source_files_resolved_module_without_file(tmp_path, monkeypatch):
+    # Target resolves, but its module has no __file__ (getfile raises) and no
+    # on-disk fallback exists -> empty.
+    nofile = types.ModuleType("flaggems.ops.weird")
+
+    def weird():
+        pass
+
+    weird.__module__ = "flaggems.ops.weird"
+    sys.modules["flaggems.ops.weird"] = nofile
+    gems = types.ModuleType("flaggems")
+    gems.__file__ = str(tmp_path / "flaggems" / "__init__.py")
+    gems.weird = weird
+    monkeypatch.setattr(run_tests, "GEMS_MODULE", gems)
+    assert run_tests._op_source_files("weird") == []
+
+
+def test_op_source_files_fallback_and_absent(tmp_path, monkeypatch):
+    # Unresolvable op (not bound at top level): fall back to a conventional
+    # <submodule>/<op>.py on disk. `ops` has no match; `fused` does.
+    package_dir = tmp_path / "pkg"
+    (package_dir / "ops").mkdir(parents=True)
+    (package_dir / "fused").mkdir(parents=True)
+    (package_dir / "fused" / "mul.py").write_text("m = 1\n", encoding="utf-8")
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    gems = types.ModuleType("pkg")
+    gems.__file__ = str(package_dir / "__init__.py")
+    monkeypatch.setattr(run_tests, "GEMS_MODULE", gems)
+    assert run_tests._op_source_files("mul") == [package_dir / "fused" / "mul.py"]
+    # Fallback path absent across all submodules -> empty.
+    assert run_tests._op_source_files("absent") == []
+
+
+def test_op_source_files_edge_cases(monkeypatch):
+    # No library at all.
+    monkeypatch.setattr(run_tests, "GEMS_MODULE", None)
+    assert run_tests._op_source_files("add") == []
+
+    # Target unresolved and the library itself has no __file__ (getfile raises)
+    # so the fallback yields nothing.
+    gems = types.ModuleType("nofilelib")
+    monkeypatch.setattr(run_tests, "GEMS_MODULE", gems)
+    assert run_tests._op_source_files("add") == []
+
+
+def test_file_uses_tle(tmp_path):
+    marked = tmp_path / "marked.py"
+    marked.write_text("import triton.experimental.tle.language\n", encoding="utf-8")
+    plain = tmp_path / "plain.py"
+    plain.write_text("import torch\n", encoding="utf-8")
+    assert run_tests._file_uses_tle(marked) is True
+    assert run_tests._file_uses_tle(plain) is False
+    # Unreadable path -> False, never raises.
+    assert run_tests._file_uses_tle(tmp_path / "missing.py") is False
+
+
+def test_detect_tle_ops(tmp_path, monkeypatch):
+    tle_file = tmp_path / "tle.py"
+    tle_file.write_text("import triton.experimental.tle.language\n", encoding="utf-8")
+    plain_file = tmp_path / "plain.py"
+    plain_file.write_text("import torch\n", encoding="utf-8")
+
+    def fake_sources(op):
+        if op == "uses_tle":
+            return [plain_file, tle_file]
+        if op == "plain":
+            return [plain_file]
+        if op == "unresolved":
+            return []  # nothing resolved -> not tagged
+        raise RuntimeError("resolution blew up")  # must be swallowed
+
+    monkeypatch.setattr(run_tests, "_op_source_files", fake_sources)
+    assert run_tests.detect_tle_ops(["uses_tle", "plain", "unresolved", "boom"]) == {
+        "uses_tle"
+    }
+
+
+def test_worker_attaches_tle_label(tmp_path, monkeypatch):
+    config = _queue_config(tmp_path)
+    config.output_dir.mkdir()
+    config.tle_ops = {"add"}
+    monkeypatch.setattr(run_tests, "CFG", config)
+    monkeypatch.setattr(run_tests, "ensure_dir", lambda _path: None)
+    monkeypatch.setattr(
+        run_tests, "run_accuracy_q", lambda *_a: {"status": "Passed", "duration": 1}
+    )
+    monkeypatch.setattr(
+        run_tests, "run_benchmark_q", lambda *_a: {"status": "Passed", "duration": 2}
+    )
+    monkeypatch.setattr(run_tests, "GEMS_MODULE", None)
+    work = _ListQueue(["add"])
+    display = _ListQueue([])
+    with (
+        mock.patch.object(sys, "stdout", io.StringIO()),
+        mock.patch.object(sys, "stderr", io.StringIO()),
+    ):
+        run_tests.worker_proc(0, work, display)
+    data = json.loads((config.output_dir / "summary0.json").read_text(encoding="utf-8"))
+    assert data["add"]["labels"] == ["tle"]

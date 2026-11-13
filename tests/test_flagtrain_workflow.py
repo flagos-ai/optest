@@ -47,6 +47,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 "H800": "harbor.baai.ac.cn/flagos-app/megatron_rl0.17.1-generic-13.3:2.2.0-0.2.3",
                 "BW1000": "harbor.baai.ac.cn/flagos-app/megatron_rl0.17.1-hygon-dtk26.04:2.2.0-0.2.3",
                 "BI-V150": "harbor.baai.ac.cn/flagos-app/megatron_rl0.17.1-iluvatar-corex4.5.0:2.2.0-0.2.3",
+                "PPU-ZW810E": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-thead-ppu2.1.0:2.3.0",
                 "P800": "harbor.baai.ac.cn/flagos-app/megatron_rl0.17.1-kunlunxin-xre5.37.1:2.2.0-0.2.3",
                 "910B": "harbor.baai.ac.cn/flagos-app/megatron_rl0.17.1-ascend-cann9.0.0:2.2.0-0.2.3",
                 "C550": "harbor.baai.ac.cn/flagos-app/megatron_rl0.17.1-metax-maca3.8.1.3:2.2.0-0.2.3",
@@ -171,6 +172,15 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     backend_names = {backend["name"] for backend in matrix["include"]}
                     self.assertNotIn("P800", backend_names)
                     self.assertNotIn("S60", backend_names)
+                    ppu = next(
+                        backend
+                        for backend in matrix["include"]
+                        if backend["name"] == "PPU-ZW810E"
+                    )
+                    self.assertEqual(
+                        ppu["container_image"],
+                        "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-thead-ppu2.1.0:2.3.0",
+                    )
 
     def test_matrix_sets_persistent_per_vendor_cache(self):
         prepare_steps = self.workflow["jobs"]["prepare"]["steps"]

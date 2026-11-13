@@ -50,6 +50,10 @@ on:
         description: 'Target repository ref. Empty = configured default branch.'
         required: false
         default: ''
+      flagtree_version:
+        description: 'FlagTree daily version or YYYYMMDD date. Empty = backend default.'
+        required: false
+        default: ''
       vendors:
         description: 'Vendors to run, comma-separated. Empty = all enabled vendors.'
         required: false
@@ -111,6 +115,7 @@ jobs:
           REPO_INPUT: ${{ github.event.inputs.repo }}
           # TARGET repo code ref (branch/commit/tag); empty -> repo default_branch.
           REF_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
+          FLAGTREE_VERSION_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.flagtree_version || '' }}
           VENDORS_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.vendors || '' }}
           OPS_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ops || '' }}
           EXCLUDE_OPS_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.exclude_ops || '' }}
@@ -119,6 +124,7 @@ jobs:
         run: |
           import json
           import os
+          import re
           import yaml
 
           with open('.github/configs/repos.yaml') as f:
@@ -151,6 +157,49 @@ jobs:
           images = rc.get('container_images', {})
           deps_cfg = rc.get('deps', {}) or {}
           base_data = (rc.get('base_data') or '').strip()
+
+          # A repository can skip FlagTree replacement on every backend with
+          # `skip_flagtree_upgrade: true`, or only on named backends with a
+          # list such as `skip_flagtree_upgrade: [H800, 910B]`.
+          skip_flagtree_config = rc.get('skip_flagtree_upgrade', False)
+          if isinstance(skip_flagtree_config, bool):
+              skip_flagtree_all = skip_flagtree_config
+              skip_flagtree_backends = set()
+          elif isinstance(skip_flagtree_config, list):
+              skip_flagtree_all = False
+              skip_flagtree_backends = {
+                  str(item).strip()
+                  for item in skip_flagtree_config
+                  if str(item).strip()
+              }
+              unknown_skip_backends = skip_flagtree_backends - set(rc['backends'])
+              if unknown_skip_backends:
+                  raise SystemExit(
+                      'skip_flagtree_upgrade contains unknown backends: '
+                      + ', '.join(sorted(unknown_skip_backends))
+                  )
+          else:
+              raise SystemExit(
+                  'skip_flagtree_upgrade must be a boolean or a list of backend names'
+              )
+
+          flagtree_version_input = os.environ.get(
+              'FLAGTREE_VERSION_INPUT', ''
+          ).strip()
+          full_flagtree_version_pattern = re.compile(
+              r'\d+(?:\.\d+)*\.dev\d{8}'
+          )
+          if (
+              flagtree_version_input
+              and not re.fullmatch(r'\d{8}', flagtree_version_input)
+              and not full_flagtree_version_pattern.fullmatch(
+                  flagtree_version_input
+              )
+          ):
+              raise SystemExit(
+                  'flagtree_version must be a full daily version '
+                  '(for example 0.7.1.dev20261111) or YYYYMMDD'
+              )
 
           # Parse optional vendor filter (case-insensitive). Empty -> all.
           vendors_filter = {
@@ -186,6 +235,62 @@ jobs:
               backend['base_data'] = base_data
               backend['ops_test_timeout'] = repo_timeout
               backend['op_cmd_timeout'] = op_cmd_timeout
+
+              # FlagTree daily distributions are hardware/runtime specific.
+              # A backend without a `flagtree` block intentionally keeps the
+              # image-provided /opt/flagtree tree. Repository policy can also
+              # skip replacement globally or for selected backends.
+              flagtree = backend.pop('flagtree', None) or {}
+              if not isinstance(flagtree, dict):
+                  raise SystemExit(f'{name}: flagtree must be a mapping')
+              flagtree_package_name = str(
+                  flagtree.get('package_name') or ''
+              ).strip()
+              flagtree_default_version = str(
+                  flagtree.get('version') or ''
+              ).strip()
+              flagtree_index_url = str(
+                  flagtree.get('index_url') or ''
+              ).strip()
+              configured_flagtree_values = (
+                  flagtree_package_name,
+                  flagtree_default_version,
+                  flagtree_index_url,
+              )
+              if any(configured_flagtree_values) and not all(
+                  configured_flagtree_values
+              ):
+                  raise SystemExit(
+                      f'{name}: flagtree requires package_name, version, and index_url'
+                  )
+              if (
+                  flagtree_default_version
+                  and not full_flagtree_version_pattern.fullmatch(
+                      flagtree_default_version
+                  )
+              ):
+                  raise SystemExit(
+                      f'{name}: flagtree.version must be a full daily version'
+                  )
+
+              effective_flagtree_version = flagtree_default_version
+              if flagtree_package_name and flagtree_version_input:
+                  if re.fullmatch(r'\d{8}', flagtree_version_input):
+                      version_base = flagtree_default_version.rsplit(
+                          '.dev', 1
+                      )[0]
+                      effective_flagtree_version = (
+                          f'{version_base}.dev{flagtree_version_input}'
+                      )
+                  else:
+                      effective_flagtree_version = flagtree_version_input
+
+              backend['flagtree_package_name'] = flagtree_package_name
+              backend['flagtree_version'] = effective_flagtree_version
+              backend['flagtree_index_url'] = flagtree_index_url
+              backend['skip_flagtree_upgrade'] = (
+                  skip_flagtree_all or name in skip_flagtree_backends
+              )
 
               # Persistent per-vendor package cache on the runner's durable
               # storage so large wheels (vllm, flashinfer-cubin, cupy, ...) are
@@ -522,12 +627,111 @@ jobs:
           # packaged GPU-check command before target dependencies are resolved.
           echo "[Install dependencies] Purpose: install the optest source that provides the test and report commands"
           echo "[Install dependencies] Source: optest checkout pyproject.toml"
-          # -v makes uv log per-package cache hits vs network downloads.
           run_with_index_fallback \
             uv \
             "optest source installation" \
-            uv pip install -v --python "${ACTIVE_PYTHON}" .
+            uv pip install --python "${ACTIVE_PYTHON}" .
           print_cache_debug "optest install: after"
+
+      - name: Upgrade Flagtree
+        if: ${{ matrix.flagtree_package_name != '' && matrix.skip_flagtree_upgrade != true }}
+        env: ${{ fromJSON(matrix.test_env) }}
+        shell: bash --login -e -o pipefail {0}
+        run: |
+          print_cache_debug() {
+            local phase="$1"
+            echo "[Cache debug] ===== ${phase}: package cache configuration ====="
+            echo "[Cache debug] UV_CACHE_DIR=${UV_CACHE_DIR:-<unset>}"
+            echo "[Cache debug] PIP_CACHE_DIR=${PIP_CACHE_DIR:-<unset>}"
+            echo "[Cache debug] UV_LINK_MODE=${UV_LINK_MODE:-<unset>}"
+            if [ -n "${UV_CACHE_DIR:-}" ]; then
+              if [ -d "${UV_CACHE_DIR}" ] && [ -n "$(ls -A "${UV_CACHE_DIR}" 2>/dev/null)" ]; then
+                echo "[Cache debug] uv cache state: WARM (reuse expected; downloads skipped on hit)"
+                echo "[Cache debug] uv cache path: ${UV_CACHE_DIR}"
+                echo "[Cache debug] uv cache size: $(du -sh "${UV_CACHE_DIR}" 2>/dev/null | cut -f1 || echo '?')"
+                echo "[Cache debug] uv cache files: $(find "${UV_CACHE_DIR}" -type f 2>/dev/null | wc -l | tr -d ' ')"
+              else
+                echo "[Cache debug] uv cache state: COLD (empty/absent -> wheels download from the network this run)"
+                echo "[Cache debug] uv cache path: ${UV_CACHE_DIR}"
+              fi
+            fi
+          }
+
+          run_logged_command() {
+            local description="$1"
+            shift
+            local exit_code
+            echo "[FlagTree] Starting: ${description}"
+            printf '[FlagTree] Command:'
+            printf ' %q' "$@"
+            printf '\n'
+            if "$@"; then
+              exit_code=0
+            else
+              exit_code=$?
+            fi
+            echo "[FlagTree] Finished: ${description} (exit_code=${exit_code})"
+            return "${exit_code}"
+          }
+
+          ACTIVE_PYTHON=$(command -v python3)
+          FLAGTREE_PACKAGE_NAME="${{ matrix.flagtree_package_name }}"
+          FLAGTREE_VERSION="${{ matrix.flagtree_version }}"
+          FLAGTREE_INDEX_URL="${{ matrix.flagtree_index_url }}"
+          FLAGTREE_REQUIREMENT="${FLAGTREE_PACKAGE_NAME}==${FLAGTREE_VERSION}"
+          FLAGTREE_INSTALL_DIR=/opt/flagtree
+          FLAGTREE_STAGING_DIR=/opt/flagtree.new
+
+          echo "[FlagTree] Backend: ${{ matrix.name }}"
+          echo "[FlagTree] Package: ${FLAGTREE_PACKAGE_NAME}"
+          echo "[FlagTree] Version: ${FLAGTREE_VERSION}"
+          echo "[FlagTree] Index: ${FLAGTREE_INDEX_URL}"
+          print_cache_debug "FlagTree install: before"
+
+          # Capture the image's current distribution state before replacing the
+          # /opt/flagtree source tree. Some images provide only that source tree
+          # and no matching distribution metadata, so a missing package is
+          # useful debug output rather than a reason to stop the upgrade.
+          run_logged_command \
+            "show installed flagtree before upgrade" \
+            uv pip show --python "${ACTIVE_PYTHON}" flagtree \
+            || true
+
+          # Keep the daily index command-local: it must resolve FlagTree from
+          # the FlagOS daily repository without changing later package installs.
+          # Install into a staging directory first, leaving the image-provided
+          # /opt/flagtree intact if resolution or installation fails. Unlike the
+          # former pip command, uv intentionally uses the inherited UV_CACHE_DIR.
+          run_logged_command \
+            "remove stale FlagTree staging directory" \
+            rm -rf -- "${FLAGTREE_STAGING_DIR}"
+          run_logged_command \
+            "install ${FLAGTREE_REQUIREMENT} into staging directory" \
+            env -u UV_INDEX -u UV_DEFAULT_INDEX -u UV_INDEX_URL \
+            uv pip install \
+              --python "${ACTIVE_PYTHON}" \
+              --no-deps \
+              --target "${FLAGTREE_STAGING_DIR}" \
+              --index-url "${FLAGTREE_INDEX_URL}" \
+              "${FLAGTREE_REQUIREMENT}"
+
+          # /opt/flagtree is first on PYTHONPATH in the runtime images. Replace
+          # it only after the exact daily wheel has installed successfully in
+          # the staging directory.
+          run_logged_command \
+            "remove image-provided FlagTree directory" \
+            rm -rf -- "${FLAGTREE_INSTALL_DIR}"
+          run_logged_command \
+            "activate staged FlagTree directory" \
+            mv "${FLAGTREE_STAGING_DIR}" "${FLAGTREE_INSTALL_DIR}"
+
+          run_logged_command \
+            "show installed ${FLAGTREE_PACKAGE_NAME} in target directory" \
+            uv pip show --target "${FLAGTREE_INSTALL_DIR}" "${FLAGTREE_PACKAGE_NAME}"
+          run_logged_command \
+            "show installed ${FLAGTREE_PACKAGE_NAME} through pip environment" \
+            pip show "${FLAGTREE_PACKAGE_NAME}"
+          print_cache_debug "FlagTree install: after"
 
       - name: Check GPU availability
         shell: bash --login -e -o pipefail {0}
@@ -718,7 +922,7 @@ jobs:
             echo "[Install dependencies] Purpose: install configured backend dependencies"
             run_uv_with_index_fallback \
               "explicit backend dependency installation" \
-              uv pip install -v --python "${ACTIVE_PYTHON}" "${EXTRA_DEPS_ARGS[@]}"
+              uv pip install --python "${ACTIVE_PYTHON}" "${EXTRA_DEPS_ARGS[@]}"
           else
             echo "[Install dependencies] No explicit backend dependencies configured; skipping."
           fi
@@ -782,12 +986,9 @@ jobs:
           echo "[Install dependencies] Purpose: incrementally install the target repository without upgrading already-satisfied packages"
           (
             cd "${TARGET_DIR}"
-            # -v makes uv log per-package cache hits vs network downloads, so
-            # the step log clearly shows which wheels were reused from the
-            # persistent cache and which were downloaded this run.
             run_uv_with_index_fallback \
               "target repository uv installation" \
-              uv pip install -v --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"
+              uv pip install --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"
           )
           print_cache_debug "target install: after"
 

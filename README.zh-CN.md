@@ -25,6 +25,7 @@
 - [使用 uv 管理目标仓库依赖](#使用-uv-管理目标仓库依赖)
   - [配置测试与厂商 extra](#配置测试与厂商-extra)
   - [集中式工作流行为](#集中式工作流行为)
+  - [FlagTree daily 升级](#flagtree-daily-升级)
   - [持久化软件包缓存](#持久化软件包缓存)
 - [仓库布局](#仓库布局)
   - [仓库配置](#仓库配置)
@@ -652,6 +653,56 @@ uv pip install --python /path/to/active/python -e '.[test,nvidia]'
 与 uv 的解析版本保持一致，可能替换 numpy 等软件包。因此，目标专用的软件包名称和排除策略
 应保留在目标仓库的 `pyproject.toml` 中，而不是放入 `repos.yaml` 或工作流。
 
+### FlagTree daily 升级
+
+工作流会在安装 `optest` 之后、探测 GPU 之前，用后端专用的 daily wheel 替换镜像
+自带的 FlagTree 源码目录。后端通过共享硬件配置中的 `flagtree` 块启用该行为：
+
+```yaml
+# .github/configs/backends/H800.yaml
+flagtree:
+  package_name: flagtree-nvidia
+  version: 0.7.1.dev20261111
+  index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+```
+
+三个字段必须同时存在。`version` 是该后端完整的默认 daily 版本。不同运行时可能具有
+不同的版本基线：例如 CANN 9.0.0 当前使用 `0.7.0.devYYYYMMDD`，而大多数已配置的
+distribution 使用 `0.7.1.devYYYYMMDD`。
+
+可选的 workflow-dispatch 输入 `flagtree_version` 支持两种覆盖形式：
+
+- 完整版本（例如 `0.7.1.dev20261015`）会原样用于所有选中的后端。
+- 8 位日期（例如 `20261015`）会保留各后端配置的版本基线。因此同一次运行中，
+  H800 会解析为 `0.7.1.dev20261015`，910B 会解析为 `0.7.0.dev20261015`。
+
+输入为空时使用各后端配置的完整默认版本。如果生成的精确版本在对应 daily index 中
+不存在，安装步骤会明确失败。
+
+只有所选后端存在 `flagtree` 配置时，`Upgrade Flagtree` 步骤才会运行。由于
+`/opt/flagtree` 在 `PYTHONPATH` 中位于 site-packages 之前，该步骤通过
+`uv pip install --no-deps --target /opt/flagtree.new` 将精确的厂商 daily wheel
+安装到 staging 目录，安装成功后才删除原来的 `/opt/flagtree` 并将 staging 目录移动到
+该路径。因此解析或安装失败时，镜像原有目录保持不变。安装命令继承按厂商持久化的
+`UV_CACHE_DIR`；与之前的手工 pip 流程不同，不会禁用软件包缓存。步骤会在替换前输出
+release 元数据，替换后分别通过 target 目录和 pip 环境输出后端 distribution 信息用于
+debug。没有 `flagtree` 配置的后端会跳过该步骤并保留镜像自带目录；目前
+T-Head、Cambricon 和 AMD 使用此行为。
+
+目标仓库可以在不修改共享后端默认值的情况下选择跳过升级：
+
+```yaml
+repos:
+  KeepImageFlagTreeEverywhere:
+    skip_flagtree_upgrade: true
+
+  KeepImageFlagTreeOnSelectedHardware:
+    skip_flagtree_upgrade: [H800, 910B]
+```
+
+布尔值形式会为整个仓库的所有后端跳过该步骤；列表形式只跳过列出的后端，其余已配置
+后端仍安装 daily wheel。正常升级行为应省略 `skip_flagtree_upgrade`。
+
 ### 持久化软件包缓存
 
 目标依赖包含体积很大的 wheel（例如 `vllm`、`flashinfer-cubin`、`cupy`，
@@ -682,7 +733,8 @@ UV_LINK_MODE  = copy
   `uv` 以软件包版本以及 wheel 的 URL 或哈希作为缓存键，因此版本不变时始终命中缓存；
   版本升级或直接 URL 依赖发生变化时，仅自动重新下载发生变化的 wheel，无需手动清理缓存。
 
-两个安装步骤都会使用 `uv pip install -v`，并在安装前后打印 `[Cache debug]` 报告
+optest、FlagTree 和目标依赖安装步骤都使用正常的 `uv pip install` 输出。三个步骤都会在
+安装前后打印 `[Cache debug]` 报告
 （解析出的 `UV_CACHE_DIR`/`PIP_CACHE_DIR`/`UV_LINK_MODE`，以及缓存是 `COLD`
 还是 `WARM`，并附上其大小与文件数量），因此步骤日志能够清晰显示哪些 wheel 来自本地
 缓存复用、哪些是从网络下载的。
@@ -739,6 +791,7 @@ src/flagos_optest/        Python 软件包、调度器、报告和 GPU 检查
 | `default_branch` | 工作流没有收到显式 ref 时使用的目标分支。 |
 | `backends.<name>.enabled` | 为该仓库启用或禁用共享硬件后端。 |
 | `container_images.<backend>` | 某个后端的仓库专用镜像覆盖项。 |
+| `skip_flagtree_upgrade` | 可选；设为 `true` 时所有后端保留镜像 FlagTree，或填写后端名称列表以跳过指定后端。 |
 | `deps.default` | 为每个已启用后端安装的显式回退软件包。优先使用目标 `pyproject.toml` 中的厂商 extra。 |
 | `deps.<backend>` | 只为某个后端安装的显式回退软件包。优先使用目标 `pyproject.toml` 中的厂商 extra。 |
 | `base_data` | 目标 checkout 中可选的性能基线 JSON 路径。 |
@@ -780,6 +833,7 @@ backend deps + repo deps.default + repo deps.<backend>
 | `container_image` | 默认镜像，除非所选仓库覆盖它。 |
 | `container_volumes` | 挂载到作业容器中的主机路径。 |
 | `container_options` | 设备映射、权限、IPC、共享内存和其他容器运行时选项。 |
+| `flagtree` | 可选的后端 daily wheel 映射，必须包含 `package_name`、完整默认 `version` 和 `index_url`；省略时保留镜像 FlagTree。 |
 | `test_gpus` | 可选的设备 ID 覆盖项；省略时由 `flagos-gpu-check` 提供可用设备。 |
 | `test_env` | 注入算子测试步骤的环境变量。 |
 | `deps` | 添加到仓库依赖组之前的硬件专用软件包。 |
@@ -790,20 +844,20 @@ MTT-S5000/摩尔线程、BI-V150/天数智芯、PPU-ZW810E/平头哥、
 MLU590-M9DE/寒武纪、P800/昆仑芯、W7900D/AMD、TX8110/清微智能和 S60/燧原。
 下表汇总其当前调度默认值；每个后端 YAML 文件中的镜像、卷、容器选项和环境细节仍为权威配置。
 
-| 后端 | 厂商 | Runner 标签 | 默认测试设备 | 输出基础目录 |
-| --- | --- | --- | --- | --- |
-| `H800` | Nvidia | `h800-flaggems-weekly` | 自动检测 | `/data/github-outputs` |
-| `910B` | Ascend | `910b-flaggems-weekly` | 自动检测 | `/data/github-outputs` |
-| `C550` | Metax | `c550-flaggems-weekly` | 自动检测 | `/data/github-outputs` |
-| `BW1000` | Hygon | `bw1000-flaggems-weekly` | 自动检测 | `/data/github-outputs` |
-| `MTT-S5000` | MThreads | `s5000-flaggems-weekly` | 自动检测 | `/data/github-outputs` |
-| `BI-V150` | Iluvatar | `v150-flaggems-weekly` | 自动检测 | `/data/github-outputs` |
-| `PPU-ZW810E` | THead | `810e-flaggems-weekly` | 自动检测 | `/home/github-outputs` |
-| `MLU590-M9DE` | Cambricon | `mlu590-m9de-flaggems-weekly` | 自动检测 | `/data/github-outputs` |
-| `P800` | KunLunXin | `p800-flaggems-weekly` | 自动检测 | `/data/github-outputs` |
-| `W7900D` | AMD | `w7900d-flaggems-weekly` | 自动检测 | `/data/github-outputs` |
-| `TX8110` | TsingMicro | `tx8110-flaggems-weekly` | `0-15`（覆盖） | `/data/github-outputs` |
-| `S60` | Enflame | `s60-flaggems-weekly` | 自动检测 | `/data/github-outputs` |
+| 后端 | 厂商 | Runner 标签 | FlagTree daily 包 | 默认测试设备 | 输出基础目录 |
+| --- | --- | --- | --- | --- | --- |
+| `H800` | Nvidia | `h800-flaggems-weekly` | `flagtree-nvidia` | 自动检测 | `/data/github-outputs` |
+| `910B` | Ascend | `910b-flaggems-weekly` | `flagtree-ascend-cann9.0.0` | 自动检测 | `/data/github-outputs` |
+| `C550` | Metax | `c550-flaggems-weekly` | `flagtree-metax` | 自动检测 | `/data/github-outputs` |
+| `BW1000` | Hygon | `bw1000-flaggems-weekly` | `flagtree-hcu` | 自动检测 | `/data/github-outputs` |
+| `MTT-S5000` | MThreads | `s5000-flaggems-weekly` | `flagtree-mthreads` | 自动检测 | `/data/github-outputs` |
+| `BI-V150` | Iluvatar | `v150-flaggems-weekly` | `flagtree-iluvatar` | 自动检测 | `/data/github-outputs` |
+| `PPU-ZW810E` | THead | `810e-flaggems-weekly` | 镜像自带 | 自动检测 | `/home/github-outputs` |
+| `MLU590-M9DE` | Cambricon | `mlu590-m9de-flaggems-weekly` | 镜像自带 | 自动检测 | `/data/github-outputs` |
+| `P800` | KunLunXin | `p800-flaggems-weekly` | `flagtree-kunlunxin` | 自动检测 | `/data/github-outputs` |
+| `W7900D` | AMD | `w7900d-flaggems-weekly` | 镜像自带 | 自动检测 | `/data/github-outputs` |
+| `TX8110` | TsingMicro | `tx8110-flaggems-weekly` | `flagtree-tsingmicro` | `0-15`（覆盖） | `/data/github-outputs` |
+| `S60` | Enflame | `s60-flaggems-weekly` | `flagtree-enflame` | 自动检测 | `/data/github-outputs` |
 
 当前所有后端都使用容器，工作流始终会调用 `flagos-gpu-check`。仓库专用策略应保留在
 `repos.yaml` 中；只有在共享硬件默认配置本身发生变化时，才应修改后端文件。

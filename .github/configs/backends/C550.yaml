@@ -47,6 +47,13 @@ container_options: >-
   --device=/dev/mxcd
   --workdir=/root
 
+# Backend-specific FlagTree daily wheel. The workflow uses this full version
+# unless workflow_dispatch supplies a full version or YYYYMMDD override.
+flagtree:
+  package_name: flagtree-metax
+  version: 0.7.1.dev20261110
+  index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+
 # Extra environment variables injected only into the "Run ops tests" step
 test_env:
   MACA_DIRECT_DISPATCH: 1

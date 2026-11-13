@@ -67,7 +67,11 @@ For every new hardware backend:
 
 1. Add `.github/configs/backends/<hardware>.yaml` with the normalized `vendor`,
    runner label, container configuration, device access, `test_env`,
-   `output_base_dir`, and any exceptional hardware-level dependencies.
+   `output_base_dir`, and any exceptional hardware-level dependencies. When
+   FlagTree publishes a compatible backend daily wheel, also add a `flagtree`
+   mapping with its exact `package_name`, full default `version`, and
+   `index_url`. Omit the mapping when no compatible daily distribution exists;
+   the workflow then retains the image-provided `/opt/flagtree` tree.
 2. Add the backend under `backends` for each applicable repository in
    `.github/configs/repos.yaml`, plus repository-specific image overrides only
    when the shared backend image is unsuitable.
@@ -83,7 +87,8 @@ For every new hardware backend:
    the first eight commit characters as `<version>_<sha8>`. Release wheels named
    `flagtree`, or daily wheels without that metadata, retain the plain
    distribution version. Update `tests/test_run_tests_coverage.py` whenever the
-   distribution list or metadata behavior changes.
+   distribution list or metadata behavior changes. Confirm that the exact
+   default version configured in the backend YAML exists in the daily index.
 5. Update the backend inventory in `README.md` and `README.zh-CN.md`. If the
    hardware participates in NVIDIA baseline comparisons, also update
    `src/nv_baseline/hardware_specs.json` and its focused tests.
@@ -116,6 +121,34 @@ branch for a new vendor. Verify that the runner supplies
 lists are desired, and that its backend `output_base_dir` is durable. Run the
 full test suite after onboarding; this repository requires 100% statement and
 branch coverage.
+
+## FlagTree Daily Upgrade
+
+The `Upgrade Flagtree` workflow step runs after optest installation and before
+GPU detection only when the selected backend YAML contains `flagtree`. That
+mapping requires `package_name`, a full daily `version` such as
+`0.7.1.dev20261111`, and `index_url`. The optional `flagtree_version` dispatch
+input accepts either another full daily version or `YYYYMMDD`; the date form
+keeps each backend's configured version base, which is important for Ascend
+CANN distributions whose base can differ from other backends.
+
+The step installs the exact daily wheel with `uv pip install --no-deps
+--target /opt/flagtree.new` and only then replaces `/opt/flagtree`, which is
+already first on the images' `PYTHONPATH`. It inherits the per-vendor
+`UV_CACHE_DIR` but keeps the FlagTree daily index command-local. After
+replacement, keep the target-directory `uv pip show` and direct `pip show`
+diagnostics. Never remove `/opt/flagtree` before staging succeeds, or on a
+backend without a configured daily wheel, because those cases must retain the
+image-provided source tree.
+
+Repository exceptions belong in `.github/configs/repos.yaml`:
+
+- `skip_flagtree_upgrade: true` skips replacement for the whole repository.
+- `skip_flagtree_upgrade: [H800, 910B]` skips only the named backends.
+- Omitting the key preserves the normal backend-controlled upgrade behavior.
+
+When changing this flow, update both READMEs, backend configuration coverage,
+matrix version/skip-policy tests, and the workflow-step assertions.
 
 ## FlagGems Per-Vendor Operator Lists
 
@@ -163,9 +196,9 @@ Notes for debugging and future changes:
 - The cache keys on package version plus wheel URL/hash. A cold (first) run
   downloads and populates the cache; warm (later) runs reuse it and skip the
   network. A version bump re-downloads only the changed package.
-- Both install steps ("Configure package index and install optest" and
-  "Install target repository and dependencies") run `uv pip install -v` and
-  print a `[Cache debug]` report: the `UV_CACHE_DIR`/`PIP_CACHE_DIR`/
+- The optest, FlagTree, and target-dependency install steps use normal
+  `uv pip install` output. All three print a `[Cache debug]` report: the
+  `UV_CACHE_DIR`/`PIP_CACHE_DIR`/
   `UV_LINK_MODE` values, the relevant `UV_`/`PIP_`/vendor env vars, and a
   COLD/WARM state with the cache size and file count before and after install.
   Grep the job log for `[Cache debug]` and `uv cache state:` to confirm a run

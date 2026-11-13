@@ -19,6 +19,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from shutil import copytree
 
 import yaml
 
@@ -36,6 +37,49 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         cls.workflow = yaml.safe_load(
             (ROOT / ".github/workflows/ops-test.yaml").read_text(encoding="utf-8")
         )
+
+    def build_matrix(
+        self,
+        repo,
+        *,
+        flagtree_version="",
+        vendors="",
+        cwd=ROOT,
+    ):
+        prepare_steps = self.workflow["jobs"]["prepare"]["steps"]
+        script = next(
+            step["run"] for step in prepare_steps if step.get("id") == "build-matrix"
+        )
+        with tempfile.TemporaryDirectory() as output_directory:
+            output = Path(output_directory) / "github-output"
+            environment = {
+                **os.environ,
+                "REPO_INPUT": repo,
+                "REF_INPUT": "",
+                "FLAGTREE_VERSION_INPUT": flagtree_version,
+                "VENDORS_INPUT": vendors,
+                "OPS_INPUT": "",
+                "EXCLUDE_OPS_INPUT": "",
+                "UPLOAD_LOG_INPUT": "",
+                "SEND_FEISHU_INPUT": "",
+                "GITHUB_OUTPUT": str(output),
+            }
+            completed = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=cwd,
+                check=False,
+                capture_output=True,
+                env=environment,
+                text=True,
+            )
+            if completed.returncode != 0:
+                self.fail(completed.stderr)
+            matrix_line = next(
+                line
+                for line in output.read_text(encoding="utf-8").splitlines()
+                if line.startswith("matrix_container=")
+            )
+        return json.loads(matrix_line.removeprefix("matrix_container="))
 
     def test_flagtrain_images_and_enabled_backends(self):
         config = self.repos["repos"]["FlagTrain"]
@@ -111,11 +155,123 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 else:
                     self.assertNotIn("test_gpus", config)
 
+    def test_backend_flagtree_daily_configuration(self):
+        backend_dir = ROOT / ".github/configs/backends"
+        backend_configs = {
+            path.stem: yaml.safe_load(path.read_text(encoding="utf-8"))
+            for path in backend_dir.glob("*.yaml")
+        }
+        daily_index = "https://resource.flagos.net/repository/flagos-pypi-daily/simple"
+        expected = {
+            "H800": ("flagtree-nvidia", "0.7.1.dev20261111"),
+            "910B": ("flagtree-ascend-cann9.0.0", "0.7.0.dev20261111"),
+            "C550": ("flagtree-metax", "0.7.1.dev20261110"),
+            "BW1000": ("flagtree-hcu", "0.7.1.dev20261111"),
+            "MTT-S5000": ("flagtree-mthreads", "0.7.1.dev20261111"),
+            "BI-V150": ("flagtree-iluvatar", "0.7.1.dev20261111"),
+            "P800": ("flagtree-kunlunxin", "0.7.1.dev20261111"),
+            "TX8110": ("flagtree-tsingmicro", "0.7.1.dev20261111"),
+            "S60": ("flagtree-enflame", "0.7.1.dev20261111"),
+        }
+        for backend_name, (package_name, version) in expected.items():
+            with self.subTest(backend=backend_name):
+                self.assertEqual(
+                    backend_configs[backend_name]["flagtree"],
+                    {
+                        "package_name": package_name,
+                        "version": version,
+                        "index_url": daily_index,
+                    },
+                )
+
+        for backend_name in ("PPU-ZW810E", "MLU590-M9DE", "W7900D"):
+            with self.subTest(backend=backend_name):
+                self.assertNotIn("flagtree", backend_configs[backend_name])
+
+    def test_matrix_resolves_flagtree_default_date_and_full_versions(self):
+        defaults = self.build_matrix("FlagGems", vendors="Nvidia,Ascend")
+        default_by_name = {backend["name"]: backend for backend in defaults["include"]}
+        self.assertEqual(
+            default_by_name["H800"]["flagtree_version"],
+            "0.7.1.dev20261111",
+        )
+        self.assertEqual(
+            default_by_name["910B"]["flagtree_version"],
+            "0.7.0.dev20261111",
+        )
+
+        dated = self.build_matrix(
+            "FlagGems",
+            flagtree_version="20261015",
+            vendors="Nvidia,Ascend",
+        )
+        dated_by_name = {backend["name"]: backend for backend in dated["include"]}
+        self.assertEqual(
+            dated_by_name["H800"]["flagtree_version"],
+            "0.7.1.dev20261015",
+        )
+        self.assertEqual(
+            dated_by_name["910B"]["flagtree_version"],
+            "0.7.0.dev20261015",
+        )
+
+        full_version = "0.8.0.dev20261201"
+        overridden = self.build_matrix(
+            "FlagGems",
+            flagtree_version=full_version,
+            vendors="Nvidia,Ascend",
+        )
+        self.assertEqual(
+            {backend["flagtree_version"] for backend in overridden["include"]},
+            {full_version},
+        )
+
+    def test_repo_can_skip_flagtree_upgrade_globally_or_by_backend(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            copytree(ROOT / ".github/configs", root / ".github/configs")
+            repos_path = root / ".github/configs/repos.yaml"
+            repos = yaml.safe_load(repos_path.read_text(encoding="utf-8"))
+
+            repos["repos"]["FlagAttention"]["skip_flagtree_upgrade"] = ["H800"]
+            repos_path.write_text(
+                yaml.safe_dump(repos, sort_keys=False),
+                encoding="utf-8",
+            )
+            selected = self.build_matrix(
+                "FlagAttention",
+                vendors="Nvidia,Ascend",
+                cwd=root,
+            )
+            selected_by_name = {
+                backend["name"]: backend for backend in selected["include"]
+            }
+            self.assertTrue(selected_by_name["H800"]["skip_flagtree_upgrade"])
+            self.assertFalse(selected_by_name["910B"]["skip_flagtree_upgrade"])
+
+            repos["repos"]["FlagAttention"]["skip_flagtree_upgrade"] = True
+            repos_path.write_text(
+                yaml.safe_dump(repos, sort_keys=False),
+                encoding="utf-8",
+            )
+            skipped = self.build_matrix(
+                "FlagAttention",
+                vendors="Nvidia,Ascend",
+                cwd=root,
+            )
+            self.assertTrue(
+                all(backend["skip_flagtree_upgrade"] for backend in skipped["include"])
+            )
+
     def test_gpu_probe_precedes_vendor_dependency_install(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]
         names = [step.get("name") for step in steps]
         self.assertLess(
             names.index("Configure package index and install optest"),
+            names.index("Upgrade Flagtree"),
+        )
+        self.assertLess(
+            names.index("Upgrade Flagtree"),
             names.index("Check GPU availability"),
         )
         self.assertLess(
@@ -129,9 +285,214 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             if step.get("name") == "Install target repository and dependencies"
         )["run"]
         self.assertIn(
-            'uv pip install -v --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"',
+            'uv pip install --python "${ACTIVE_PYTHON}" --editable "${TARGET_PROJECT_SPEC}"',
             install,
         )
+
+        upgrade = next(step for step in steps if step.get("name") == "Upgrade Flagtree")
+        self.assertEqual(
+            upgrade["if"],
+            "${{ matrix.flagtree_package_name != '' && matrix.skip_flagtree_upgrade != true }}",
+        )
+        self.assertEqual(upgrade["env"], "${{ fromJSON(matrix.test_env) }}")
+        self.assertNotIn("flagtree_backup", upgrade["run"])
+        self.assertNotIn("uv pip uninstall", upgrade["run"])
+        self.assertIn("uv pip install", upgrade["run"])
+        self.assertNotIn("uv pip install -v", upgrade["run"])
+        self.assertIn("--no-deps", upgrade["run"])
+        self.assertIn('--target "${FLAGTREE_STAGING_DIR}"', upgrade["run"])
+        self.assertIn('--index-url "${FLAGTREE_INDEX_URL}"', upgrade["run"])
+        self.assertNotIn("--no-cache", upgrade["run"])
+        self.assertIn('rm -rf -- "${FLAGTREE_STAGING_DIR}"', upgrade["run"])
+        self.assertIn('rm -rf -- "${FLAGTREE_INSTALL_DIR}"', upgrade["run"])
+        self.assertIn(
+            'mv "${FLAGTREE_STAGING_DIR}" "${FLAGTREE_INSTALL_DIR}"',
+            upgrade["run"],
+        )
+        self.assertIn("uv pip show", upgrade["run"])
+        self.assertIn('print_cache_debug "FlagTree install: before"', upgrade["run"])
+        self.assertIn('print_cache_debug "FlagTree install: after"', upgrade["run"])
+        self.assertIn(
+            'uv pip show --python "${ACTIVE_PYTHON}" flagtree', upgrade["run"]
+        )
+        self.assertNotIn('"show staged ${FLAGTREE_PACKAGE_NAME}"', upgrade["run"])
+        self.assertIn(
+            'uv pip show --target "${FLAGTREE_INSTALL_DIR}" "${FLAGTREE_PACKAGE_NAME}"',
+            upgrade["run"],
+        )
+        self.assertNotIn(
+            '"show installed ${FLAGTREE_PACKAGE_NAME} through uv environment"',
+            upgrade["run"],
+        )
+        self.assertIn('pip show "${FLAGTREE_PACKAGE_NAME}"', upgrade["run"])
+        self.assertLess(
+            upgrade["run"].index('"show installed flagtree before upgrade"'),
+            upgrade["run"].index('rm -rf -- "${FLAGTREE_INSTALL_DIR}"'),
+        )
+
+    def test_flagtree_upgrade_stages_and_activates_exact_daily_wheel(self):
+        steps = self.workflow["jobs"]["test-container"]["steps"]
+        script = next(
+            step["run"] for step in steps if step.get("name") == "Upgrade Flagtree"
+        )
+        replacements = {
+            "${{ matrix.flagtree_package_name }}": "flagtree-nvidia",
+            "${{ matrix.flagtree_version }}": "0.7.1.dev20261111",
+            "${{ matrix.flagtree_index_url }}": (
+                "https://resource.flagos.net/repository/flagos-pypi-daily/simple"
+            ),
+            "${{ matrix.name }}": "H800",
+        }
+        for expression, value in replacements.items():
+            script = script.replace(expression, value)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "flagtree"
+            staging = root / "flagtree.new"
+            source.mkdir()
+            (source / "marker").write_text("image source", encoding="utf-8")
+            script = script.replace("/opt/flagtree.new", str(staging)).replace(
+                "/opt/flagtree", str(source)
+            )
+            uv_log = root / "uv.log"
+            uv = root / "uv"
+            uv.write_text(
+                "#!/bin/sh\n"
+                'args="$*"\n'
+                'printf "UV_CACHE_DIR=%s UV_DEFAULT_INDEX=%s ARGS=%s\\n" '
+                '"${UV_CACHE_DIR:-}" "${UV_DEFAULT_INDEX:-}" "$args" >> "$UV_LOG"\n'
+                'target=""\n'
+                'while [ "$#" -gt 0 ]; do\n'
+                '  if [ "$1" = "--target" ]; then shift; target="$1"; fi\n'
+                "  shift\n"
+                "done\n"
+                'case " $args " in\n'
+                '  *" pip install "*) mkdir -p "$target"; '
+                'printf "daily wheel" > "$target/marker" ;;\n'
+                "esac\n",
+                encoding="utf-8",
+            )
+            uv.chmod(0o755)
+            pip_log = root / "pip.log"
+            pip = root / "pip"
+            pip.write_text(
+                '#!/bin/sh\nprintf "ARGS=%s\\n" "$*" >> "$PIP_LOG"\n',
+                encoding="utf-8",
+            )
+            pip.chmod(0o755)
+            completed = subprocess.run(
+                ["bash", "-e", "-o", "pipefail", "-c", script],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                    "UV_CACHE_DIR": str(root / "uv-cache"),
+                    "UV_DEFAULT_INDEX": "https://pypi.example/simple",
+                    "UV_LOG": str(uv_log),
+                    "PIP_LOG": str(pip_log),
+                },
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(
+                (source / "marker").read_text(encoding="utf-8"),
+                "daily wheel",
+            )
+            self.assertFalse(staging.exists())
+            commands = uv_log.read_text(encoding="utf-8")
+            self.assertIn(
+                "pip install --python ",
+                commands,
+            )
+            self.assertIn(
+                f"--no-deps --target {staging} --index-url "
+                "https://resource.flagos.net/repository/flagos-pypi-daily/simple "
+                "flagtree-nvidia==0.7.1.dev20261111",
+                commands,
+            )
+            install_log = next(
+                line for line in commands.splitlines() if "pip install" in line
+            )
+            self.assertTrue(
+                install_log.startswith(
+                    f"UV_CACHE_DIR={root / 'uv-cache'} UV_DEFAULT_INDEX= ARGS="
+                )
+            )
+            pre_upgrade_show = next(
+                line for line in commands.splitlines() if "pip show --python" in line
+            )
+            self.assertTrue(pre_upgrade_show.endswith(" flagtree"))
+            self.assertNotIn(f"pip show --target {staging}", commands)
+            self.assertIn(f"pip show --target {source}", commands)
+            self.assertIn("flagtree-nvidia", commands)
+            daily_show_commands = [
+                line
+                for line in commands.splitlines()
+                if "pip show" in line and "flagtree-nvidia" in line
+            ]
+            self.assertEqual(len(daily_show_commands), 1)
+            self.assertEqual(
+                pip_log.read_text(encoding="utf-8"),
+                "ARGS=show flagtree-nvidia\n",
+            )
+
+    def test_flagtree_upgrade_preserves_image_tree_when_staging_fails(self):
+        steps = self.workflow["jobs"]["test-container"]["steps"]
+        script = next(
+            step["run"] for step in steps if step.get("name") == "Upgrade Flagtree"
+        )
+        replacements = {
+            "${{ matrix.flagtree_package_name }}": "flagtree-nvidia",
+            "${{ matrix.flagtree_version }}": "0.7.1.dev20261111",
+            "${{ matrix.flagtree_index_url }}": (
+                "https://resource.flagos.net/repository/flagos-pypi-daily/simple"
+            ),
+            "${{ matrix.name }}": "H800",
+        }
+        for expression, value in replacements.items():
+            script = script.replace(expression, value)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "flagtree"
+            staging = root / "flagtree.new"
+            source.mkdir()
+            (source / "marker").write_text("image source", encoding="utf-8")
+            script = script.replace("/opt/flagtree.new", str(staging)).replace(
+                "/opt/flagtree", str(source)
+            )
+            uv = root / "uv"
+            uv.write_text(
+                '#!/bin/sh\ncase " $* " in *" pip install "*) exit 42 ;; esac\n',
+                encoding="utf-8",
+            )
+            uv.chmod(0o755)
+            completed = subprocess.run(
+                ["bash", "-e", "-o", "pipefail", "-c", script],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                },
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 42, completed.stderr)
+            self.assertEqual(
+                (source / "marker").read_text(encoding="utf-8"),
+                "image source",
+            )
+            self.assertFalse(staging.exists())
+            self.assertNotIn(
+                "Starting: remove image-provided FlagTree directory",
+                completed.stdout,
+            )
 
     def test_matrix_resolves_command_timeout_without_dependency_policy(self):
         prepare_steps = self.workflow["jobs"]["prepare"]["steps"]
@@ -484,7 +845,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             "target repository uv installation: failed with https://pypi.tuna.tsinghua.edu.cn/simple",
             "target repository uv installation: selected https://mirrors.aliyun.com/pypi/simple/",
             "Starting: target repository uv installation via https://mirrors.aliyun.com/pypi/simple/",
-            "pip install -v --python",
+            "pip install --python",
             "--editable .[test,nvidia]",
             "Finished: target repository uv installation via https://mirrors.aliyun.com/pypi/simple/ (exit_code=0)",
         ]

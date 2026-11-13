@@ -68,10 +68,10 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 "C550",
                 "MTT-S5000",
                 "PPU-ZW810E",
+                "P800",
+                "S60",
             },
         )
-        self.assertFalse(config["backends"]["P800"]["enabled"])
-        self.assertFalse(config["backends"]["S60"]["enabled"])
         self.assertNotIn("deps", config)
 
         workflow_text = (ROOT / ".github/workflows/ops-test.yaml").read_text(
@@ -169,9 +169,11 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     self.assertEqual(backend["op_cmd_timeout"], expected_timeout)
 
                 if repo == "FlagTrain":
-                    backend_names = {backend["name"] for backend in matrix["include"]}
-                    self.assertNotIn("P800", backend_names)
-                    self.assertNotIn("S60", backend_names)
+                    backends = {
+                        backend["name"]: backend for backend in matrix["include"]
+                    }
+                    self.assertIn("P800", backends)
+                    self.assertIn("S60", backends)
                     ppu = next(
                         backend
                         for backend in matrix["include"]
@@ -180,6 +182,14 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     self.assertEqual(
                         ppu["container_image"],
                         "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-thead-ppu2.1.0:2.3.0",
+                    )
+                    self.assertEqual(
+                        backends["P800"]["container_image"],
+                        "harbor.baai.ac.cn/flagos-app/megatron_rl0.17.1-kunlunxin-xre5.37.1:2.2.0-0.2.3",
+                    )
+                    self.assertEqual(
+                        backends["S60"]["container_image"],
+                        "harbor.baai.ac.cn/flagos-app/megatron_rl0.17.1-enflame-tops1.10.6:2.2.0-0.2.3",
                     )
 
     def test_matrix_sets_persistent_per_vendor_cache(self):

@@ -76,6 +76,11 @@ class FlagTrainWorkflowTest(unittest.TestCase):
 
         self.assertLessEqual(configured_repos, probed_repos)
 
+    def test_flagattention_enables_s60_backend(self):
+        config = self.repos["repos"]["FlagAttention"]
+
+        self.assertTrue(config["backends"]["S60"]["enabled"])
+
     def test_backend_gpu_configuration_uses_dynamic_detection_by_default(self):
         self.assertNotIn("server", self.repos)
 

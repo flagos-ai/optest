@@ -46,10 +46,6 @@ on:
           - FlagGems-sglang
           - FlagTrain
           - FlagAttention
-      branch:
-        description: 'optest source branch. Empty = dispatched branch.'
-        required: false
-        default: ''
       ref:
         description: 'Target repository ref. Empty = configured default branch.'
         required: false
@@ -98,12 +94,9 @@ jobs:
       publish_results: ${{ steps.build-matrix.outputs.publish_results }}
       send_feishu: ${{ steps.build-matrix.outputs.send_feishu }}
     steps:
-      # Checkout optest itself (this repo) for repos.yaml + backend configs.
-      # `branch` input picks the optest branch; empty -> the dispatched ref.
+      # Checkout optest itself at the dispatched ref for repo/backend configs.
       - name: Checkout optest workflow source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
       - id: get-date
         env:
@@ -279,14 +272,11 @@ jobs:
       TEST_EXCLUDE_OPS: ${{ needs.prepare.outputs.exclude_ops }}
       OUTPUT_DIR: ${{ matrix.output_base_dir }}/${{ needs.prepare.outputs.library_name }}/${{ needs.prepare.outputs.date }}/logs_results_${{ needs.prepare.outputs.date }}
     steps:
-      # Checkout optest itself (this repo) at workspace root: provides src/
-      # and configs. `branch` input picks the optest branch; empty -> the
-      # dispatched ref. The target library is checked out separately into the
-      # per-repo directory ./<repo> (TARGET_DIR).
+      # Checkout optest itself at the dispatched ref and workspace root to
+      # provide src/ and configs. The target library is checked out separately
+      # into the per-repo directory ./<repo> (TARGET_DIR).
       - name: Checkout optest source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
       # Checkout the TARGET repo (the library under test) into ./<repo>, with
       # the same 3-attempt retry the previous single-repo workflow used.

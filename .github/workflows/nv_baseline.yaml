@@ -80,6 +80,7 @@ jobs:
       image: ${{ steps.resolve.outputs.image }}
       output: ${{ steps.resolve.outputs.output }}
       target_repo: ${{ steps.resolve.outputs.target_repo }}
+      vllm_version: ${{ steps.resolve.outputs.vllm_version }}
     steps:
       - name: Checkout optest workflow source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -110,11 +111,15 @@ jobs:
           if not image or not output:
               raise SystemExit(f"repo '{repo}' must set both 'image' and 'output'")
           org = cfg.get('org', 'flagos-ai')
+          # Optional vllm version override (FlagGems-vllm only). YAML may parse an
+          # unquoted value as a number, so coerce to str before stripping.
+          vllm_version = str(rc.get('vllm_version', '') or '').strip()
 
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write(f"image={image}\n")
               out.write(f"output={output}\n")
               out.write(f"target_repo={org}/{repo}\n")
+              out.write(f"vllm_version={vllm_version}\n")
 
   collect:
     name: nv-baseline (H800)
@@ -152,6 +157,9 @@ jobs:
       TARGET_REF: ${{ github.event.inputs.ref }}
       # When true, the generated baseline json is committed into data/.
       AUTO_UPDATE: ${{ github.event.inputs.auto_update }}
+      # Optional vllm version to install before collection (FlagGems-vllm only);
+      # empty keeps the baseline image's bundled vllm.
+      VLLM_VERSION: ${{ needs.prepare.outputs.vllm_version }}
     steps:
       # Checkout optest itself at the workspace root: provides src/nv_baseline
       # and hardware_specs.json. The target library is checked out into ./target.
@@ -197,6 +205,21 @@ jobs:
         run: |
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
           git config --global --add safe.directory "${GITHUB_WORKSPACE}/target"
+
+      # FlagGems-vllm only: the baseline image bundles a fixed vllm (its tag,
+      # e.g. :0.24.0). When baseline_repos.yaml sets vllm_version, install that
+      # exact release here so the collection runs against it without rebuilding
+      # the image. Skipped (no-op) when vllm_version is empty.
+      - name: Upgrade vllm for baseline collection
+        if: ${{ github.event.inputs.repo == 'FlagGems-vllm' && needs.prepare.outputs.vllm_version != '' }}
+        shell: bash --login -e -o pipefail {0}
+        run: |
+          echo "[vllm] Requested vllm version: ${VLLM_VERSION}"
+          echo "[vllm] Currently installed:"
+          python3 -m pip show vllm 2>/dev/null | grep -i '^Version:' || echo "  (vllm not installed)"
+          python3 -m pip install "vllm==${VLLM_VERSION}"
+          echo "[vllm] After install:"
+          python3 -c "import vllm; print('[vllm] vllm', vllm.__version__)"
 
       # FlagTrain only: its baseline modules hard-depend on DeepSpeed and
       # Megatron-LM (native() raises if missing, no torch fallback), so install
@@ -285,12 +308,13 @@ jobs:
           # built with. This image's nvcc is 13.2 but torch is +cu130 (13.0), a
           # minor mismatch Apex's own comment calls safe but still rejects. No
           # bypass flag exists, so comment out the check before building.
-          python3 - <<'PATCH'
+          WORK="${WORK}" python3 - <<'PATCH'
+          import os
           from pathlib import Path
-          p = Path("${WORK}/apex/setup.py")
+          p = Path(os.environ["WORK"]) / "apex" / "setup.py"
           src = p.read_text()
           line = "check_cuda_torch_binary_vs_bare_metal(CUDA_HOME)"
-          if line in src and not src.startswith("# ") and src.count(line) == 1:
+          if line in src and src.count(line) == 1:
               p.write_text(src.replace(line, "# " + line + "  # patched: nvcc 13.2 vs torch cu130"))
               print("[Deps] Patched apex setup.py: disabled CUDA version check")
           else:

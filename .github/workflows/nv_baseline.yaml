@@ -160,6 +160,13 @@ jobs:
       # Optional vllm version to install before collection (FlagGems-vllm only);
       # empty keeps the baseline image's bundled vllm.
       VLLM_VERSION: ${{ needs.prepare.outputs.vllm_version }}
+      # Do not auto-load torch device-backend extensions. The image's FlagCX
+      # (cross-chip comm) extension registers itself as a torch backend and is
+      # loaded on `import torch`, but its prebuilt _C.so is pinned to the image's
+      # original torch ABI. A vllm upgrade can pull in a newer torch, after which
+      # FlagCX fails with an undefined c10 symbol and breaks `import vllm`.
+      # NV single-card baseline collection does not use FlagCX, so skip it.
+      TORCH_DEVICE_BACKEND_AUTOLOAD: '0'
     steps:
       # Checkout optest itself at the workspace root: provides src/nv_baseline
       # and hardware_specs.json. The target library is checked out into ./target.

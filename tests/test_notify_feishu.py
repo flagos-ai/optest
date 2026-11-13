@@ -141,6 +141,7 @@ class NotifyFeishuRefTest(unittest.TestCase):
     def test_workflow_passes_resolved_target_checkout_ref(self):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
         dispatch_inputs = workflow[True]["workflow_dispatch"]["inputs"]
+        self.assertNotIn("branch", dispatch_inputs)
         self.assertIn("exclude_ops", dispatch_inputs)
         self.assertEqual(dispatch_inputs["exclude_ops"]["default"], "")
         self.assertIn(
@@ -243,16 +244,20 @@ class NotifyFeishuRefTest(unittest.TestCase):
     def test_workflow_names_checkouts_and_install_commands(self):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
         prepare_steps = workflow["jobs"]["prepare"]["steps"]
-        self.assertTrue(
-            any(
-                step.get("name") == "Checkout optest workflow source"
-                for step in prepare_steps
-            )
+        prepare_checkout = next(
+            step
+            for step in prepare_steps
+            if step.get("name") == "Checkout optest workflow source"
         )
+        self.assertNotIn("with", prepare_checkout)
 
         steps = workflow["jobs"]["test-container"]["steps"]
         names = {step.get("name") for step in steps}
         self.assertIn("Checkout optest source", names)
+        source_checkout = next(
+            step for step in steps if step.get("name") == "Checkout optest source"
+        )
+        self.assertNotIn("with", source_checkout)
         for attempt in range(1, 4):
             self.assertIn(f"Checkout target repository (attempt {attempt})", names)
 

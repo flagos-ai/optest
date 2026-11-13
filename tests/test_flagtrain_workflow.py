@@ -59,7 +59,15 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         }
         self.assertEqual(
             enabled,
-            {"H800", "BW1000", "BI-V150", "910B", "C550", "MTT-S5000"},
+            {
+                "H800",
+                "BW1000",
+                "BI-V150",
+                "910B",
+                "C550",
+                "MTT-S5000",
+                "PPU-ZW810E",
+            },
         )
         self.assertFalse(config["backends"]["P800"]["enabled"])
         self.assertFalse(config["backends"]["S60"]["enabled"])

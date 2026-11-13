@@ -154,7 +154,7 @@ repos:
       BW1000: {enabled: true}
       MTT-S5000: {enabled: true}
       BI-V150: {enabled: true}
-      PPU-ZW810E: {enabled: false}
+      PPU-ZW810E: {enabled: true}
       MLU590-M9DE: {enabled: false}
       P800: {enabled: false}  # FlagTrain: unsupported for now.
       W7900D: {enabled: false}

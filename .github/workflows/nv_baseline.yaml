@@ -411,14 +411,19 @@ jobs:
             echo "[Collect] The target repo must provide a baseline/ directory."
             exit 1
           fi
-          echo "[Collect] Command: python3 src/nv_baseline/collect_baseline_nvidia.py --device ${DEVICE} --output ${OUTPUT} --ops-dir ${OPS_DIR}"
+          # Per-operator subprocess timeout in seconds (guards against CUDA
+          # hangs); 3600 = 1h. Overrides the collector's 1800s default.
+          OP_TIMEOUT=3600
+          echo "[Collect] Per-op timeout: ${OP_TIMEOUT}s"
+          echo "[Collect] Command: python3 src/nv_baseline/collect_baseline_nvidia.py --device ${DEVICE} --output ${OUTPUT} --ops-dir ${OPS_DIR} --op-timeout ${OP_TIMEOUT}"
           # Capture the collector's exit code without failing the step; the
           # classify step makes the final call from the produced JSON.
           set +e
           python3 src/nv_baseline/collect_baseline_nvidia.py \
             --device "${DEVICE}" \
             --output "${OUTPUT}" \
-            --ops-dir "${OPS_DIR}"
+            --ops-dir "${OPS_DIR}" \
+            --op-timeout "${OP_TIMEOUT}"
           rc=$?
           echo "[Collect] collector exit code: ${rc}"
 

@@ -434,11 +434,19 @@ jobs:
       #   - failed  : any operator "failed", or the run crashed/was interrupted
       #               (status.json missing/unparseable, empty tasks, a
       #               non-terminal status left behind, or interrupted). Exits 1,
-      #               so the data/ update step is skipped and the job is red.
+      #               so the job is red.
       #   - warning : no failures but at least one "profiling_incomplete";
       #               emits a ::warning:: annotation and keeps the job green.
       #   - pass    : everything "completed" (operators merely "skipped" do not
       #               fail the run).
+      # Also emits a "committable" output that distinguishes the two kinds of
+      # failure: a plain operator failure (collection ran to the end with intact
+      # output + status.json) is committable=true, so with auto_update the data/
+      # baseline is still updated (the failed operators are simply absent from
+      # it). A crash/interrupt (missing/unparseable output or status, empty
+      # tasks, a non-terminal status, or interrupted) is committable=false, so
+      # its partial/untrustworthy artifact never overwrites a known-good
+      # baseline. pass/warning are always committable.
       - name: Classify collection result
         id: classify
         if: always()
@@ -450,24 +458,39 @@ jobs:
           import sys
           from collections import Counter
 
+          def emit(result, committable):
+              # committable: whether the produced baseline is trustworthy enough
+              # to commit into data/ (true for pass/warning and plain operator
+              # failures; false for crash/interrupt with partial artifacts).
+              with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+                  fh.write(f"result={result}\n")
+                  fh.write(f"committable={'true' if committable else 'false'}\n")
+              print(f"[Classify] final result: {result} (committable={committable})")
+
           terminal = {"completed", "failed", "skipped", "profiling_incomplete"}
           output = pathlib.Path(os.environ["OUTPUT"])
           status_path = pathlib.Path(f"{os.environ['OUTPUT']}.work") / "status.json"
+          # Crash/interrupt cases below: the artifact is missing or untrustworthy,
+          # so grade failed AND committable=false (never overwrites data/).
           if not output.exists():
               print("::error::baseline output missing; collector likely crashed")
+              emit("failed", False)
               sys.exit(1)
           if not status_path.exists():
               print("::error::collection status file missing; collector likely crashed")
+              emit("failed", False)
               sys.exit(1)
           try:
               status = json.loads(status_path.read_text())
           except (ValueError, OSError) as exc:
               print(f"::error::cannot parse collection status: {exc}")
+              emit("failed", False)
               sys.exit(1)
 
           tasks = status.get("tasks", {})
           if not tasks:
               print("::error::no operator tasks recorded; collector likely crashed")
+              emit("failed", False)
               sys.exit(1)
 
           counts = Counter(t.get("status") for t in tasks.values())
@@ -484,41 +507,96 @@ jobs:
 
           if status.get("interrupted"):
               print("::error::collection was interrupted before finishing")
-              result = "failed"
-          elif nonterminal:
+              emit("failed", False)
+              sys.exit(1)
+          if nonterminal:
               print(
                   "::error::operator(s) left in a non-terminal state "
                   f"(collector likely crashed): {', '.join(nonterminal)}"
               )
-              result = "failed"
-          elif failed:
+              emit("failed", False)
+              sys.exit(1)
+          if failed:
+              # Plain operator failures: collection ran to the end and the
+              # artifact is intact, so it is committable; with auto_update the
+              # failed operators are simply absent from the updated baseline.
               print(f"::error::{len(failed)} operator(s) failed: {', '.join(failed)}")
-              result = "failed"
-          elif incomplete:
+              emit("failed", True)
+              sys.exit(1)
+          if incomplete:
               print(
                   f"::warning::{len(incomplete)} operator(s) profiling_incomplete: "
                   f"{', '.join(incomplete)}"
               )
-              result = "warning"
+              emit("warning", True)
           else:
-              result = "pass"
+              emit("pass", True)
 
-          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
-              fh.write(f"result={result}\n")
-          print(f"[Classify] final result: {result}")
-          if result == "failed":
-              sys.exit(1)
+      # Print which operators were newly added, which failed, and which were
+      # skipped in this run. Runs on always() so the summary is available even
+      # when the run is graded failed. Must run BEFORE the data/ update step:
+      # "newly added" is the freshly produced operators minus those already in
+      # the committed data/${OUTPUT}, and the update step overwrites that file.
+      - name: Summarize collected operators
+        if: always()
+        shell: python3 {0}
+        run: |
+          import json
+          import os
+          import pathlib
+
+          def op_keys(path):
+              # Top-level operator keys only (skip "_environment",
+              # "_scaling_factors", and any other "_"-prefixed bookkeeping).
+              try:
+                  data = json.loads(pathlib.Path(path).read_text())
+              except (ValueError, OSError):
+                  return set()
+              if not isinstance(data, dict):
+                  return set()
+              return {k for k in data if not k.startswith("_")}
+
+          output = os.environ["OUTPUT"]
+          produced = op_keys(output)
+          committed = op_keys(pathlib.Path("data") / output)
+          # Operators present now but absent from the committed baseline (a
+          # missing/empty committed file makes every produced operator "new").
+          added = sorted(produced - committed)
+
+          status_path = pathlib.Path(f"{output}.work") / "status.json"
+          failed, skipped = [], []
+          try:
+              tasks = json.loads(status_path.read_text()).get("tasks", {})
+              failed = sorted(n for n, t in tasks.items() if t.get("status") == "failed")
+              skipped = sorted(
+                  n for n, t in tasks.items() if t.get("status") == "skipped"
+              )
+          except (ValueError, OSError):
+              print("[Summary] status.json unavailable; cannot list failed/skipped")
+
+          def line(label, names):
+              body = ", ".join(names) if names else "(none)"
+              print(f"[Summary] {label} ({len(names)}): {body}")
+
+          print("::group::Operator summary")
+          line("newly added", added)
+          line("failed", failed)
+          line("skipped", skipped)
+          print("::endgroup::")
 
       # Commit the freshly generated baseline into the optest checkout's data/
-      # directory. Runs only when auto_update is on AND the classify step graded
-      # the run pass or warning (not failed), so a failed collection never
-      # overwrites a known-good baseline. A warning run (profiling_incomplete
-      # only) still updates. Pushes to the branch optest was checked out from.
+      # directory. Runs when auto_update is on AND the classify step graded the
+      # run as committable: pass, warning, or a plain operator failure (failed +
+      # committable=true, where collection finished and the artifact is intact;
+      # the failed operators are simply absent from the committed baseline). A
+      # crash/interrupt (committable=false) never overwrites a known-good
+      # baseline. Pushes to the branch optest was checked out from.
       - name: Update baseline in data/
-        if: ${{ env.AUTO_UPDATE == 'true' && (steps.classify.outputs.result == 'pass' || steps.classify.outputs.result == 'warning') }}
+        if: ${{ always() && env.AUTO_UPDATE == 'true' && steps.classify.outputs.committable == 'true' }}
         shell: bash --login -e -o pipefail {0}
         env:
           PUSH_BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.ref_name }}
+          CLASSIFY_RESULT: ${{ steps.classify.outputs.result }}
         run: |
           SRC="${GITHUB_WORKSPACE}/${OUTPUT}"
           DEST_DIR="${GITHUB_WORKSPACE}/data"
@@ -537,7 +615,13 @@ jobs:
             echo "[Update] data/${OUTPUT} unchanged; nothing to commit."
             exit 0
           fi
-          git commit -m "chore(nv-baseline): update data/${OUTPUT} for ${TARGET_REPO}"
+          # Flag forced updates (committed despite operator failures) in the
+          # commit message so the history shows the baseline may be incomplete.
+          MSG="chore(nv-baseline): update data/${OUTPUT} for ${TARGET_REPO}"
+          if [ "${CLASSIFY_RESULT}" = "failed" ]; then
+            MSG="${MSG} (forced: some operators failed)"
+          fi
+          git commit -m "${MSG}"
           # Rebase onto the latest remote branch tip in case it moved, then push.
           git pull --rebase origin "${PUSH_BRANCH}"
           git push origin "HEAD:${PUSH_BRANCH}"

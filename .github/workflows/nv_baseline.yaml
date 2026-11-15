@@ -63,7 +63,7 @@ on:
         description: 'Commit the generated baseline json into the optest data/ dir.'
         required: false
         type: boolean
-        default: true
+        default: false
 
 defaults:
   run:

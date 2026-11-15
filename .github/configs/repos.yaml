@@ -103,6 +103,10 @@ repos:
   # =========================================================================
   FlagGems-sglang:
     default_branch: master
+    # Ops-baseline JSON the nv-baseline workflow commits under optest's data/
+    # dir; ops-test passes it via --base-data so the benchmark reports the
+    # vs-baseline ratio. Same wiring as FlagGems-vllm.
+    base_data: data/op_sglang_perf_baseline.json
     # sglang ships its own images per backend, so this repo OVERRIDES the shared
     # backend defaults. Keep only backends enabled below.
     container_images:
@@ -131,6 +135,10 @@ repos:
   # =========================================================================
   FlagTrain:
     default_branch: main
+    # Ops-baseline JSON the nv-baseline workflow commits under optest's data/
+    # dir; ops-test passes it via --base-data so the benchmark reports the
+    # vs-baseline ratio. Same wiring as FlagGems-vllm.
+    base_data: data/op_flagtrain_perf_baseline.json
     # The operator suite needs the longer per-command timeout, matching
     # FlagGems; 600s is too tight for FlagTrain's heavier operators.
     op_cmd_timeout: 1800

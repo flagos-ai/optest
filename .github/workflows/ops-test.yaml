@@ -85,7 +85,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       date: ${{ steps.get-date.outputs.DATE }}
-      datetime: ${{ steps.get-date.outputs.DATETIME }}
+      time_suffix: ${{ steps.get-date.outputs.TIME_SUFFIX }}
       checkout_ref: ${{ steps.build-matrix.outputs.checkout_ref }}
       target_repo: ${{ steps.build-matrix.outputs.target_repo }}
       library_name: ${{ steps.build-matrix.outputs.library_name }}
@@ -104,12 +104,8 @@ jobs:
           # Optional test_date input; empty for default runs.
           TEST_DATE_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.test_date || '' }}
         run: |
-          CURRENT_DATETIME="$(date '+%Y-%m-%d_%H%M%S')"
-          RUN_DATE="${TEST_DATE_INPUT:-${CURRENT_DATETIME%_*}}"
-          {
-            echo "DATE=${RUN_DATE}"
-            echo "DATETIME=${RUN_DATE}_${CURRENT_DATETIME#*_}"
-          } >> "$GITHUB_OUTPUT"
+          echo "DATE=${TEST_DATE_INPUT:-$(date '+%Y-%m-%d')}" >> "$GITHUB_OUTPUT"
+          echo "TIME_SUFFIX=$(date '+_%H%M%S')" >> "$GITHUB_OUTPUT"
 
       - id: build-matrix
         shell: python3 {0}
@@ -267,7 +263,7 @@ jobs:
       volumes: ${{ matrix.container_volumes }}
     env:
       DATE: ${{ needs.prepare.outputs.date }}
-      DATETIME: ${{ needs.prepare.outputs.datetime }}
+      TIME_SUFFIX: ${{ needs.prepare.outputs.time_suffix }}
       # Library/repo name drives the results path, archive name and upload label.
       REPOSITORY_NAME: ${{ needs.prepare.outputs.library_name }}
       TARGET_REPOSITORY: ${{ needs.prepare.outputs.target_repo }}
@@ -278,7 +274,7 @@ jobs:
       TARGET_DIR: ${{ needs.prepare.outputs.library_name }}
       TEST_OPS: ${{ needs.prepare.outputs.ops }}
       TEST_EXCLUDE_OPS: ${{ needs.prepare.outputs.exclude_ops }}
-      OUTPUT_DIR: ${{ matrix.output_base_dir }}/${{ needs.prepare.outputs.library_name }}/${{ needs.prepare.outputs.datetime }}/logs_results_${{ needs.prepare.outputs.datetime }}
+      OUTPUT_DIR: ${{ matrix.output_base_dir }}/${{ needs.prepare.outputs.library_name }}/${{ needs.prepare.outputs.date }}${{ needs.prepare.outputs.time_suffix }}/logs_results_${{ needs.prepare.outputs.date }}${{ needs.prepare.outputs.time_suffix }}
     steps:
       # Checkout optest itself at the dispatched ref and workspace root to
       # provide src/ and configs. The target library is checked out separately
@@ -954,7 +950,7 @@ jobs:
 
       - name: Package results
         run: |
-          ARCHIVE="${{ matrix.output_base_dir }}/${REPOSITORY_NAME}/${REPOSITORY_NAME}-${{ matrix.name }}-${DATETIME}.tar.gz"
+          ARCHIVE="${{ matrix.output_base_dir }}/${REPOSITORY_NAME}/${REPOSITORY_NAME}-${{ matrix.name }}-${DATE}${TIME_SUFFIX}.tar.gz"
           mkdir -p "${OUTPUT_DIR}" "$(dirname "${ARCHIVE}")"
           tar -czf "${ARCHIVE}" -C "$(dirname "${OUTPUT_DIR}")" "$(basename "${OUTPUT_DIR}")"
           echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"

@@ -779,6 +779,10 @@ repos:
 The boolean form skips the step for the entire repository. The list form skips
 only the named backends; all other configured backends still receive their
 configured wheels. Omit `skip_flagtree_upgrade` for the normal upgrade behavior.
+The current `FlagGems` 910B exception uses the CANN 9.2.1 runtime image and
+retains its image-provided FlagTree because the shared 910B daily wheel targets
+CANN 9.0.0. Other FlagGems backends and the 910B backend in other repositories
+continue to use their normal FlagTree upgrade configuration.
 
 ### Persistent package cache
 

@@ -62,8 +62,12 @@ repos:
     op_cmd_timeout: 1800
     # Full operator suite; 910B alone runs ~15h, so allow a long step timeout.
     ops_test_timeout_minutes: 1440
-    # Uses the shared backend images (.github/configs/backends/<NAME>.yaml);
-    # no per-repo container_images override needed.
+    # The 910B image uses CANN 9.2.1 while the shared FlagTree daily package is
+    # built for CANN 9.0.0. Retain that image's compatible FlagTree; all other
+    # FlagGems backends continue to use the shared upgrade configuration.
+    container_images:
+      910B: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.2.1:2.3.0
+    skip_flagtree_upgrade: [910B]
     # Backends this repo runs. enabled:false skips the backend entirely.
     backends:
       H800: {enabled: true}

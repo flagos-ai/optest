@@ -153,6 +153,11 @@ Repository exceptions belong in `.github/configs/repos.yaml`:
 - `skip_flagtree_upgrade: [H800, 910B]` skips only the named backends.
 - Omitting the key preserves the normal backend-controlled upgrade behavior.
 
+The current `FlagGems` 910B repository exception must retain its image-provided
+FlagTree: its repository-specific runtime image uses CANN 9.2.1, while the
+shared 910B FlagTree daily distribution targets CANN 9.0.0. This exception must
+not affect 910B runs for other repositories.
+
 When changing this flow, update both READMEs, backend configuration coverage,
 matrix version/skip-policy tests, and the workflow-step assertions.
 

@@ -705,6 +705,9 @@ repos:
 
 布尔值形式会为整个仓库的所有后端跳过该步骤；列表形式只跳过列出的后端，其余已配置
 后端仍安装配置的 wheel。正常升级行为应省略 `skip_flagtree_upgrade`。
+当前 `FlagGems` 的 910B 例外使用 CANN 9.2.1 runtime 镜像，并保留镜像自带的
+FlagTree，因为共享 910B daily wheel 面向 CANN 9.0.0。FlagGems 的其他后端以及其他
+仓库的 910B 后端仍按各自的正常配置升级 FlagTree。
 
 ### 持久化软件包缓存
 

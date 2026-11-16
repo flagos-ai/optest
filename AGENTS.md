@@ -129,11 +129,14 @@ The `Upgrade Flagtree` workflow step runs after optest installation and before
 GPU detection only when the selected backend YAML contains `flagtree`. That
 mapping requires `package_name`, a full daily `version` such as
 `0.7.1.dev20261115`, or a fixed release version, plus `index_url`. The optional
-`flagtree_version` dispatch input accepts either another full daily version or
-`YYYYMMDD`; the date form keeps each backend's configured version base, which
-is important for Ascend CANN distributions whose base can differ from other
-backends. It intentionally does not override fixed release pins because those
-may use a different package name and index.
+`flagtree_version` dispatch input accepts a full daily or release version, or
+`YYYYMMDD`; the date form keeps each daily backend's configured version base,
+which is important for Ascend CANN distributions whose base can differ from
+other backends. Before applying an override, the matrix builder checks the
+exact version in that backend's package and index. Missing versions and index
+query failures must emit a GitHub Actions warning and fall back only that
+backend to its configured default. A date cannot be derived from a fixed
+release default, but a complete release version can override it when available.
 
 The step installs the exact configured wheel with `uv pip install --no-deps
 --target /opt/flagtree.new` and only then replaces `/opt/flagtree`, which is

@@ -55,7 +55,7 @@ on:
         required: false
         default: ''
       flagtree_version:
-        description: 'FlagTree daily version or YYYYMMDD date. Fixed release pins ignore this input. Empty = backend default.'
+        description: 'FlagTree version or YYYYMMDD date. Unavailable versions fall back to each backend default.'
         required: false
         default: ''
       vendors:
@@ -132,7 +132,102 @@ jobs:
           import json
           import os
           import re
+          from html.parser import HTMLParser
+          from urllib.parse import unquote, urljoin, urlparse
+          from urllib.request import Request, urlopen
           import yaml
+
+          class SimpleIndexParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.links = []
+
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower() != 'a':
+                      return
+                  href = dict(attrs).get('href')
+                  if href:
+                      self.links.append(href)
+
+          flagtree_index_links = {}
+
+          def flagtree_warning(message):
+              # Escape GitHub workflow command control characters.
+              escaped = str(message).replace('%', '%25')
+              escaped = escaped.replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::warning title=FlagTree version fallback::{escaped}')
+
+          def fetch_flagtree_index_links(package_name, index_url):
+              key = (package_name, index_url)
+              if key in flagtree_index_links:
+                  return flagtree_index_links[key]
+
+              normalized_name = re.sub(r'[-_.]+', '-', package_name).lower()
+              package_url = f"{index_url.rstrip('/')}/{normalized_name}/"
+              request_url = package_url
+              if urlparse(package_url).scheme == 'file':
+                  request_url = urljoin(package_url, 'index.html')
+              request = Request(
+                  request_url,
+                  headers={
+                      'Accept': (
+                          'application/vnd.pypi.simple.v1+json, '
+                          'text/html;q=0.9'
+                      ),
+                      'User-Agent': 'flagos-optest-flagtree-version-check',
+                  },
+              )
+              with urlopen(request, timeout=5) as response:
+                  payload = response.read().decode('utf-8')
+
+              if payload.lstrip().startswith('{'):
+                  files = json.loads(payload).get('files', [])
+                  links = [item.get('url', '') for item in files]
+              else:
+                  parser = SimpleIndexParser()
+                  parser.feed(payload)
+                  links = parser.links
+
+              resolved_links = [
+                  unquote(urljoin(package_url, link))
+                  for link in links
+                  if link
+              ]
+              flagtree_index_links[key] = resolved_links
+              return resolved_links
+
+          def flagtree_version_exists(package_name, version, index_url):
+              normalized_name = re.sub(r'[-_.]+', '-', package_name).lower()
+              normalized_version = re.sub(r'[-_]+', '.', version).lower()
+              for link in fetch_flagtree_index_links(package_name, index_url):
+                  path = urlparse(link).path
+                  path_parts = [part for part in path.split('/') if part]
+                  # Nexus links include the exact version as the directory
+                  # immediately before the artifact filename.
+                  if (
+                      len(path_parts) >= 2
+                      and re.sub(r'[-_]+', '.', path_parts[-2]).lower()
+                      == normalized_version
+                  ):
+                      return True
+                  filename = path.rsplit('/', 1)[-1]
+                  if not filename.endswith('.whl'):
+                      continue
+                  wheel_parts = filename[:-4].split('-')
+                  if len(wheel_parts) < 5:
+                      continue
+                  wheel_name = re.sub(
+                      r'[-_.]+', '-', wheel_parts[0]
+                  ).lower()
+                  wheel_version = re.sub(
+                      r'[-_]+', '.', wheel_parts[1]
+                  ).lower()
+                  if (
+                      wheel_name == normalized_name
+                      and wheel_version == normalized_version
+                  ):
+                      return True
+              return False
 
           with open('.github/configs/repos.yaml') as f:
               main = yaml.safe_load(f)
@@ -197,7 +292,8 @@ jobs:
               r'\d+(?:\.\d+)*\.dev\d{8}'
           )
           fixed_flagtree_version_pattern = re.compile(
-              r'\d+(?:\.\d+)*(?:(?:a|b|rc)\d+)?(?:\.post\d+)?'
+              r'\d+(?:\.\d+)*(?:(?:a|b|rc)\d+)?'
+              r'(?:(?:\.post|\.dev)\d+)?'
               r'(?:\+[0-9A-Za-z]+(?:[._-][0-9A-Za-z]+)*)?'
           )
           if (
@@ -206,10 +302,14 @@ jobs:
               and not daily_flagtree_version_pattern.fullmatch(
                   flagtree_version_input
               )
+              and not fixed_flagtree_version_pattern.fullmatch(
+                  flagtree_version_input
+              )
           ):
               raise SystemExit(
-                  'flagtree_version must be a full daily version '
-                  '(for example 0.7.1.dev20261115) or YYYYMMDD'
+                  'flagtree_version must be a full daily or release version '
+                  '(for example 0.7.1.dev20261115 or 0.7.1a1+hcu3.6) '
+                  'or YYYYMMDD'
               )
 
           # Parse optional vendor filter (case-insensitive). Empty -> all.
@@ -295,23 +395,56 @@ jobs:
                   )
 
               effective_flagtree_version = flagtree_default_version
-              # The dispatch input is intentionally daily-only. A fixed release
-              # pin can use a different distribution and index, so overriding
-              # only its version would create an invalid requirement.
-              if (
-                  flagtree_package_name
-                  and flagtree_uses_daily_version
-                  and flagtree_version_input
-              ):
+              requested_flagtree_version = ''
+              if flagtree_package_name and flagtree_version_input:
                   if re.fullmatch(r'\d{8}', flagtree_version_input):
-                      version_base = flagtree_default_version.rsplit(
-                          '.dev', 1
-                      )[0]
-                      effective_flagtree_version = (
-                          f'{version_base}.dev{flagtree_version_input}'
+                      if flagtree_uses_daily_version:
+                          version_base = flagtree_default_version.rsplit(
+                              '.dev', 1
+                          )[0]
+                          requested_flagtree_version = (
+                              f'{version_base}.dev{flagtree_version_input}'
+                          )
+                      else:
+                          flagtree_warning(
+                              f'{name}: cannot expand date '
+                              f'{flagtree_version_input} from fixed release '
+                              f'{flagtree_default_version}; using configured '
+                              'version'
+                          )
+                  else:
+                      requested_flagtree_version = flagtree_version_input
+
+              if requested_flagtree_version:
+                  try:
+                      version_exists = flagtree_version_exists(
+                          flagtree_package_name,
+                          requested_flagtree_version,
+                          flagtree_index_url,
+                      )
+                  except Exception as error:
+                      flagtree_warning(
+                          f'{name}: failed to check '
+                          f'{flagtree_package_name}=='
+                          f'{requested_flagtree_version} at '
+                          f'{flagtree_index_url}: {error}; using configured '
+                          f'version {flagtree_default_version}'
                       )
                   else:
-                      effective_flagtree_version = flagtree_version_input
+                      if version_exists:
+                          effective_flagtree_version = requested_flagtree_version
+                          print(
+                              f'[FlagTree] {name}: selected dispatch version '
+                              f'{flagtree_package_name}=='
+                              f'{effective_flagtree_version}'
+                          )
+                      else:
+                          flagtree_warning(
+                              f'{name}: {flagtree_package_name}=='
+                              f'{requested_flagtree_version} is unavailable '
+                              f'at {flagtree_index_url}; using configured '
+                              f'version {flagtree_default_version}'
+                          )
 
               backend['flagtree_package_name'] = flagtree_package_name
               backend['flagtree_version'] = effective_flagtree_version

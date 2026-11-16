@@ -668,15 +668,19 @@ flagtree:
 `flagtree==0.7.1a1+hcu3.6`。其 backend YAML 在生效的 release 配置旁保留了注释状态的
 daily 配置，以便后续明确切回。
 
-可选的 workflow-dispatch 输入 `flagtree_version` 支持两种覆盖形式：
+可选的 workflow-dispatch 输入 `flagtree_version` 支持以下覆盖形式：
 
-- 完整版本（例如 `0.7.1.dev20261015`）会原样用于所有选中的后端。
+- 完整的 daily 或 release 版本（例如 `0.7.1.dev20261015` 或
+  `0.7.1a1+hcu3.6`）会在每个选中后端上原样检查。
 - 8 位日期（例如 `20261015`）会保留各后端配置的版本基线。因此同一次运行中，
   H800 会解析为 `0.7.1.dev20261015`，910B 会解析为 `0.7.0.dev20261015`。
 
-该输入只覆盖配置为 daily 版本的后端。BW1000 这类固定 release 配置会保留自身的包名、
-版本和 index，因为只覆盖其版本会产生无效的跨 index requirement。输入为空时使用各后端
-配置的完整默认值；精确版本在对应配置 index 中不存在时，安装步骤会明确失败。
+prepare job 会先在各后端自己的 `package_name` 和 `index_url` 中检查精确版本，再将覆盖值
+写入 matrix。如果版本不存在或 index 查询失败，job 会打印 `FlagTree version fallback`
+warning，并继续使用该后端 YAML 的默认版本。其他后端仍可独立使用自身存在的覆盖版本，
+因此单个厂商缺少构建不会导致整个运行失败。日期无法从 BW1000 这类固定 release 默认值
+展开，该后端会 warning 并保留 release pin；如果 hosted index 中存在传入的完整 release
+版本，BW1000 仍可使用该覆盖值。输入为空时直接使用各后端默认值，不查询 index。
 
 只有所选后端存在 `flagtree` 配置时，`Upgrade Flagtree` 步骤才会运行。由于
 `/opt/flagtree` 在 `PYTHONPATH` 中位于 site-packages 之前，该步骤通过

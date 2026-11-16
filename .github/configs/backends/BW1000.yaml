@@ -52,8 +52,8 @@ container_options: >-
 #   version: 0.7.1.dev20261115
 #   index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
 #
-# Use the compatible HCU release wheel in the meantime. Fixed release versions
-# are intentionally not changed by the daily-only flagtree_version input.
+# Use the compatible HCU release wheel in the meantime. A dispatch override is
+# used only when this package's hosted index contains the requested version.
 flagtree:
   package_name: flagtree
   version: 0.7.1a1+hcu3.6

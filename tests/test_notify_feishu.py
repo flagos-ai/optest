@@ -149,6 +149,7 @@ class NotifyFeishuRefTest(unittest.TestCase):
         self.assertIn("flagtree_version", dispatch_inputs)
         self.assertEqual(dispatch_inputs["flagtree_version"]["default"], "")
         self.assertIn("YYYYMMDD", dispatch_inputs["flagtree_version"]["description"])
+        self.assertIn("fall back", dispatch_inputs["flagtree_version"]["description"])
         prepare_steps = workflow["jobs"]["prepare"]["steps"]
         build_matrix = next(
             step for step in prepare_steps if step.get("id") == "build-matrix"

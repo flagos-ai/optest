@@ -732,21 +732,24 @@ index while its `flagtree-hcu` daily wheel is disabled. Its backend YAML keeps
 the intended daily mapping commented next to the active release mapping so the
 switch back is explicit.
 
-The optional `flagtree_version` workflow-dispatch input overrides the backend
-default in either of two forms:
+The optional `flagtree_version` workflow-dispatch input requests an override in
+one of these forms:
 
-- A complete version such as `0.7.1.dev20261015` is used unchanged for every
-  selected backend.
+- A complete daily or release version, such as `0.7.1.dev20261015` or
+  `0.7.1a1+hcu3.6`, is checked unchanged for every selected backend.
 - An eight-digit date such as `20261015` keeps each backend's configured
   version base. The same run therefore resolves H800 to
   `0.7.1.dev20261015` and 910B to `0.7.0.dev20261015`.
 
-The input applies only to backends configured with daily versions. Fixed
-release pins such as BW1000 keep their configured package, version, and index;
-overriding only their version would produce an invalid cross-index requirement.
-An empty input uses every backend's configured default. Installation fails
-clearly if the resulting exact version is unavailable from its configured
-index.
+Before adding an override to the matrix, the prepare job checks the backend's
+own `package_name` and `index_url`. If that exact version does not exist, or the
+index cannot be queried, the job emits a `FlagTree version fallback` warning
+and keeps that backend's YAML default. Other backends independently use the
+override when their package contains it, so one missing vendor build does not
+fail the whole run. A date cannot be expanded from a fixed release default such
+as BW1000; that backend warns and keeps its release pin. A complete release
+version can still override BW1000 when the hosted index contains it. An empty
+input uses every backend default without querying the indexes.
 
 The `Upgrade Flagtree` step runs only when the selected backend has this block.
 Because `/opt/flagtree` precedes site-packages on `PYTHONPATH`, the step installs

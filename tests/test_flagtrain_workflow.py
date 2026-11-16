@@ -141,7 +141,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 else:
                     self.assertNotIn("test_gpus", config)
 
-    def test_backend_flagtree_daily_configuration(self):
+    def test_backend_flagtree_configuration(self):
         backend_dir = ROOT / ".github/configs/backends"
         backend_configs = {
             path.stem: yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -149,47 +149,79 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         }
         daily_index = "https://resource.flagos.net/repository/flagos-pypi-daily/simple"
         expected = {
-            "H800": ("flagtree-nvidia", "0.7.1.dev20261111"),
-            "910B": ("flagtree-ascend-cann9.0.0", "0.7.0.dev20261111"),
-            "C550": ("flagtree-metax", "0.7.1.dev20261110"),
-            "BW1000": ("flagtree-hcu", "0.7.1.dev20261111"),
-            "MTT-S5000": ("flagtree-mthreads", "0.7.1.dev20261111"),
-            "BI-V150": ("flagtree-iluvatar", "0.7.1.dev20261111"),
-            "P800": ("flagtree-kunlunxin", "0.7.1.dev20261111"),
-            "TX8110": ("flagtree-tsingmicro", "0.7.1.dev20261111"),
-            "S60": ("flagtree-enflame", "0.7.1.dev20261111"),
+            "H800": ("flagtree-nvidia", "0.7.1.dev20261115", daily_index),
+            "910B": (
+                "flagtree-ascend-cann9.0.0",
+                "0.7.0.dev20261115",
+                daily_index,
+            ),
+            "C550": ("flagtree-metax", "0.7.1.dev20261115", daily_index),
+            "BW1000": (
+                "flagtree",
+                "0.7.1a1+hcu3.6",
+                "https://resource.flagos.net/repository/flagos-pypi-hosted/simple",
+            ),
+            "MTT-S5000": (
+                "flagtree-mthreads",
+                "0.7.1.dev20261115",
+                daily_index,
+            ),
+            "BI-V150": (
+                "flagtree-iluvatar",
+                "0.7.1.dev20261115",
+                daily_index,
+            ),
+            "P800": ("flagtree-kunlunxin", "0.7.1.dev20261112", daily_index),
+            "TX8110": (
+                "flagtree-tsingmicro",
+                "0.7.1.dev20261115",
+                daily_index,
+            ),
+            "S60": ("flagtree-enflame", "0.7.1.dev20261115", daily_index),
+            "PPU-ZW810E": ("flagtree-ppu", "0.7.1.dev20261115", daily_index),
+            "W7900D": ("flagtree-amd", "0.7.1.dev20261115", daily_index),
         }
-        for backend_name, (package_name, version) in expected.items():
+        for backend_name, (package_name, version, index_url) in expected.items():
             with self.subTest(backend=backend_name):
                 self.assertEqual(
                     backend_configs[backend_name]["flagtree"],
                     {
                         "package_name": package_name,
                         "version": version,
-                        "index_url": daily_index,
+                        "index_url": index_url,
                     },
                 )
 
-        for backend_name in ("PPU-ZW810E", "MLU590-M9DE", "W7900D"):
-            with self.subTest(backend=backend_name):
-                self.assertNotIn("flagtree", backend_configs[backend_name])
+        self.assertNotIn("flagtree", backend_configs["MLU590-M9DE"])
 
-    def test_matrix_resolves_flagtree_default_date_and_full_versions(self):
-        defaults = self.build_matrix("FlagGems", vendors="Nvidia,Ascend")
+    def test_matrix_resolves_daily_overrides_and_preserves_fixed_release(self):
+        defaults = self.build_matrix("FlagGems", vendors="Nvidia,Ascend,Hygon")
         default_by_name = {backend["name"]: backend for backend in defaults["include"]}
         self.assertEqual(
             default_by_name["H800"]["flagtree_version"],
-            "0.7.1.dev20261111",
+            "0.7.1.dev20261115",
         )
         self.assertEqual(
             default_by_name["910B"]["flagtree_version"],
-            "0.7.0.dev20261111",
+            "0.7.0.dev20261115",
+        )
+        self.assertEqual(
+            default_by_name["BW1000"]["flagtree_version"],
+            "0.7.1a1+hcu3.6",
+        )
+        self.assertEqual(
+            default_by_name["BW1000"]["flagtree_package_name"],
+            "flagtree",
+        )
+        self.assertEqual(
+            default_by_name["BW1000"]["flagtree_index_url"],
+            "https://resource.flagos.net/repository/flagos-pypi-hosted/simple",
         )
 
         dated = self.build_matrix(
             "FlagGems",
             flagtree_version="20261015",
-            vendors="Nvidia,Ascend",
+            vendors="Nvidia,Ascend,Hygon",
         )
         dated_by_name = {backend["name"]: backend for backend in dated["include"]}
         self.assertEqual(
@@ -200,16 +232,25 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             dated_by_name["910B"]["flagtree_version"],
             "0.7.0.dev20261015",
         )
+        self.assertEqual(
+            dated_by_name["BW1000"]["flagtree_version"],
+            "0.7.1a1+hcu3.6",
+        )
 
         full_version = "0.8.0.dev20261201"
         overridden = self.build_matrix(
             "FlagGems",
             flagtree_version=full_version,
-            vendors="Nvidia,Ascend",
+            vendors="Nvidia,Ascend,Hygon",
         )
+        overridden_by_name = {
+            backend["name"]: backend for backend in overridden["include"]
+        }
+        self.assertEqual(overridden_by_name["H800"]["flagtree_version"], full_version)
+        self.assertEqual(overridden_by_name["910B"]["flagtree_version"], full_version)
         self.assertEqual(
-            {backend["flagtree_version"] for backend in overridden["include"]},
-            {full_version},
+            overridden_by_name["BW1000"]["flagtree_version"],
+            "0.7.1a1+hcu3.6",
         )
 
     def test_repo_can_skip_flagtree_upgrade_globally_or_by_backend(self):
@@ -316,18 +357,18 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             upgrade["run"].index('rm -rf -- "${FLAGTREE_INSTALL_DIR}"'),
         )
 
-    def test_flagtree_upgrade_stages_and_activates_exact_daily_wheel(self):
+    def test_flagtree_upgrade_stages_and_activates_exact_fixed_release(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]
         script = next(
             step["run"] for step in steps if step.get("name") == "Upgrade Flagtree"
         )
         replacements = {
-            "${{ matrix.flagtree_package_name }}": "flagtree-nvidia",
-            "${{ matrix.flagtree_version }}": "0.7.1.dev20261111",
+            "${{ matrix.flagtree_package_name }}": "flagtree",
+            "${{ matrix.flagtree_version }}": "0.7.1a1+hcu3.6",
             "${{ matrix.flagtree_index_url }}": (
-                "https://resource.flagos.net/repository/flagos-pypi-daily/simple"
+                "https://resource.flagos.net/repository/flagos-pypi-hosted/simple"
             ),
-            "${{ matrix.name }}": "H800",
+            "${{ matrix.name }}": "BW1000",
         }
         for expression, value in replacements.items():
             script = script.replace(expression, value)
@@ -355,7 +396,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 "done\n"
                 'case " $args " in\n'
                 '  *" pip install "*) mkdir -p "$target"; '
-                'printf "daily wheel" > "$target/marker" ;;\n'
+                'printf "fixed release" > "$target/marker" ;;\n'
                 "esac\n",
                 encoding="utf-8",
             )
@@ -386,7 +427,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertEqual(
                 (source / "marker").read_text(encoding="utf-8"),
-                "daily wheel",
+                "fixed release",
             )
             self.assertFalse(staging.exists())
             commands = uv_log.read_text(encoding="utf-8")
@@ -396,8 +437,8 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             )
             self.assertIn(
                 f"--no-deps --target {staging} --index-url "
-                "https://resource.flagos.net/repository/flagos-pypi-daily/simple "
-                "flagtree-nvidia==0.7.1.dev20261111",
+                "https://resource.flagos.net/repository/flagos-pypi-hosted/simple "
+                "flagtree==0.7.1a1+hcu3.6",
                 commands,
             )
             install_log = next(
@@ -413,17 +454,15 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             )
             self.assertTrue(pre_upgrade_show.endswith(" flagtree"))
             self.assertNotIn(f"pip show --target {staging}", commands)
-            self.assertIn(f"pip show --target {source}", commands)
-            self.assertIn("flagtree-nvidia", commands)
-            daily_show_commands = [
+            target_show_commands = [
                 line
                 for line in commands.splitlines()
-                if "pip show" in line and "flagtree-nvidia" in line
+                if f"pip show --target {source} flagtree" in line
             ]
-            self.assertEqual(len(daily_show_commands), 1)
+            self.assertEqual(len(target_show_commands), 1)
             self.assertEqual(
                 pip_log.read_text(encoding="utf-8"),
-                "ARGS=show flagtree-nvidia\n",
+                "ARGS=show flagtree\n",
             )
 
     def test_flagtree_upgrade_preserves_image_tree_when_staging_fails(self):
@@ -433,7 +472,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         )
         replacements = {
             "${{ matrix.flagtree_package_name }}": "flagtree-nvidia",
-            "${{ matrix.flagtree_version }}": "0.7.1.dev20261111",
+            "${{ matrix.flagtree_version }}": "0.7.1.dev20261115",
             "${{ matrix.flagtree_index_url }}": (
                 "https://resource.flagos.net/repository/flagos-pypi-daily/simple"
             ),

@@ -45,12 +45,19 @@ container_options: >-
   --device=/dev/mkfd
   --device=/dev/dri
 
-# Backend-specific FlagTree daily wheel. The workflow uses this full version
-# unless workflow_dispatch supplies a full version or YYYYMMDD override.
+# The HCU daily wheel is temporarily disabled until its current issue is fixed.
+# Retain the intended daily configuration here for the later switch back:
+# flagtree:
+#   package_name: flagtree-hcu
+#   version: 0.7.1.dev20261115
+#   index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+#
+# Use the compatible HCU release wheel in the meantime. Fixed release versions
+# are intentionally not changed by the daily-only flagtree_version input.
 flagtree:
-  package_name: flagtree-hcu
-  version: 0.7.1.dev20261111
-  index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+  package_name: flagtree
+  version: 0.7.1a1+hcu3.6
+  index_url: https://resource.flagos.net/repository/flagos-pypi-hosted/simple
 
 # Extra environment variables injected only into the "Run ops tests" step
 test_env:

@@ -49,7 +49,7 @@ container_options: >-
 # unless workflow_dispatch supplies a full version or YYYYMMDD override.
 flagtree:
   package_name: flagtree-tsingmicro
-  version: 0.7.1.dev20261111
+  version: 0.7.1.dev20261115
   index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
 
 # Override the GPUs detected by flagos-gpu-check. The physical host exposes

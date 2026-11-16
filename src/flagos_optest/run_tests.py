@@ -167,10 +167,11 @@ _KNOWN_LIBS = [
 # Extra frameworks probed for version reporting only (shown if importable).
 _EXTRA_FRAMEWORKS = ["vllm", "sglang"]
 
-# FlagTree release and per-backend daily wheel distribution names. All of the
-# distributions provide the same ``flagtree`` import package.
+# Per-backend daily wheel and release distribution names. All distributions
+# provide the same ``flagtree`` import package. Probe backend distributions
+# before the release fallback so stale image metadata cannot hide an upgraded
+# wheel installed under /opt/flagtree.
 _FLAGTREE_DISTRIBUTIONS = (
-    "flagtree",
     "flagtree-nvidia",
     "flagtree-iluvatar",
     "flagtree-metax",
@@ -180,9 +181,12 @@ _FLAGTREE_DISTRIBUTIONS = (
     "flagtree-tsingmicro",
     "flagtree-mthreads",
     "flagtree-kunlunxin",
+    "flagtree-ppu",
+    "flagtree-amd",
     "flagtree-ascend-cann9.0.0",
     "flagtree-ascend-cann9.2.1",
     "flagtree-ascend-cann8.5.0",
+    "flagtree",
 )
 _FLAGTREE_SOURCE_COMMIT_RE = re.compile(
     r"\s*Source-Commit\s*,\s*"

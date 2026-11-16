@@ -216,5 +216,7 @@ repos:
 # The boolean form skips the "Upgrade Flagtree" step on every backend for that
 # repository. The list form skips only the named backends. Backends without a
 # `flagtree` block in .github/configs/backends/<NAME>.yaml also skip the step
-# automatically and retain the image-provided /opt/flagtree tree.
+# automatically and retain the image-provided /opt/flagtree tree. Package,
+# version, and index choices (including temporary fixed releases) belong in the
+# shared backend YAML rather than in this repository-specific file.
 # ---------------------------------------------------------------------------

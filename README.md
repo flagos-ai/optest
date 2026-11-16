@@ -26,7 +26,7 @@ result-labeling, web-data conversion, and vendor-specific GPU checking toolsuite
 - [Target repository dependencies with uv](#target-repository-dependencies-with-uv)
   - [Configure test and vendor extras](#configure-test-and-vendor-extras)
   - [Centralized workflow behavior](#centralized-workflow-behavior)
-  - [FlagTree daily upgrade](#flagtree-daily-upgrade)
+  - [FlagTree upgrade](#flagtree-upgrade)
   - [Persistent package cache](#persistent-package-cache)
 - [Repository layout](#repository-layout)
   - [Repository configuration](#repository-configuration)
@@ -707,24 +707,30 @@ replace packages such as numpy. Target-specific package names and exclusion
 policy therefore stay in the target repository's `pyproject.toml`, not in
 `repos.yaml` or the workflow.
 
-### FlagTree daily upgrade
+### FlagTree upgrade
 
 After installing `optest` and before probing GPUs, the workflow replaces the
-image-provided FlagTree source tree with the backend-specific daily wheel. A
-backend opts in with a `flagtree` block in its shared hardware configuration:
+image-provided FlagTree source tree with the backend-specific configured wheel.
+A backend opts in with a `flagtree` block in its shared hardware configuration:
 
 ```yaml
 # .github/configs/backends/H800.yaml
 flagtree:
   package_name: flagtree-nvidia
-  version: 0.7.1.dev20261111
+  version: 0.7.1.dev20261115
   index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
 ```
 
-All three fields are required together. `version` is the backend's complete
-default daily version. This matters for runtimes with a different version base;
-for example, the CANN 9.0.0 distribution currently uses `0.7.0.devYYYYMMDD`,
-while most other configured distributions use `0.7.1.devYYYYMMDD`.
+All three fields are required together. Most backends use a complete daily
+version. This matters for runtimes with a different version base; for example,
+the CANN 9.0.0 distribution uses `0.7.0.devYYYYMMDD`, while most other daily
+distributions use `0.7.1.devYYYYMMDD`.
+
+A backend may temporarily pin a compatible release wheel from a different
+index. BW1000 currently uses `flagtree==0.7.1a1+hcu3.6` from the FlagOS hosted
+index while its `flagtree-hcu` daily wheel is disabled. Its backend YAML keeps
+the intended daily mapping commented next to the active release mapping so the
+switch back is explicit.
 
 The optional `flagtree_version` workflow-dispatch input overrides the backend
 default in either of two forms:
@@ -735,9 +741,12 @@ default in either of two forms:
   version base. The same run therefore resolves H800 to
   `0.7.1.dev20261015` and 910B to `0.7.0.dev20261015`.
 
-An empty input uses each backend's full configured default. Installation fails
-clearly if the resulting exact version is not available from that backend's
-daily index.
+The input applies only to backends configured with daily versions. Fixed
+release pins such as BW1000 keep their configured package, version, and index;
+overriding only their version would produce an invalid cross-index requirement.
+An empty input uses every backend's configured default. Installation fails
+clearly if the resulting exact version is unavailable from its configured
+index.
 
 The `Upgrade Flagtree` step runs only when the selected backend has this block.
 Because `/opt/flagtree` precedes site-packages on `PYTHONPATH`, the step installs
@@ -751,7 +760,7 @@ The step prints release metadata before replacement and, afterward, shows the
 backend distribution through its target directory and the pip environment for
 debug.
 Backends with no `flagtree` block skip the step and retain the image-provided
-tree; this currently applies to T-Head, Cambricon, and AMD.
+tree; this currently applies only to Cambricon.
 
 A target repository can opt out without changing the shared backend defaults:
 
@@ -766,7 +775,7 @@ repos:
 
 The boolean form skips the step for the entire repository. The list form skips
 only the named backends; all other configured backends still receive their
-daily wheels. Omit `skip_flagtree_upgrade` for the normal upgrade behavior.
+configured wheels. Omit `skip_flagtree_upgrade` for the normal upgrade behavior.
 
 ### Persistent package cache
 
@@ -915,7 +924,7 @@ hardware configuration shared by all repositories:
 | `container_image` | Default image, unless the selected repository overrides it. |
 | `container_volumes` | Host paths mounted into the job container. |
 | `container_options` | Device mappings, privileges, IPC, shared memory, and other container runtime options. |
-| `flagtree` | Optional backend daily-wheel mapping with required `package_name`, full default `version`, and `index_url`; absence retains image FlagTree. |
+| `flagtree` | Optional backend wheel mapping with required `package_name`, full default `version`, and `index_url`; absence retains image FlagTree. |
 | `test_gpus` | Optional device-ID override; when omitted, `flagos-gpu-check` supplies the available devices. |
 | `test_env` | Environment variables injected into the operator-test step. |
 | `deps` | Hardware-specific packages prepended to repository dependency groups. |
@@ -928,18 +937,18 @@ S60/Enflame. Their current scheduling defaults are summarized below; the image,
 volume, container-option, and environment details remain authoritative in each
 backend YAML file.
 
-| Backend | Vendor | Runner label | FlagTree daily package | Default test devices | Output base |
+| Backend | Vendor | Runner label | FlagTree package | Default test devices | Output base |
 | --- | --- | --- | --- | --- | --- |
 | `H800` | Nvidia | `h800-flaggems-weekly` | `flagtree-nvidia` | detected | `/data/github-outputs` |
 | `910B` | Ascend | `910b-flaggems-weekly` | `flagtree-ascend-cann9.0.0` | detected | `/data/github-outputs` |
 | `C550` | Metax | `c550-flaggems-weekly` | `flagtree-metax` | detected | `/data/github-outputs` |
-| `BW1000` | Hygon | `bw1000-flaggems-weekly` | `flagtree-hcu` | detected | `/data/github-outputs` |
+| `BW1000` | Hygon | `bw1000-flaggems-weekly` | `flagtree` (fixed release) | detected | `/data/github-outputs` |
 | `MTT-S5000` | MThreads | `s5000-flaggems-weekly` | `flagtree-mthreads` | detected | `/data/github-outputs` |
 | `BI-V150` | Iluvatar | `v150-flaggems-weekly` | `flagtree-iluvatar` | detected | `/data/github-outputs` |
-| `PPU-ZW810E` | THead | `810e-flaggems-weekly` | image-provided | detected | `/home/github-outputs` |
+| `PPU-ZW810E` | THead | `810e-flaggems-weekly` | `flagtree-ppu` | detected | `/home/github-outputs` |
 | `MLU590-M9DE` | Cambricon | `mlu590-m9de-flaggems-weekly` | image-provided | detected | `/data/github-outputs` |
 | `P800` | KunLunXin | `p800-flaggems-weekly` | `flagtree-kunlunxin` | detected | `/data/github-outputs` |
-| `W7900D` | AMD | `w7900d-flaggems-weekly` | image-provided | detected | `/data/github-outputs` |
+| `W7900D` | AMD | `w7900d-flaggems-weekly` | `flagtree-amd` | detected | `/data/github-outputs` |
 | `TX8110` | TsingMicro | `tx8110-flaggems-weekly` | `flagtree-tsingmicro` | `0-15` (override) | `/data/github-outputs` |
 | `S60` | Enflame | `s60-flaggems-weekly` | `flagtree-enflame` | detected | `/data/github-outputs` |
 

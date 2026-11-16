@@ -59,7 +59,7 @@ container_options: >-
 # package name and 0.7.0 version base.
 flagtree:
   package_name: flagtree-ascend-cann9.0.0
-  version: 0.7.0.dev20261111
+  version: 0.7.0.dev20261115
   index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
 
 # Extra environment variables injected only into the "Run ops tests" step

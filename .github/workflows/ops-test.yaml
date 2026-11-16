@@ -55,7 +55,7 @@ on:
         required: false
         default: ''
       flagtree_version:
-        description: 'FlagTree daily version or YYYYMMDD date. Empty = backend default.'
+        description: 'FlagTree daily version or YYYYMMDD date. Fixed release pins ignore this input. Empty = backend default.'
         required: false
         default: ''
       vendors:
@@ -193,19 +193,23 @@ jobs:
           flagtree_version_input = os.environ.get(
               'FLAGTREE_VERSION_INPUT', ''
           ).strip()
-          full_flagtree_version_pattern = re.compile(
+          daily_flagtree_version_pattern = re.compile(
               r'\d+(?:\.\d+)*\.dev\d{8}'
+          )
+          fixed_flagtree_version_pattern = re.compile(
+              r'\d+(?:\.\d+)*(?:(?:a|b|rc)\d+)?(?:\.post\d+)?'
+              r'(?:\+[0-9A-Za-z]+(?:[._-][0-9A-Za-z]+)*)?'
           )
           if (
               flagtree_version_input
               and not re.fullmatch(r'\d{8}', flagtree_version_input)
-              and not full_flagtree_version_pattern.fullmatch(
+              and not daily_flagtree_version_pattern.fullmatch(
                   flagtree_version_input
               )
           ):
               raise SystemExit(
                   'flagtree_version must be a full daily version '
-                  '(for example 0.7.1.dev20261111) or YYYYMMDD'
+                  '(for example 0.7.1.dev20261115) or YYYYMMDD'
               )
 
           # Parse optional vendor filter (case-insensitive). Empty -> all.
@@ -243,7 +247,9 @@ jobs:
               backend['ops_test_timeout'] = repo_timeout
               backend['op_cmd_timeout'] = op_cmd_timeout
 
-              # FlagTree daily distributions are hardware/runtime specific.
+              # FlagTree distributions are hardware/runtime specific. Most
+              # backends use daily wheels; a backend may temporarily pin a
+              # compatible fixed release from another index.
               # A backend without a `flagtree` block intentionally keeps the
               # image-provided /opt/flagtree tree. Repository policy can also
               # skip replacement globally or for selected backends.
@@ -270,18 +276,33 @@ jobs:
                   raise SystemExit(
                       f'{name}: flagtree requires package_name, version, and index_url'
                   )
-              if (
-                  flagtree_default_version
-                  and not full_flagtree_version_pattern.fullmatch(
+              flagtree_uses_daily_version = bool(
+                  daily_flagtree_version_pattern.fullmatch(
                       flagtree_default_version
                   )
+              )
+              flagtree_uses_fixed_version = bool(
+                  fixed_flagtree_version_pattern.fullmatch(
+                      flagtree_default_version
+                  )
+              )
+              if flagtree_default_version and not (
+                  flagtree_uses_daily_version or flagtree_uses_fixed_version
               ):
                   raise SystemExit(
-                      f'{name}: flagtree.version must be a full daily version'
+                      f'{name}: flagtree.version must be a full daily version '
+                      'or a fixed release version'
                   )
 
               effective_flagtree_version = flagtree_default_version
-              if flagtree_package_name and flagtree_version_input:
+              # The dispatch input is intentionally daily-only. A fixed release
+              # pin can use a different distribution and index, so overriding
+              # only its version would create an invalid requirement.
+              if (
+                  flagtree_package_name
+                  and flagtree_uses_daily_version
+                  and flagtree_version_input
+              ):
                   if re.fullmatch(r'\d{8}', flagtree_version_input):
                       version_base = flagtree_default_version.rsplit(
                           '.dev', 1
@@ -707,8 +728,8 @@ jobs:
             uv pip show --python "${ACTIVE_PYTHON}" flagtree \
             || true
 
-          # Keep the daily index command-local: it must resolve FlagTree from
-          # the FlagOS daily repository without changing later package installs.
+          # Keep the selected FlagTree index command-local so it does not
+          # change later package installs.
           # Install into a staging directory first, leaving the image-provided
           # /opt/flagtree intact if resolution or installation fails. Unlike the
           # former pip command, uv intentionally uses the inherited UV_CACHE_DIR.
@@ -726,8 +747,8 @@ jobs:
               "${FLAGTREE_REQUIREMENT}"
 
           # /opt/flagtree is first on PYTHONPATH in the runtime images. Replace
-          # it only after the exact daily wheel has installed successfully in
-          # the staging directory.
+          # it only after the exact configured wheel has installed successfully
+          # in the staging directory.
           run_logged_command \
             "remove image-provided FlagTree directory" \
             rm -rf -- "${FLAGTREE_INSTALL_DIR}"

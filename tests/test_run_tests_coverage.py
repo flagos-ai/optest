@@ -120,6 +120,29 @@ def test_probe_flagtree_distributions(distribution_name, monkeypatch):
     )
 
 
+def test_probe_flagtree_prefers_backend_wheel_over_release_fallback(monkeypatch):
+    versions = {
+        "flagtree-nvidia": "0.7.1.dev20261115",
+        "flagtree": "0.7.0",
+    }
+
+    def get_version(candidate):
+        try:
+            return versions[candidate]
+        except KeyError:
+            raise run_tests.metadata.PackageNotFoundError(candidate) from None
+
+    package_metadata = mock.Mock()
+    package_metadata.get_all.return_value = []
+    monkeypatch.setattr(run_tests.metadata, "version", get_version)
+    monkeypatch.setattr(run_tests.metadata, "metadata", lambda _name: package_metadata)
+
+    assert run_tests._probe_flagtree_distribution() == (
+        "flagtree-nvidia",
+        "0.7.1.dev20261115",
+    )
+
+
 def test_probe_flagtree_ignores_missing_commit_metadata(monkeypatch):
     monkeypatch.setattr(
         run_tests.metadata,

@@ -60,7 +60,7 @@ new libraries are represented in test results.
 First determine whether the change adds hardware for an already-supported
 vendor or introduces a genuinely new vendor. A new hardware backend for an
 existing vendor normally reuses the vendor key, GPU probe, and metadata parser;
-do not duplicate those entries. It may still have a distinct FlagTree daily
+do not duplicate those entries. It may still have a distinct FlagTree
 distribution when its backend or toolchain differs.
 
 For every new hardware backend:
@@ -68,9 +68,9 @@ For every new hardware backend:
 1. Add `.github/configs/backends/<hardware>.yaml` with the normalized `vendor`,
    runner label, container configuration, device access, `test_env`,
    `output_base_dir`, and any exceptional hardware-level dependencies. When
-   FlagTree publishes a compatible backend daily wheel, also add a `flagtree`
+   FlagTree publishes a compatible backend wheel, also add a `flagtree`
    mapping with its exact `package_name`, full default `version`, and
-   `index_url`. Omit the mapping when no compatible daily distribution exists;
+   `index_url`. Omit the mapping when no compatible distribution exists;
    the workflow then retains the image-provided `/opt/flagtree` tree.
 2. Add the backend under `backends` for each applicable repository in
    `.github/configs/repos.yaml`, plus repository-specific image overrides only
@@ -79,7 +79,7 @@ For every new hardware backend:
    matches the lowercase vendor key reported by `flagos-gpu-check`. The workflow
    selects that group automatically.
 4. Check FlagTree's `packaging/flagtree/backends.yaml` for a backend-specific
-   daily wheel distribution. If it introduces a distribution name not already
+   wheel distribution. If it introduces a distribution name not already
    present, add that exact name to `_FLAGTREE_DISTRIBUTIONS` in
    `src/flagos_optest/run_tests.py`; backend names, vendor keys, and Python
    import names are not interchangeable here. The probe reports the wheel
@@ -88,7 +88,8 @@ For every new hardware backend:
    `flagtree`, or daily wheels without that metadata, retain the plain
    distribution version. Update `tests/test_run_tests_coverage.py` whenever the
    distribution list or metadata behavior changes. Confirm that the exact
-   default version configured in the backend YAML exists in the daily index.
+   default version configured in the backend YAML exists in its configured
+   index.
 5. Update the backend inventory in `README.md` and `README.zh-CN.md`. If the
    hardware participates in NVIDIA baseline comparisons, also update
    `src/nv_baseline/hardware_specs.json` and its focused tests.
@@ -122,23 +123,25 @@ lists are desired, and that its backend `output_base_dir` is durable. Run the
 full test suite after onboarding; this repository requires 100% statement and
 branch coverage.
 
-## FlagTree Daily Upgrade
+## FlagTree Upgrade
 
 The `Upgrade Flagtree` workflow step runs after optest installation and before
 GPU detection only when the selected backend YAML contains `flagtree`. That
 mapping requires `package_name`, a full daily `version` such as
-`0.7.1.dev20261111`, and `index_url`. The optional `flagtree_version` dispatch
-input accepts either another full daily version or `YYYYMMDD`; the date form
-keeps each backend's configured version base, which is important for Ascend
-CANN distributions whose base can differ from other backends.
+`0.7.1.dev20261115`, or a fixed release version, plus `index_url`. The optional
+`flagtree_version` dispatch input accepts either another full daily version or
+`YYYYMMDD`; the date form keeps each backend's configured version base, which
+is important for Ascend CANN distributions whose base can differ from other
+backends. It intentionally does not override fixed release pins because those
+may use a different package name and index.
 
-The step installs the exact daily wheel with `uv pip install --no-deps
+The step installs the exact configured wheel with `uv pip install --no-deps
 --target /opt/flagtree.new` and only then replaces `/opt/flagtree`, which is
 already first on the images' `PYTHONPATH`. It inherits the per-vendor
-`UV_CACHE_DIR` but keeps the FlagTree daily index command-local. After
+`UV_CACHE_DIR` but keeps the selected FlagTree index command-local. After
 replacement, keep the target-directory `uv pip show` and direct `pip show`
 diagnostics. Never remove `/opt/flagtree` before staging succeeds, or on a
-backend without a configured daily wheel, because those cases must retain the
+backend without a configured wheel, because those cases must retain the
 image-provided source tree.
 
 Repository exceptions belong in `.github/configs/repos.yaml`:

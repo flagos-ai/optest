@@ -682,14 +682,16 @@ warning，并继续使用该后端 YAML 的默认版本。其他后端仍可独�
 展开，该后端会 warning 并保留 release pin；如果 hosted index 中存在传入的完整 release
 版本，BW1000 仍可使用该覆盖值。输入为空时直接使用各后端默认值，不查询 index。
 
-只有所选后端存在 `flagtree` 配置时，`Upgrade Flagtree` 步骤才会运行。由于
-`/opt/flagtree` 在 `PYTHONPATH` 中位于 site-packages 之前，该步骤通过
+只有所选后端存在 `flagtree` 配置时，`Upgrade Flagtree` 步骤才会运行。该步骤通过
 `uv pip install --no-deps --target /opt/flagtree.new` 将精确配置的厂商 wheel
 安装到 staging 目录，安装成功后才删除原来的 `/opt/flagtree` 并将 staging 目录移动到
 该路径。因此解析或安装失败时，镜像原有目录保持不变。安装命令继承按厂商持久化的
 `UV_CACHE_DIR`；与之前的手工 pip 流程不同，不会禁用软件包缓存。步骤会在替换前输出
-release 元数据，替换后分别通过 target 目录和 pip 环境输出后端 distribution 信息用于
-debug。没有 `flagtree` 配置的后端会跳过该步骤并保留镜像自带目录；目前只有
+release 元数据，并在替换后通过 target 目录输出后端 distribution 信息。随后检查
+`/opt/flagtree` 是否已在 `PYTHONPATH` 中：存在时打印并保留，缺失时将其前置；最终值写入
+`GITHUB_ENV`，确保后续 Python 和 pytest 命令默认使用替换后的目录。最后再通过
+`ACTIVE_PYTHON` 校验配置的 distribution 是否为精确请求版本，避免将无法看到未激活
+target 目录的裸 `pip show` 误当成安装检查。没有 `flagtree` 配置的后端会跳过该步骤并保留镜像自带目录；目前只有
 Cambricon 使用此行为。
 
 目标仓库可以在不修改共享后端默认值的情况下选择跳过升级：

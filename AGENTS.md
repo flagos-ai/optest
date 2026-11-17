@@ -139,13 +139,16 @@ backend to its configured default. A date cannot be derived from a fixed
 release default, but a complete release version can override it when available.
 
 The step installs the exact configured wheel with `uv pip install --no-deps
---target /opt/flagtree.new` and only then replaces `/opt/flagtree`, which is
-already first on the images' `PYTHONPATH`. It inherits the per-vendor
-`UV_CACHE_DIR` but keeps the selected FlagTree index command-local. After
-replacement, keep the target-directory `uv pip show` and direct `pip show`
-diagnostics. Never remove `/opt/flagtree` before staging succeeds, or on a
-backend without a configured wheel, because those cases must retain the
-image-provided source tree.
+--target /opt/flagtree.new` and only then replaces `/opt/flagtree`. It inherits
+the per-vendor `UV_CACHE_DIR` but keeps the selected FlagTree index
+command-local. After replacement, keep the target-directory `uv pip show`,
+check whether `/opt/flagtree` is already on `PYTHONPATH`, prepend it when
+missing, and persist the effective value through `GITHUB_ENV` for later steps.
+Verify the exact configured distribution version through `ACTIVE_PYTHON`, not
+bare `pip`: a target directory is not part of an interpreter's normal package
+environment unless `PYTHONPATH` activates it. Never remove `/opt/flagtree`
+before staging succeeds, or on a backend without a configured wheel, because
+those cases must retain the image-provided source tree.
 
 Repository exceptions belong in `.github/configs/repos.yaml`:
 

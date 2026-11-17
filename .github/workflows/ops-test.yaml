@@ -892,9 +892,31 @@ jobs:
           run_logged_command \
             "show installed ${FLAGTREE_PACKAGE_NAME} in target directory" \
             uv pip show --target "${FLAGTREE_INSTALL_DIR}" "${FLAGTREE_PACKAGE_NAME}"
+
+          # A --target install is visible to normal Python commands only through
+          # PYTHONPATH. Current FlagOS runtime images already activate the side
+          # directory, while older vendor test images may not. Preserve an
+          # existing activation; otherwise prepend it for this step and persist
+          # the resulting value for every later GitHub Actions step.
+          case ":${PYTHONPATH:-}:" in
+            *":${FLAGTREE_INSTALL_DIR}:"*)
+              echo "[FlagTree] ${FLAGTREE_INSTALL_DIR} already exists in PYTHONPATH; skipping prepend."
+              ;;
+            *)
+              echo "[FlagTree] ${FLAGTREE_INSTALL_DIR} is not present in PYTHONPATH; prepending it."
+              export PYTHONPATH="${FLAGTREE_INSTALL_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
+              ;;
+          esac
+          echo "[FlagTree] Effective PYTHONPATH: ${PYTHONPATH}"
+          printf 'PYTHONPATH=%s\n' "${PYTHONPATH}" >> "${GITHUB_ENV}"
+
           run_logged_command \
-            "show installed ${FLAGTREE_PACKAGE_NAME} through pip environment" \
-            pip show "${FLAGTREE_PACKAGE_NAME}"
+            "verify installed ${FLAGTREE_PACKAGE_NAME} through active Python" \
+            env \
+              FLAGTREE_PACKAGE_NAME="${FLAGTREE_PACKAGE_NAME}" \
+              FLAGTREE_EXPECTED_VERSION="${FLAGTREE_VERSION}" \
+              "${ACTIVE_PYTHON}" -c \
+                'import importlib.metadata as metadata, os; package = os.environ["FLAGTREE_PACKAGE_NAME"]; expected = os.environ["FLAGTREE_EXPECTED_VERSION"]; actual = metadata.version(package); print(f"[FlagTree] Active Python sees {package}=={actual}"); raise SystemExit(0 if actual == expected else f"{package}: active Python sees version {actual}, expected {expected}")'
           print_cache_debug "FlagTree install: after"
 
       - name: Check GPU availability

@@ -542,7 +542,22 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             '"show installed ${FLAGTREE_PACKAGE_NAME} through uv environment"',
             upgrade["run"],
         )
-        self.assertIn('pip show "${FLAGTREE_PACKAGE_NAME}"', upgrade["run"])
+        self.assertNotIn('pip show "${FLAGTREE_PACKAGE_NAME}"', upgrade["run"])
+        self.assertIn(
+            '":${PYTHONPATH:-}:"',
+            upgrade["run"],
+        )
+        self.assertIn(
+            'export PYTHONPATH="${FLAGTREE_INSTALL_DIR}${PYTHONPATH:+:${PYTHONPATH}}"',
+            upgrade["run"],
+        )
+        self.assertIn(
+            'printf \'PYTHONPATH=%s\\n\' "${PYTHONPATH}" >> "${GITHUB_ENV}"',
+            upgrade["run"],
+        )
+        self.assertIn('"${ACTIVE_PYTHON}" -c', upgrade["run"])
+        self.assertIn("actual = metadata.version(package)", upgrade["run"])
+        self.assertIn("actual == expected", upgrade["run"])
         self.assertLess(
             upgrade["run"].index('"show installed flagtree before upgrade"'),
             upgrade["run"].index('rm -rf -- "${FLAGTREE_INSTALL_DIR}"'),
@@ -585,20 +600,19 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 '  if [ "$1" = "--target" ]; then shift; target="$1"; fi\n'
                 "  shift\n"
                 "done\n"
+                'version="${FAKE_FLAGTREE_VERSION:-0.7.1a1+hcu3.6}"\n'
                 'case " $args " in\n'
                 '  *" pip install "*) mkdir -p "$target"; '
-                'printf "fixed release" > "$target/marker" ;;\n'
+                'printf "fixed release" > "$target/marker"; '
+                'mkdir -p "$target/flagtree-0.7.1a1+hcu3.6.dist-info"; '
+                "printf 'Metadata-Version: 2.1\\nName: flagtree\\n"
+                'Version: %s\\n\' "$version" > '
+                '"$target/flagtree-0.7.1a1+hcu3.6.dist-info/METADATA" ;;\n'
                 "esac\n",
                 encoding="utf-8",
             )
             uv.chmod(0o755)
-            pip_log = root / "pip.log"
-            pip = root / "pip"
-            pip.write_text(
-                '#!/bin/sh\nprintf "ARGS=%s\\n" "$*" >> "$PIP_LOG"\n',
-                encoding="utf-8",
-            )
-            pip.chmod(0o755)
+            github_env = root / "github-env"
             completed = subprocess.run(
                 ["bash", "-e", "-o", "pipefail", "-c", script],
                 cwd=ROOT,
@@ -610,7 +624,8 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     "UV_CACHE_DIR": str(root / "uv-cache"),
                     "UV_DEFAULT_INDEX": "https://pypi.example/simple",
                     "UV_LOG": str(uv_log),
-                    "PIP_LOG": str(pip_log),
+                    "GITHUB_ENV": str(github_env),
+                    "PYTHONPATH": "",
                 },
                 text=True,
             )
@@ -652,8 +667,76 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             ]
             self.assertEqual(len(target_show_commands), 1)
             self.assertEqual(
-                pip_log.read_text(encoding="utf-8"),
-                "ARGS=show flagtree\n",
+                github_env.read_text(encoding="utf-8"),
+                f"PYTHONPATH={source}\n",
+            )
+
+            self.assertIn(
+                f"[FlagTree] {source} is not present in PYTHONPATH; prepending it.",
+                completed.stdout,
+            )
+            self.assertIn(
+                f"[FlagTree] Effective PYTHONPATH: {source}", completed.stdout
+            )
+            self.assertIn(
+                "[FlagTree] Active Python sees flagtree==0.7.1a1+hcu3.6",
+                completed.stdout,
+            )
+
+            github_env.write_text("", encoding="utf-8")
+            completed = subprocess.run(
+                ["bash", "-e", "-o", "pipefail", "-c", script],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                    "UV_CACHE_DIR": str(root / "uv-cache"),
+                    "UV_DEFAULT_INDEX": "https://pypi.example/simple",
+                    "UV_LOG": str(uv_log),
+                    "GITHUB_ENV": str(github_env),
+                    "PYTHONPATH": str(source),
+                },
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn(
+                f"[FlagTree] {source} already exists in PYTHONPATH; skipping prepend.",
+                completed.stdout,
+            )
+            self.assertIn(
+                f"[FlagTree] Effective PYTHONPATH: {source}", completed.stdout
+            )
+            self.assertEqual(
+                github_env.read_text(encoding="utf-8"),
+                f"PYTHONPATH={source}\n",
+            )
+
+            completed = subprocess.run(
+                ["bash", "-e", "-o", "pipefail", "-c", script],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                    "UV_CACHE_DIR": str(root / "uv-cache"),
+                    "UV_DEFAULT_INDEX": "https://pypi.example/simple",
+                    "UV_LOG": str(uv_log),
+                    "GITHUB_ENV": str(github_env),
+                    "PYTHONPATH": str(source),
+                    "FAKE_FLAGTREE_VERSION": "0.7.1a1+hcu3.5",
+                },
+                text=True,
+            )
+
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn(
+                "flagtree: active Python sees version 0.7.1a1+hcu3.5, "
+                "expected 0.7.1a1+hcu3.6",
+                completed.stderr,
             )
 
     def test_flagtree_upgrade_preserves_image_tree_when_staging_fails(self):

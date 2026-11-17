@@ -752,16 +752,20 @@ version can still override BW1000 when the hosted index contains it. An empty
 input uses every backend default without querying the indexes.
 
 The `Upgrade Flagtree` step runs only when the selected backend has this block.
-Because `/opt/flagtree` precedes site-packages on `PYTHONPATH`, the step installs
-the exact vendor wheel with `uv pip install --no-deps --target
+It installs the exact vendor wheel with `uv pip install --no-deps --target
 /opt/flagtree.new` and only after installation succeeds removes the old
 `/opt/flagtree` and moves the staged directory into its place. A failed
 resolution or installation therefore leaves the original tree intact. The
 command inherits the persistent per-vendor `UV_CACHE_DIR`;
 unlike the previous manual pip flow, it does not disable the package cache.
 The step prints release metadata before replacement and, afterward, shows the
-backend distribution through its target directory and the pip environment for
-debug.
+backend distribution through its target directory. It then checks whether
+`/opt/flagtree` is already on `PYTHONPATH`, logs and keeps an existing entry, or
+prepends it when missing. The effective value is written to `GITHUB_ENV` so all
+later Python and pytest commands use the replacement. Finally, `ACTIVE_PYTHON`
+must resolve the configured distribution to the exact requested version; this
+avoids treating a bare `pip show`, which cannot see an unactivated target
+directory, as an installation check.
 Backends with no `flagtree` block skip the step and retain the image-provided
 tree; this currently applies only to Cambricon.
 

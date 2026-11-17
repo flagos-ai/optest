@@ -126,11 +126,18 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             {
                 "910B": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.2.1:2.3.0",
                 "PPU-ZW810E": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-thead-ppu2.1.0:2.3.0",
-                "MLU590-M9DE": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-cambricon-neuware4.7.2:2.3.0",
                 "W7900D": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-amd-rocm7.2.4:2.3.0",
             },
         )
         self.assertEqual(config["skip_flagtree_upgrade"], ["910B"])
+        self.assertEqual(
+            [
+                repo_name
+                for repo_name, repo_config in self.repos["repos"].items()
+                if repo_config["backends"]["MLU590-M9DE"]["enabled"]
+            ],
+            ["FlagGems"],
+        )
 
         flaggems = self.build_matrix(
             "FlagGems",
@@ -247,6 +254,10 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 )
 
         self.assertNotIn("flagtree", backend_configs["MLU590-M9DE"])
+        self.assertEqual(
+            backend_configs["MLU590-M9DE"]["container_image"],
+            "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-cambricon-neuware4.7.2:2.3.0",
+        )
 
     def test_matrix_checks_overrides_and_falls_back_per_backend(self):
         with tempfile.TemporaryDirectory() as directory:

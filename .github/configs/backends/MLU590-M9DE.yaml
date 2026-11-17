@@ -22,9 +22,12 @@ vendor: Cambricon
 runner_labels: mlu590-m9de-flaggems-weekly
 
 # Container image for this backend (DEFAULT).
-# Priority: repos.yaml `images.<BACKEND>` for the selected repo OVERRIDES
+# Priority: repos.yaml `container_images.<BACKEND>` for the selected repo OVERRIDES
 # this value; when that repo has no override here, this default is used.
-container_image: harbor.baai.ac.cn/flaggems/flaggems-test-cambricon-mlu590-m9de:20260929
+container_image: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-cambricon-neuware4.7.2:2.3.0
+
+# Cambricon FlagTree daily packages are not supported yet. Keep this backend
+# without a `flagtree` mapping so the workflow retains the image-provided tree.
 
 # Container volumes to mount for this backends
 container_volumes:

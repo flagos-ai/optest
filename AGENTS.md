@@ -162,8 +162,9 @@ shared 910B FlagTree daily distribution targets CANN 9.0.0. This exception must
 not affect 910B runs for other repositories. FlagGems also carries
 repository-specific T-Head PPU 2.1.0 and AMD ROCm 7.2.4 runtime image overrides;
 these backends continue to use the shared FlagTree upgrade policy. Its
-Cambricon Neuware 4.7.2 runtime image override retains the image-provided
-FlagTree because the shared backend has no configured daily distribution.
+Cambricon backend uses the shared Neuware 4.7.2 runtime image and retains the
+image-provided FlagTree because it has no configured daily distribution. Only
+FlagGems currently enables that backend, so keep its image in the backend YAML.
 
 When changing this flow, update both READMEs, backend configuration coverage,
 matrix version/skip-policy tests, and the workflow-step assertions.

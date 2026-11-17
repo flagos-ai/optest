@@ -790,8 +790,9 @@ continue to use their normal FlagTree upgrade configuration. `FlagGems` also
 uses its current T-Head PPU 2.1.0 and AMD ROCm 7.2.4 runtime images through
 repository-specific overrides; both still receive their configured FlagTree
 daily wheels. Its Cambricon backend similarly uses the current Neuware 4.7.2
-runtime image, but retains the image-provided FlagTree because no Cambricon
-daily distribution is configured.
+shared backend image, but retains the image-provided FlagTree because no
+Cambricon daily distribution is configured. Only FlagGems currently enables
+this backend, so it does not need a repository-specific image override.
 
 ### Persistent package cache
 

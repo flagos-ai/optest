@@ -1191,6 +1191,28 @@ Normal target-specific vendor dependencies should not use these maps. The
 workflow instead selects the target's optional-dependency group from the vendor
 key reported by `flagos-gpu-check`.
 
+Some images need a few patches before a repository can install its native
+operator libraries: a C++ toolchain, a system library the vendor torch was
+linked against, a runtime directory the dynamic loader does not know about, or a
+patch to the installed vendor stack. That work runs in a separate step, before
+the target repository is installed, and it needs no configuration: it is a
+convention on the backend's vendor name.
+
+```text
+.github/scripts/install/<vendor>.py    (or <vendor>.sh)
+<vendor> = the backend's vendor, lower case: mthreads, hygon, ascend, ...
+```
+
+The step runs that file when it exists and skips otherwise, so native operator
+libraries that need no image patch require no extra declaration. A script runs
+with `bash`, or with `python3` when the file is `*.py`, and inherits the job
+environment: `REPOSITORY_NAME`, the `FLAGOS_GPU_*` variables from
+`flagos-gpu-check`, and the backend's `test_env`. Everything a script does must
+be idempotent.
+
+This is also where vendor-specific environment patches belong, instead of
+hardcoded `if vendor == ...` branches in the workflow.
+
 ### Backend configuration
 
 Each `.github/configs/backends/<hardware>.yaml` file supplies the default

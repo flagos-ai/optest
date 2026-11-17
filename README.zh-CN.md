@@ -1062,6 +1062,22 @@ defaults.deps -> backend deps -> repo deps.default -> repo deps.<backend>
 普通的目标专用厂商依赖不应使用这些 map。工作流会根据 `flagos-gpu-check` 报告的厂商键，
 选择目标仓库的可选依赖组。
 
+有些镜像在安装原生算子库之前需要先做一些修补：C++ 工具链、厂商 torch 链接的系统库、
+动态加载器不认识的运行时目录，或对已安装厂商栈的补丁。这类工作在前面单独一步执行，
+时机在目标仓库安装之前，而且不需要任何配置——它是对后端 vendor 名称的约定：
+
+```text
+.github/scripts/install/<vendor>.py    （或 <vendor>.sh）
+<vendor> = 后端 vendor 名的小写：mthreads、hygon、ascend ...
+```
+
+文件存在就执行，不存在就跳过，因此原生算子库不需要对镜像做修补的厂商不需要任何额外声明。
+脚本用 `bash` 执行（`*.py` 时用 `python3`），并继承 job 环境：`REPOSITORY_NAME`、
+`flagos-gpu-check` 导出的 `FLAGOS_GPU_*`，以及后端的 `test_env`。
+脚本必须幂等。
+
+厂商特例的环境 patch 也放在这里，而不是在工作流里写成硬编码的 `if vendor == ...` 分支。
+
 ### 后端配置
 
 每个 `.github/configs/backends/<hardware>.yaml` 文件都提供供所有仓库共享的默认硬件配置：

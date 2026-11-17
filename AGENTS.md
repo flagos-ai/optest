@@ -357,6 +357,12 @@ Notes for debugging and future changes:
   COLD/WARM state with the cache size and file count before and after install.
   Grep the job log for `[Cache debug]` and `uv cache state:` to confirm a run
   hit the local cache instead of the network.
+- Image preparation is a convention, not configuration:
+  `.github/scripts/install/<vendor>.py` (or `.sh`), where `<vendor>` is the
+  backend's vendor name in lower case, runs before the target install because
+  native target extensions compile against it. Scripts must be idempotent, and
+  vendor-specific patches belong there instead of a hardcoded `if vendor == ...`
+  branch in the workflow.
 - Vendor-specific `test_env` variables in the backend config (for example
   `FLAGTREE_BACKEND`, `MACA_DIRECT_DISPATCH`, `GEMS_VENDOR`, `XPU_EVENT_KL3_ENABLE`)
   are preserved; the cache vars are merged on top without dropping them.

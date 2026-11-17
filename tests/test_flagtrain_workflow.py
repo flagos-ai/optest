@@ -890,6 +890,55 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 completed.stdout,
             )
 
+    def test_vendor_install_script_precedes_target_install(self):
+        steps = self.workflow["jobs"]["test-container"]["steps"]
+        names = [step.get("name") for step in steps]
+        self.assertLess(
+            names.index("Run vendor install script"),
+            names.index("Configure package index and install optest"),
+        )
+        self.assertLess(
+            names.index("Run vendor install script"),
+            names.index("Install target repository and dependencies"),
+        )
+
+        run = next(
+            step for step in steps if step.get("name") == "Run vendor install script"
+        )["run"]
+        self.assertIn("VENDOR=$(printf", run)
+        self.assertIn(".github/scripts/install/${VENDOR}.py", run)
+        self.assertIn(".github/scripts/install/${VENDOR}.sh", run)
+        self.assertIn("*.py)", run)
+
+    def test_vendor_specific_work_does_not_use_hardcoded_vendor_branches(self):
+        profile = next(
+            step
+            for step in self.workflow["jobs"]["test-container"]["steps"]
+            if step.get("name") == "Copy root profile to GitHub Actions home"
+        )["run"]
+        self.assertNotIn("matrix.vendor", profile)
+        self.assertNotIn("ASCEND_WORK_PATH", profile)
+
+    def test_install_scripts_exist_for_prepared_vendors(self):
+        directory = ROOT / ".github/scripts/install"
+        self.assertEqual(
+            sorted(path.name for path in directory.iterdir()),
+            ["ascend.sh", "hygon.sh", "mthreads.sh"],
+        )
+        for script in directory.iterdir():
+            text = script.read_text(encoding="utf-8")
+            with self.subTest(script=script.name):
+                self.assertNotIn("${{", text)
+                self.assertEqual(script.suffix, ".sh")
+                self.assertEqual(
+                    subprocess.run(
+                        ["bash", "-n", str(script)],
+                        check=False,
+                        capture_output=True,
+                    ).returncode,
+                    0,
+                )
+
     def test_matrix_resolves_command_timeout_without_dependency_policy(self):
         prepare_steps = self.workflow["jobs"]["prepare"]["steps"]
         script = next(

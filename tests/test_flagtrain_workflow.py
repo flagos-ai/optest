@@ -126,6 +126,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             {
                 "910B": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.2.1:2.3.0",
                 "PPU-ZW810E": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-thead-ppu2.1.0:2.3.0",
+                "MLU590-M9DE": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-cambricon-neuware4.7.2:2.3.0",
                 "W7900D": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-amd-rocm7.2.4:2.3.0",
             },
         )
@@ -133,12 +134,13 @@ class FlagTrainWorkflowTest(unittest.TestCase):
 
         flaggems = self.build_matrix(
             "FlagGems",
-            vendors="Nvidia,Ascend,THead,AMD",
+            vendors="Nvidia,Ascend,THead,Cambricon,AMD",
         )
         flaggems_by_name = {backend["name"]: backend for backend in flaggems["include"]}
         expected_images = {
             "910B": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.2.1:2.3.0",
             "PPU-ZW810E": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-thead-ppu2.1.0:2.3.0",
+            "MLU590-M9DE": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-cambricon-neuware4.7.2:2.3.0",
             "W7900D": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-amd-rocm7.2.4:2.3.0",
         }
         for backend_name, image in expected_images.items():
@@ -150,6 +152,8 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         self.assertFalse(flaggems_by_name["H800"]["skip_flagtree_upgrade"])
         self.assertFalse(flaggems_by_name["PPU-ZW810E"]["skip_flagtree_upgrade"])
         self.assertFalse(flaggems_by_name["W7900D"]["skip_flagtree_upgrade"])
+        self.assertFalse(flaggems_by_name["MLU590-M9DE"]["skip_flagtree_upgrade"])
+        self.assertEqual(flaggems_by_name["MLU590-M9DE"]["flagtree_package_name"], "")
 
         flaggems_vllm = self.build_matrix(
             "FlagGems-vllm",

@@ -709,7 +709,8 @@ repos:
 FlagTree，因为共享 910B daily wheel 面向 CANN 9.0.0。FlagGems 的其他后端以及其他
 仓库的 910B 后端仍按各自的正常配置升级 FlagTree。`FlagGems` 还通过仓库专用覆盖使用
 当前的 T-Head PPU 2.1.0 和 AMD ROCm 7.2.4 runtime 镜像，这两个后端仍会安装各自
-配置的 FlagTree daily wheel。
+配置的 FlagTree daily wheel。其 Cambricon 后端同样使用当前的 Neuware 4.7.2
+runtime 镜像，但由于未配置 Cambricon daily distribution，会保留镜像自带的 FlagTree。
 
 ### 持久化软件包缓存
 

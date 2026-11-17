@@ -119,33 +119,50 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         )
         self.assertIn("          - FlagTrain\n", workflow_text)
 
-    def test_flaggems_910b_uses_cann_921_image_and_keeps_image_flagtree(self):
+    def test_flaggems_runtime_images_and_910b_flagtree_exception(self):
         config = self.repos["repos"]["FlagGems"]
         self.assertEqual(
             config["container_images"],
             {
-                "910B": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.2.1:2.3.0"
+                "910B": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.2.1:2.3.0",
+                "PPU-ZW810E": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-thead-ppu2.1.0:2.3.0",
+                "W7900D": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-amd-rocm7.2.4:2.3.0",
             },
         )
         self.assertEqual(config["skip_flagtree_upgrade"], ["910B"])
 
         flaggems = self.build_matrix(
             "FlagGems",
-            vendors="Nvidia,Ascend",
+            vendors="Nvidia,Ascend,THead,AMD",
         )
         flaggems_by_name = {backend["name"]: backend for backend in flaggems["include"]}
-        self.assertEqual(
-            flaggems_by_name["910B"]["container_image"],
-            "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.2.1:2.3.0",
-        )
+        expected_images = {
+            "910B": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.2.1:2.3.0",
+            "PPU-ZW810E": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-thead-ppu2.1.0:2.3.0",
+            "W7900D": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-amd-rocm7.2.4:2.3.0",
+        }
+        for backend_name, image in expected_images.items():
+            with self.subTest(backend=backend_name):
+                self.assertEqual(
+                    flaggems_by_name[backend_name]["container_image"], image
+                )
         self.assertTrue(flaggems_by_name["910B"]["skip_flagtree_upgrade"])
         self.assertFalse(flaggems_by_name["H800"]["skip_flagtree_upgrade"])
+        self.assertFalse(flaggems_by_name["PPU-ZW810E"]["skip_flagtree_upgrade"])
+        self.assertFalse(flaggems_by_name["W7900D"]["skip_flagtree_upgrade"])
 
         flaggems_vllm = self.build_matrix(
             "FlagGems-vllm",
-            vendors="Ascend",
+            vendors="Ascend,THead",
         )
-        self.assertFalse(flaggems_vllm["include"][0]["skip_flagtree_upgrade"])
+        flaggems_vllm_by_name = {
+            backend["name"]: backend for backend in flaggems_vllm["include"]
+        }
+        self.assertFalse(flaggems_vllm_by_name["910B"]["skip_flagtree_upgrade"])
+        self.assertEqual(
+            flaggems_vllm_by_name["PPU-ZW810E"]["container_image"],
+            "harbor.baai.ac.cn/flaggems/flaggems-test-thead-ppu-zw810e:20261015",
+        )
 
     def test_configured_repositories_have_runtime_probes(self):
         configured_repos = set(self.repos["repos"])

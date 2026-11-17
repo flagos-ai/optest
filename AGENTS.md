@@ -156,7 +156,9 @@ Repository exceptions belong in `.github/configs/repos.yaml`:
 The current `FlagGems` 910B repository exception must retain its image-provided
 FlagTree: its repository-specific runtime image uses CANN 9.2.1, while the
 shared 910B FlagTree daily distribution targets CANN 9.0.0. This exception must
-not affect 910B runs for other repositories.
+not affect 910B runs for other repositories. FlagGems also carries
+repository-specific T-Head PPU 2.1.0 and AMD ROCm 7.2.4 runtime image overrides;
+these backends continue to use the shared FlagTree upgrade policy.
 
 When changing this flow, update both READMEs, backend configuration coverage,
 matrix version/skip-policy tests, and the workflow-step assertions.

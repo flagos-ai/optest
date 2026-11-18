@@ -1343,7 +1343,6 @@ jobs:
         # Three possible 900-second attempts plus two 15-second retry delays
         # need up to 45m30s; keep enough step-level overhead around that budget.
         timeout-minutes: 50
-        continue-on-error: true
         run: |
           # get backend name from matrix
           BACKEND_NAME="${{ matrix.name }}"

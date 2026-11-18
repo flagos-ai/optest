@@ -402,7 +402,7 @@ class NotifyFeishuRefTest(unittest.TestCase):
             self.assertIn("uv cache state: WARM", cache_step["run"])
             self.assertIn("uv cache state: COLD", cache_step["run"])
 
-    def test_workflow_retries_transient_result_upload_failures(self):
+    def test_workflow_retries_and_propagates_result_upload_failures(self):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
         steps = workflow["jobs"]["test-container"]["steps"]
         publish = next(
@@ -420,6 +420,7 @@ class NotifyFeishuRefTest(unittest.TestCase):
         )
         self.assertIn("--fail-with-body", curl_command)
         self.assertNotIn("--retry-all-errors", curl_command)
+        self.assertFalse(publish.get("continue-on-error", False))
         retry_budget_seconds = 3 * 900 + 2 * 15
         self.assertGreaterEqual(publish["timeout-minutes"] * 60, retry_budget_seconds)
 

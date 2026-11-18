@@ -670,10 +670,9 @@ flagtree:
 版本基线：例如 CANN 9.0.0 使用 `0.7.0.devYYYYMMDD`，而大多数 daily distribution
 使用 `0.7.1.devYYYYMMDD`。
 
-后端也可以临时从其他 index 固定兼容的 release wheel。BW1000 当前在
-`flagtree-hcu` daily wheel 的问题修复前，使用 FlagOS hosted index 中的
-`flagtree==0.7.1a1+hcu3.6`。其 backend YAML 在生效的 release 配置旁保留了注释状态的
-daily 配置，以便后续明确切回。
+BW1000 使用 FlagOS daily index 中的 `flagtree-hcu==0.7.1.dev20261104`。
+其 backend YAML 将之前兼容的 `flagtree==0.7.1a1+hcu3.6` release 配置保留为
+注释状态，以便必要时回退。
 
 可选的 workflow-dispatch 输入 `flagtree_version` 支持以下覆盖形式：
 
@@ -685,9 +684,8 @@ daily 配置，以便后续明确切回。
 prepare job 会先在各后端自己的 `package_name` 和 `index_url` 中检查精确版本，再将覆盖值
 写入 matrix。如果版本不存在或 index 查询失败，job 会打印 `FlagTree version fallback`
 warning，并继续使用该后端 YAML 的默认版本。其他后端仍可独立使用自身存在的覆盖版本，
-因此单个厂商缺少构建不会导致整个运行失败。日期无法从 BW1000 这类固定 release 默认值
-展开，该后端会 warning 并保留 release pin；如果 hosted index 中存在传入的完整 release
-版本，BW1000 仍可使用该覆盖值。输入为空时直接使用各后端默认值，不查询 index。
+因此单个厂商缺少构建不会导致整个运行失败。日期无法从固定 release 默认值展开；此时该后端
+会 warning 并保留 release pin。输入为空时直接使用各后端默认值，不查询 index。
 
 只有所选后端存在 `flagtree` 配置时，`Upgrade Flagtree` 步骤才会运行。该步骤通过
 `uv pip install --no-deps --target /opt/flagtree.new` 将精确配置的厂商 wheel
@@ -868,7 +866,7 @@ MLU590-M9DE/寒武纪、P800/昆仑芯、W7900D/AMD、TX8110/清微智能和 S60
 | `H800` | Nvidia | `h800-flaggems-weekly` | `flagtree-nvidia` | 自动检测 | `/data/github-outputs` |
 | `910B` | Ascend | `910b-flaggems-weekly` | `flagtree-ascend-cann9.0.0` | 自动检测 | `/data/github-outputs` |
 | `C550` | Metax | `c550-flaggems-weekly` | `flagtree-metax` | 自动检测 | `/data/github-outputs` |
-| `BW1000` | Hygon | `bw1000-flaggems-weekly` | `flagtree`（固定 release） | 自动检测 | `/data/github-outputs` |
+| `BW1000` | Hygon | `bw1000-flaggems-weekly` | `flagtree-hcu` | 自动检测 | `/data/github-outputs` |
 | `MTT-S5000` | MThreads | `s5000-flaggems-weekly` | `flagtree-mthreads` | 自动检测 | `/data/github-outputs` |
 | `BI-V150` | Iluvatar | `v150-flaggems-weekly` | `flagtree-iluvatar` | 自动检测 | `/data/github-outputs` |
 | `PPU-ZW810E` | THead | `810e-flaggems-weekly` | `flagtree-ppu` | 自动检测 | `/home/github-outputs` |

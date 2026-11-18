@@ -45,19 +45,16 @@ container_options: >-
   --device=/dev/mkfd
   --device=/dev/dri
 
-# The HCU daily wheel is temporarily disabled until its current issue is fixed.
-# Retain the intended daily configuration here for the later switch back:
-# flagtree:
-#   package_name: flagtree-hcu
-#   version: 0.7.1.dev20261115
-#   index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
-#
-# Use the compatible HCU release wheel in the meantime. A dispatch override is
-# used only when this package's hosted index contains the requested version.
 flagtree:
-  package_name: flagtree
-  version: 0.7.1a1+hcu3.6
-  index_url: https://resource.flagos.net/repository/flagos-pypi-hosted/simple
+  package_name: flagtree-hcu
+  version: 0.7.1.dev20261104
+  index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+
+# Retain the compatible HCU release configuration for a possible fallback:
+# flagtree:
+#   package_name: flagtree
+#   version: 0.7.1a1+hcu3.6
+#   index_url: https://resource.flagos.net/repository/flagos-pypi-hosted/simple
 
 # Extra environment variables injected only into the "Run ops tests" step
 test_env:

@@ -735,11 +735,9 @@ version. This matters for runtimes with a different version base; for example,
 the CANN 9.0.0 distribution uses `0.7.0.devYYYYMMDD`, while most other daily
 distributions use `0.7.1.devYYYYMMDD`.
 
-A backend may temporarily pin a compatible release wheel from a different
-index. BW1000 currently uses `flagtree==0.7.1a1+hcu3.6` from the FlagOS hosted
-index while its `flagtree-hcu` daily wheel is disabled. Its backend YAML keeps
-the intended daily mapping commented next to the active release mapping so the
-switch back is explicit.
+BW1000 uses `flagtree-hcu==0.7.1.dev20261104` from the FlagOS daily index. Its
+backend YAML retains the previous compatible `flagtree==0.7.1a1+hcu3.6`
+release mapping as a commented fallback.
 
 The optional `flagtree_version` workflow-dispatch input requests an override in
 one of these forms:
@@ -755,10 +753,9 @@ own `package_name` and `index_url`. If that exact version does not exist, or the
 index cannot be queried, the job emits a `FlagTree version fallback` warning
 and keeps that backend's YAML default. Other backends independently use the
 override when their package contains it, so one missing vendor build does not
-fail the whole run. A date cannot be expanded from a fixed release default such
-as BW1000; that backend warns and keeps its release pin. A complete release
-version can still override BW1000 when the hosted index contains it. An empty
-input uses every backend default without querying the indexes.
+fail the whole run. A date cannot be expanded from a fixed release default; in
+that case the backend warns and keeps its release pin. An empty input uses
+every backend default without querying the indexes.
 
 The `Upgrade Flagtree` step runs only when the selected backend has this block.
 It installs the exact vendor wheel with `uv pip install --no-deps --target
@@ -968,7 +965,7 @@ backend YAML file.
 | `H800` | Nvidia | `h800-flaggems-weekly` | `flagtree-nvidia` | detected | `/data/github-outputs` |
 | `910B` | Ascend | `910b-flaggems-weekly` | `flagtree-ascend-cann9.0.0` | detected | `/data/github-outputs` |
 | `C550` | Metax | `c550-flaggems-weekly` | `flagtree-metax` | detected | `/data/github-outputs` |
-| `BW1000` | Hygon | `bw1000-flaggems-weekly` | `flagtree` (fixed release) | detected | `/data/github-outputs` |
+| `BW1000` | Hygon | `bw1000-flaggems-weekly` | `flagtree-hcu` | detected | `/data/github-outputs` |
 | `MTT-S5000` | MThreads | `s5000-flaggems-weekly` | `flagtree-mthreads` | detected | `/data/github-outputs` |
 | `BI-V150` | Iluvatar | `v150-flaggems-weekly` | `flagtree-iluvatar` | detected | `/data/github-outputs` |
 | `PPU-ZW810E` | THead | `810e-flaggems-weekly` | `flagtree-ppu` | detected | `/home/github-outputs` |

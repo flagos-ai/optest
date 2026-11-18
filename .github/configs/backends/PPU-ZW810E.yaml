@@ -26,7 +26,7 @@ test_env:
 # Container image for this backend (DEFAULT).
 # Priority: repos.yaml `images.<BACKEND>` for the selected repo OVERRIDES
 # this value; when that repo has no override here, this default is used.
-container_image: harbor.baai.ac.cn/flaggems/flaggems-test-thead-ppu-zw810e:20261015
+container_image: harbor.baai.ac.cn/flagos-app/vllm0.32.0-thead-ppu2.1.0:2.3.0-0.5.0.dev0_g814b6d3.d20261117
 
 # Container volumes to mount for this backends
 container_volumes:

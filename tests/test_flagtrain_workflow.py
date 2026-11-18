@@ -181,7 +181,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         self.assertFalse(flaggems_vllm_by_name["910B"]["skip_flagtree_upgrade"])
         self.assertEqual(
             flaggems_vllm_by_name["PPU-ZW810E"]["container_image"],
-            "harbor.baai.ac.cn/flaggems/flaggems-test-thead-ppu-zw810e:20261015",
+            "harbor.baai.ac.cn/flagos-app/vllm0.32.0-thead-ppu2.1.0:2.3.0-0.5.0.dev0_g814b6d3.d20261117",
         )
 
     def test_configured_repositories_have_runtime_probes(self):
@@ -272,6 +272,22 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             backend_configs["MLU590-M9DE"]["container_image"],
             "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-cambricon-neuware4.7.2:2.3.0",
         )
+
+    def test_vllm_backend_container_images(self):
+        backend_dir = ROOT / ".github/configs/backends"
+        expected = {
+            "H800": "harbor.baai.ac.cn/flagos-app/vllm0.32.0-generic-13.3:2.3.0-0.5.0.dev0_g814b6d3.d20261117",
+            "W7900D": "harbor.baai.ac.cn/flagos-app/vllm0.32.0-amd-rocm7.2.4:2.3.0-0.5.0.dev0_g814b6d3.d20261117",
+            "PPU-ZW810E": "harbor.baai.ac.cn/flagos-app/vllm0.32.0-thead-ppu2.1.0:2.3.0-0.5.0.dev0_g814b6d3.d20261117",
+            "BI-V150": "harbor.baai.ac.cn/flagos-app/vllm0.32.0-iluvatar-corex5.0.1:2.3.0-0.5.0.dev0_g814b6d3.d20261117",
+        }
+
+        for backend_name, image in expected.items():
+            with self.subTest(backend=backend_name):
+                config = yaml.safe_load(
+                    (backend_dir / f"{backend_name}.yaml").read_text(encoding="utf-8")
+                )
+                self.assertEqual(config["container_image"], image)
 
     def test_matrix_checks_overrides_and_falls_back_per_backend(self):
         with tempfile.TemporaryDirectory() as directory:

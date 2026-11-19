@@ -164,11 +164,117 @@ booleans add the flag only when true, scalar values add an option/value pair,
 and lists repeat the option. An omitted `index_url` keeps the workflow-selected
 package index; an explicit index remains command-local.
 
+Use the exact same package key in every layer that overrides it. The workflow
+does not normalize hyphens and underscores while merging configuration, even
+though Python package installers may treat those spellings as the same
+distribution. Do not create two central entries for alternate spellings.
+
+The control fields have narrow responsibilities:
+
+- `display_name` is a log label only. It does not change package identity,
+  imports, precedence, or install order. It defaults to the package key.
+- `priority` is an integer install-order key. Lower values run first, the
+  default is `1000`, and equal values sort by package key. It does not affect
+  the four-layer configuration precedence.
+- `enabled` defaults to true after merging and follows the last explicit value.
+- `version` creates an exact `package==version` requirement. Omitting it uses
+  the bare package requirement and may retain an already-satisfied install.
+- `target` is both the uv `--target` value and the managed replacement path. It
+  must be a normalized, specific absolute path such as `/opt/flagtree`.
+
 A package with `target` is installed into `<target>.new`; only a successful
 install may replace the existing target. Targets must be normalized, specific
 absolute paths. Keep removal failures fatal, update `PYTHONPATH` after a
 successful replacement, and verify a pinned version through `ACTIVE_PYTHON`.
 Never remove the old target before staging succeeds.
+
+### Dependency ownership and configuration recipes
+
+Repository-owned dependencies normally belong in the target repository, not
+in optest configuration:
+
+- `[project].dependencies` owns requirements used on every backend.
+- `[project.optional-dependencies].test` owns common test-only requirements.
+- A normalized vendor extra such as `nvidia`, `ascend`, or `kunlunxin` owns
+  backend/vendor-specific requirements. The workflow selects the detected
+  vendor extra automatically.
+- `[tool.uv].exclude-dependencies` is reserved for packages intentionally
+  supplied by every applicable runtime image or by the shared configured
+  environment. Exclusion prevents target resolution from changing that
+  package, so verify that a compatible version is already present.
+
+Central `deps` is for shared test-environment preparation: packages used by
+multiple repositories, packages needed globally, hardware defaults shared by
+repositories, and exceptional repository/backend policy that cannot live in a
+target project. Do not duplicate a target repository's dependency contract in
+optest merely to make CI pass; fix that repository's `pyproject.toml` instead.
+
+Use these central locations when an exception is justified:
+
+```yaml
+# Every enabled backend of every repository.
+defaults:
+  deps:
+    shared-helper:
+      version: 1.2.3
+      priority: 300
+
+# Every repository that enables H800.
+# .github/configs/backends/H800.yaml
+deps:
+  nvidia-shared-helper:
+    version: 2.0.0
+
+# One repository, or one repository/backend combination.
+repos:
+  SomeRepo:
+    deps:
+      default:
+        repo-ci-exception:
+          version: 3.0.0
+        shared-helper:
+          enabled: false      # exclude from every SomeRepo backend
+      H800:
+        h800-ci-exception:
+          version: 4.0.0
+        nvidia-shared-helper:
+          enabled: false      # exclude only from SomeRepo/H800
+```
+
+An explicit `enabled: true` in a more specific layer can re-enable an inherited
+disabled package. It cannot re-enable a backend disabled under
+`repos.<repo>.backends.<name>.enabled`; backend filtering occurs first.
+Use `repos.<repo>.backends.<name>.enabled: false` to remove the entire backend
+job. Use `repos.<repo>.deps.<name>.<package>.enabled: false` to skip only one
+package while keeping that repository/backend test job.
+
+### Environment installation order
+
+Keep dependency behavior aligned with the workflow's actual phases:
+
+1. The backend container image supplies the initial environment.
+2. The optest checkout is installed.
+3. Merged central packages are installed in `priority`, package-key order.
+4. GPU detection selects the target vendor extra.
+5. The target project is installed editable with its base dependencies plus
+   the `test` and detected-vendor extras. This is the last resolution phase.
+
+For packages installed into the active Python environment, target-project
+requirements have final authority but uv installs incrementally. An exact pin
+or constraint replaces an earlier incompatible image/central version; a
+currently installed version that already satisfies the target requirement may
+be retained. If the target project itself has the same distribution name as an
+installed wheel, its editable install becomes active; disable the redundant
+central package, as the `FlagGems` repository does for `flag-gems`. A package
+listed in `[tool.uv].exclude-dependencies` is omitted from target resolution,
+so the image/central version remains active.
+
+Do not treat `priority` as a dependency-conflict resolver. It orders central
+install commands only; the target install always runs afterward. Also treat
+`target` packages separately: they live outside the active environment and are
+activated through a prepended `PYTHONPATH`, so a same-name active-environment
+distribution can coexist and may not override the target directory. Avoid that
+combination unless it is deliberate and tested.
 
 FlagTree remains a configured-package specialization. Its backend package uses
 `priority: 100` and `target: /opt/flagtree`. The backend YAML is the sole

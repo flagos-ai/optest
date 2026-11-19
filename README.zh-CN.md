@@ -654,6 +654,20 @@ uv pip install --python /path/to/active/python -e '.[test,nvidia]'
 与 uv 的解析版本保持一致，可能替换 numpy 等软件包。因此，目标专用的软件包名称和排除策略
 应保留在目标仓库的 `pyproject.toml` 中，而不是放入 `repos.yaml` 或工作流。
 
+目标仓库负责维护自身应用和测试依赖契约：
+
+- 所有 backend 都需要的依赖放入 `[project].dependencies`。
+- 共享的测试专用依赖放入 `[project.optional-dependencies].test`。
+- backend/厂商专用依赖放入以标准化厂商名命名的 optional group，例如 `nvidia`、
+  `ascend` 或 `kunlunxin`。
+- 只有当运行时镜像或通用配置环境有意提供兼容构建，并且需要 uv 保持其不变时，才使用
+  `[tool.uv].exclude-dependencies`。
+
+不要因为只有一个目标仓库需要某项依赖，就把它加入 optest 的中央 `deps` map。中央
+`deps` 用于准备共享测试环境、供多个目标仓库共同使用的软件包，或无法放入目标项目的
+硬件/仓库例外。将项目自身依赖保留在目标仓库 `pyproject.toml` 中，可以让本地安装和 CI
+解析出相同环境。
+
 ### FlagTree 升级
 
 工作流会在安装 `optest` 之后、探测 GPU 之前，由通用 package 升级步骤用后端配置的
@@ -777,6 +791,127 @@ package key：
 `--index-url VALUE`，`no_deps: true` 转为 `--no-deps`，列表值会重复该选项，省略字段则
 不产生参数。`target` 还会启用 `<target>.new` staging 替换，并将该路径持久写入
 `PYTHONPATH`。
+
+#### 新增和排除通用 package
+
+以下配置只用于共享测试环境 package。package name 是 YAML mapping key；任何覆盖层都必须
+使用完全相同的 key。
+
+为所有仓库的所有已启用 backend 添加 package：
+
+```yaml
+# .github/configs/repos.yaml
+defaults:
+  deps:
+    shared-profiler:
+      display_name: Shared profiler
+      priority: 300
+      version: 2.4.1
+      index_url: https://example.invalid/simple
+      no_deps: true
+```
+
+为所有启用了某个硬件 backend 的仓库添加共享 package：
+
+```yaml
+# .github/configs/backends/H800.yaml
+deps:
+  nvidia-debug-runtime:
+    display_name: NVIDIA debug runtime
+    priority: 400
+    version: 1.8.0
+```
+
+为整个仓库排除继承的 package，或只排除该仓库的某个 backend：
+
+```yaml
+# .github/configs/repos.yaml
+repos:
+  SomeRepo:
+    deps:
+      default:
+        shared-profiler:
+          enabled: false       # SomeRepo 的所有已启用 backend
+      H800:
+        nvidia-debug-runtime:
+          enabled: false       # 仅 SomeRepo/H800
+```
+
+若要为某个仓库跳过整个 backend job，应使用独立的 backend 开关：
+
+```yaml
+repos:
+  SomeRepo:
+    backends:
+      H800: {enabled: false}    # 从 matrix 删除 SomeRepo/H800
+```
+
+`backends.H800.enabled: false` 会跳过该组合的所有 package 和测试 job；
+`deps.H800.<package>.enabled: false` 只跳过该 package，SomeRepo 的 H800 测试仍会运行。
+
+为一个仓库，或一个仓库/backend 组合新增例外的中央 package：
+
+```yaml
+repos:
+  SomeRepo:
+    deps:
+      default:
+        shared-ci-helper:
+          version: 3.1.0       # SomeRepo 的所有已启用 backend
+          priority: 500
+      910B:
+        ascend-ci-helper:
+          version: 4.2.0       # 仅 SomeRepo/910B
+          priority: 500
+```
+
+这些仓库范围的中央配置属于例外。SomeRepo 自身拥有的 package 应优先写入
+`SomeRepo/pyproject.toml`。若要重新启用在较低层被禁用的 package，应在更具体层显式设置
+`enabled: true`；省略 `enabled` 会继承前层状态。
+
+package 字段定义如下：
+
+| 字段 | 行为 |
+| --- | --- |
+| `<package-name>` | 用于合并四层配置并生成安装 requirement 的精确 distribution key。连字符和下划线写法是不同的配置 key。 |
+| `display_name` | 仅用于人类可读的日志标签；不会改变 distribution name、import name、合并标识或安装顺序。默认值为 package key。 |
+| `priority` | 控制通用 package 安装顺序的整数：数值较小者先执行，默认 `1000`；相同值按 package key 排序。它不会改变配置合并优先级。 |
+| `enabled` | 最终合并后的布尔值，决定是否安装。默认 `true`，最后一个显式值生效。 |
+| `version` | 生成精确 requirement `<package>==<version>`；省略时安装裸 package requirement。 |
+| `target` | 规范化的具体绝对安装目录，例如 `/opt/flagtree`。工作流先安装至 `<target>.new`，成功后才替换旧目录，并将 `target` 前置到 `PYTHONPATH`。普通活动环境 package 应省略该字段。 |
+| 其他字段 | 转为 uv 参数，例如 `index_url` 变成 `--index-url`、`no_deps: true` 变成 `--no-deps`，列表值会重复该参数。 |
+
+`target` 不是普通虚拟环境前缀。target-directory package 可以与活动 Python 环境中的同名
+distribution 共存，并且前置的 `PYTHONPATH` 可能拥有 import 优先级。除非明确需要这种共存，
+否则不要在目标仓库中再次声明同一 distribution。
+
+#### 安装顺序和同名 package
+
+工作流按以下顺序构建环境：
+
+| 阶段 | 来源 | 结果 |
+| ---: | --- | --- |
+| 1 | backend 容器镜像 | 提供初始 Python 环境和厂商运行时。 |
+| 2 | optest checkout | 安装调度器及其自身 package metadata。 |
+| 3 | 合并后的中央 `deps` | 按 `priority` 升序、再按 package key 安装启用项，并立即校验精确 `version` pin。 |
+| 4 | GPU 探测 | 选择目标仓库的厂商 extra。 |
+| 5 | 目标仓库 `pyproject.toml` | 以 editable 模式安装基础项目以及 `test` 和检测到的厂商 extra；这是测试前最后一次依赖解析。 |
+
+对于普通活动环境 package，较晚执行的目标安装对目标项目声明的 requirement 具有最终控制权，
+但 uv 是增量安装，而不是无条件覆盖：
+
+- 如果目标仓库声明的精确版本或版本范围与当前安装版本不兼容，uv 会安装满足条件的版本，
+  必要时替换镜像或中央 `deps` 先前安装的版本。
+- 如果当前版本已经满足目标 requirement，uv 可以保留它；“安装阶段更晚”本身不会强制重装。
+- 如果目标项目自身的 distribution name 与已安装 wheel 相同，目标项目的 editable 安装会成为
+  活动的项目 distribution。`FlagGems` 仓库因此禁用了全局 `flag-gems` 配置。
+- `[tool.uv].exclude-dependencies` 中的名称不会参与目标依赖解析。镜像或中央 `deps` 提供的
+  兼容版本会保持活动状态，目标 pin 不会替换它。
+
+因此每个 requirement 应只有一个明确 owner：仓库自身依赖以 `pyproject.toml` 为准，中央
+`deps` 负责共享环境准备，exclusion 只用于有意由镜像/共享运行时负责的软件包。`priority`
+只控制中央安装命令的顺序，不是通用依赖冲突解析器；目标仓库安装始终发生在所有中央
+priority 之后。
 
 ### 持久化软件包缓存
 

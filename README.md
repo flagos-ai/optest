@@ -717,6 +717,23 @@ replace packages such as numpy. Target-specific package names and exclusion
 policy therefore stay in the target repository's `pyproject.toml`, not in
 `repos.yaml` or the workflow.
 
+The target repository owns its application and test dependency contract:
+
+- Put dependencies required on every backend in `[project].dependencies`.
+- Put shared test-only dependencies in `[project.optional-dependencies].test`.
+- Put backend/vendor-specific dependencies in the optional group named after
+  the normalized vendor, such as `nvidia`, `ascend`, or `kunlunxin`.
+- Use `[tool.uv].exclude-dependencies` only when the runtime image or the
+  configured shared environment intentionally supplies a compatible build that
+  uv must leave untouched.
+
+Do not add a dependency to optest's central `deps` map merely because one
+target repository needs it. Central `deps` exists for packages that prepare the
+shared test environment, are used by multiple target repositories, or require
+hardware/repository exceptions that cannot live in a target project. Keeping
+project-owned requirements in the target `pyproject.toml` makes local installs
+and CI resolve the same environment.
+
 ### FlagTree upgrade
 
 After installing `optest` and before probing GPUs, the generic package-upgrade
@@ -863,6 +880,141 @@ and `version`) are not passed to uv. Every other key becomes a
 `--index-url VALUE`, `no_deps: true` becomes `--no-deps`, lists repeat the
 option, and omitted keys produce no argument. `target` additionally enables
 staged replacement at `<target>.new` and persists that path on `PYTHONPATH`.
+
+#### Adding and excluding configured packages
+
+Use these recipes only for shared test-environment packages. The package name
+is the YAML mapping key and must be identical in every layer that overrides it.
+
+Add a package to every enabled backend of every repository:
+
+```yaml
+# .github/configs/repos.yaml
+defaults:
+  deps:
+    shared-profiler:
+      display_name: Shared profiler
+      priority: 300
+      version: 2.4.1
+      index_url: https://example.invalid/simple
+      no_deps: true
+```
+
+Add a hardware-specific shared package to every repository that enables that
+backend:
+
+```yaml
+# .github/configs/backends/H800.yaml
+deps:
+  nvidia-debug-runtime:
+    display_name: NVIDIA debug runtime
+    priority: 400
+    version: 1.8.0
+```
+
+Disable an inherited package for an entire repository, or only for one of its
+backends:
+
+```yaml
+# .github/configs/repos.yaml
+repos:
+  SomeRepo:
+    deps:
+      default:
+        shared-profiler:
+          enabled: false       # all enabled SomeRepo backends
+      H800:
+        nvidia-debug-runtime:
+          enabled: false       # SomeRepo/H800 only
+```
+
+To skip the entire backend job for a repository, use the separate backend
+switch instead:
+
+```yaml
+repos:
+  SomeRepo:
+    backends:
+      H800: {enabled: false}    # removes SomeRepo/H800 from the matrix
+```
+
+`backends.H800.enabled: false` skips every package and the test job for that
+combination. `deps.H800.<package>.enabled: false` skips only that package and
+still runs SomeRepo on H800.
+
+Add an exceptional central package for one repository, or one repository and
+backend combination:
+
+```yaml
+repos:
+  SomeRepo:
+    deps:
+      default:
+        shared-ci-helper:
+          version: 3.1.0       # every enabled SomeRepo backend
+          priority: 500
+      910B:
+        ascend-ci-helper:
+          version: 4.2.0       # SomeRepo/910B only
+          priority: 500
+```
+
+These repository-scoped central entries are exceptions. Prefer
+`SomeRepo/pyproject.toml` for packages owned by SomeRepo. To re-enable a package
+disabled by a lower layer, set `enabled: true` at the more specific layer; an
+omitted `enabled` inherits the earlier value.
+
+The package fields have these meanings:
+
+| Field | Behavior |
+| --- | --- |
+| `<package-name>` | Exact distribution key used to merge the four configuration layers and build the install requirement. Hyphenated and underscored spellings are different configuration keys. |
+| `display_name` | Human-readable log label only. It does not change the distribution name, import name, merge identity, or install order. Defaults to the package key. |
+| `priority` | Integer controlling configured-package install order: lower values run first; default `1000`; equal values sort by package key. It does not change configuration merge precedence. |
+| `enabled` | Final merged boolean controlling whether the package is installed. Defaults to `true`; the last explicit value wins. |
+| `version` | Produces the exact requirement `<package>==<version>`. Omitting it installs the bare package requirement. |
+| `target` | Normalized, specific absolute install directory such as `/opt/flagtree`. The workflow installs into `<target>.new`, replaces the old directory only after success, and prepends `target` to `PYTHONPATH`. Omit it for normal active-environment packages. |
+| Other fields | Converted to uv options: for example `index_url` becomes `--index-url`, `no_deps: true` becomes `--no-deps`, and list values repeat the option. |
+
+`target` is not a generic virtual-environment prefix. A target-directory package
+can coexist with a distribution in the active Python environment, and the
+prepended `PYTHONPATH` may take import precedence. Avoid declaring the same
+distribution in a target repository unless that coexistence is deliberate.
+
+#### Installation order and same-name packages
+
+The workflow builds the environment in this order:
+
+| Phase | Source | Result |
+| ---: | --- | --- |
+| 1 | Backend container image | Supplies the initial Python environment and vendor runtime. |
+| 2 | optest checkout | Installs the scheduler and its own package metadata. |
+| 3 | Merged central `deps` | Installs enabled packages by ascending `priority`, then package key. Exact `version` pins are verified immediately. |
+| 4 | GPU detection | Selects the target repository's vendor extra. |
+| 5 | Target repository `pyproject.toml` | Installs the base project editable plus `test` and detected-vendor extras. This is the final dependency-resolution phase before tests. |
+
+For normal active-environment packages, the later target install has final
+authority over requirements declared by the target project, but uv is
+incremental rather than an unconditional overwrite:
+
+- If the target declares an exact or constrained version that the installed
+  package does not satisfy, uv installs a satisfying version, replacing the
+  earlier image or central-`deps` version when necessary.
+- If the installed version already satisfies the target requirement, uv can
+  keep it; “installed later” does not by itself force a reinstall.
+- If the target project itself has the same distribution name as an installed
+  wheel, the editable target install becomes the active project distribution.
+  This is why the `FlagGems` repository disables the global `flag-gems` entry.
+- A name in `[tool.uv].exclude-dependencies` is omitted from target dependency
+  resolution. The compatible version supplied by the image or central `deps`
+  remains active; the target pin does not replace it.
+
+Therefore, keep one owner for each requirement. Use `pyproject.toml` as the
+authority for repository-owned dependencies, use central `deps` for shared
+environment preparation, and use exclusions only for intentional image/shared
+runtime ownership. `priority` orders central install commands; it is not a
+general dependency-conflict resolver, and the target install always occurs
+after all central priorities.
 
 ### Persistent package cache
 

@@ -61,7 +61,6 @@ deps:
   flagtree-ascend-cann9.0.0:
     display_name: FlagTree
     priority: 100
-    version_input: flagtree_version
     version: 0.7.0.dev20261115
     index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
     no_deps: true

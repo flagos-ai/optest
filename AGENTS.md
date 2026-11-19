@@ -70,8 +70,8 @@ For every new hardware backend:
    `output_base_dir`, and any exceptional hardware-level dependencies. When
    FlagTree publishes a compatible backend wheel, add it under `deps` using the
    exact distribution name as the key, with its full default `version`,
-   `index_url`, `priority: 100`, `version_input: flagtree_version`,
-   `no_deps: true`, and `target: /opt/flagtree`. Omit that package when no
+   `index_url`, `priority: 100`, `no_deps: true`, and
+   `target: /opt/flagtree`. Omit that package when no
    compatible distribution exists; the workflow then retains the
    image-provided `/opt/flagtree` tree.
 2. Add the backend under `backends` for each applicable repository in
@@ -158,8 +158,8 @@ does not affect configuration precedence.
 
 The package name is the mapping key. `version` produces `package==version`; an
 omitted version installs the bare package. `display_name`, `enabled`,
-`priority`, `version`, and `version_input` are workflow control fields. Every
-other field maps from snake_case to a `uv pip install --kebab-case` option:
+`priority`, and `version` are workflow control fields. Every other field maps
+from snake_case to a `uv pip install --kebab-case` option:
 booleans add the flag only when true, scalar values add an option/value pair,
 and lists repeat the option. An omitted `index_url` keeps the workflow-selected
 package index; an explicit index remains command-local.
@@ -171,13 +171,10 @@ successful replacement, and verify a pinned version through `ACTIVE_PYTHON`.
 Never remove the old target before staging succeeds.
 
 FlagTree remains a configured-package specialization. Its backend package uses
-`priority: 100`, `version_input: flagtree_version`, and
-`target: /opt/flagtree`. The optional dispatch input accepts a full daily or
-release version, or `YYYYMMDD`; the date form keeps each backend's configured
-version base. Before applying an override, the matrix builder checks the exact
-version in that package and index. A missing version or index failure warns and
-falls back only that backend. A date cannot be derived from a fixed release
-default, but an available complete release version can override it.
+`priority: 100` and `target: /opt/flagtree`. The backend YAML is the sole
+version source: the workflow-dispatch form has no FlagTree version override and
+the matrix builder does not query package indexes. When changing a pin, update
+that backend's exact `version` and confirm it exists at `index_url`.
 
 FlagGems is the global default package with `priority: 200`, so FlagTree is
 installed first. The `FlagGems` repository disables its inherited `flag-gems`
@@ -193,7 +190,7 @@ When changing this flow, keep the resolution rules synchronized in
 four layers, field inheritance, default enablement, disable inheritance,
 explicit re-enablement at every later layer, final disablement at every later
 layer, backend-level disablement, priority ordering, and the package-name
-tie-breaker, plus FlagTree version overrides and safe target replacement.
+tie-breaker, fixed FlagTree version selection, and safe target replacement.
 
 ## FlagGems Per-Vendor Operator Lists
 

@@ -14,7 +14,6 @@
 
 import json
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -43,10 +42,8 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         self,
         repo,
         *,
-        flagtree_version="",
         vendors="",
         cwd=ROOT,
-        return_output=False,
     ):
         prepare_steps = self.workflow["jobs"]["prepare"]["steps"]
         script = next(
@@ -58,7 +55,6 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 **os.environ,
                 "REPO_INPUT": repo,
                 "REF_INPUT": "",
-                "FLAGTREE_VERSION_INPUT": flagtree_version,
                 "VENDORS_INPUT": vendors,
                 "OPS_INPUT": "",
                 "EXCLUDE_OPS_INPUT": "",
@@ -82,8 +78,6 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 if line.startswith("matrix_container=")
             )
         matrix = json.loads(matrix_line.removeprefix("matrix_container="))
-        if return_output:
-            return matrix, completed.stdout
         return matrix
 
     @staticmethod
@@ -306,7 +300,6 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     {
                         "display_name": "FlagTree",
                         "priority": 100,
-                        "version_input": "flagtree_version",
                         "version": version,
                         "index_url": index_url,
                         "no_deps": True,
@@ -336,221 +329,34 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 )
                 self.assertEqual(config["container_image"], image)
 
-    def test_matrix_checks_overrides_and_falls_back_per_backend(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            copytree(ROOT / ".github/configs", root / ".github/configs")
-            index_root = root / "simple"
-            available_versions = {
-                "flagtree-nvidia": {
-                    "0.7.1.dev20261015",
-                    "0.7.1.dev20261115",
-                    "0.8.0.dev20261201",
-                },
-                "flagtree-ascend-cann9.0.0": {"0.8.0.dev20261201"},
-                "flagtree-hcu": {
-                    "0.7.1.dev20261015",
-                    "0.7.1.dev20261104",
-                    "0.7.1a2+hcu3.6",
-                },
-            }
-            for package_name, versions in available_versions.items():
-                normalized_name = re.sub(r"[-_.]+", "-", package_name).lower()
-                wheel_name = re.sub(r"[-_.]+", "_", package_name).lower()
-                package_dir = index_root / normalized_name
-                package_dir.mkdir(parents=True)
-                wheel_urls = [
-                    f"../../packages/{normalized_name}/"
-                    f"{wheel_name}-{version}-py3-none-any.whl"
-                    for version in sorted(versions)
-                ]
-                if package_name == "flagtree-hcu":
-                    index_contents = json.dumps(
-                        {"files": [{"url": url} for url in wheel_urls]}
-                    )
-                else:
-                    index_contents = "\n".join(
-                        f'<a href="{url}">{url}</a>' for url in wheel_urls
-                    )
-                (package_dir / "index.html").write_text(
-                    index_contents,
-                    encoding="utf-8",
-                )
+    def test_matrix_uses_fixed_backend_flagtree_versions_without_index_queries(self):
+        selected = self.build_matrix(
+            "FlagAttention",
+            vendors="Nvidia,Ascend,Hygon",
+        )
+        selected_by_name = {backend["name"]: backend for backend in selected["include"]}
+        self.assertEqual(
+            self.upgrade_dep(selected_by_name["H800"], "flagtree-nvidia")["version"],
+            "0.7.1.dev20261115",
+        )
+        self.assertEqual(
+            self.upgrade_dep(selected_by_name["910B"], "flagtree-ascend-cann9.0.0")[
+                "version"
+            ],
+            "0.7.0.dev20261115",
+        )
+        self.assertEqual(
+            self.upgrade_dep(selected_by_name["BW1000"], "flagtree-hcu")["version"],
+            "0.7.1.dev20261104",
+        )
 
-            index_url = index_root.as_uri()
-            for backend_name in ("H800", "910B", "BW1000"):
-                backend_path = root / f".github/configs/backends/{backend_name}.yaml"
-                backend = yaml.safe_load(backend_path.read_text(encoding="utf-8"))
-                package_name = next(iter(backend["deps"]))
-                backend["deps"][package_name]["index_url"] = index_url
-                backend_path.write_text(
-                    yaml.safe_dump(backend, sort_keys=False),
-                    encoding="utf-8",
-                )
-
-            defaults = self.build_matrix(
-                "FlagAttention",
-                vendors="Nvidia,Ascend,Hygon",
-                cwd=root,
-            )
-            default_by_name = {
-                backend["name"]: backend for backend in defaults["include"]
-            }
-            self.assertEqual(
-                self.upgrade_dep(default_by_name["H800"], "flagtree-nvidia")["version"],
-                "0.7.1.dev20261115",
-            )
-            self.assertEqual(
-                self.upgrade_dep(default_by_name["910B"], "flagtree-ascend-cann9.0.0")[
-                    "version"
-                ],
-                "0.7.0.dev20261115",
-            )
-            self.assertEqual(
-                self.upgrade_dep(default_by_name["BW1000"], "flagtree-hcu")["version"],
-                "0.7.1.dev20261104",
-            )
-
-            dated, dated_output = self.build_matrix(
-                "FlagAttention",
-                flagtree_version="20261015",
-                vendors="Nvidia,Ascend,Hygon",
-                cwd=root,
-                return_output=True,
-            )
-            dated_by_name = {backend["name"]: backend for backend in dated["include"]}
-            self.assertEqual(
-                self.upgrade_dep(dated_by_name["H800"], "flagtree-nvidia")["version"],
-                "0.7.1.dev20261015",
-            )
-            self.assertEqual(
-                self.upgrade_dep(dated_by_name["910B"], "flagtree-ascend-cann9.0.0")[
-                    "version"
-                ],
-                "0.7.0.dev20261115",
-            )
-            self.assertEqual(
-                self.upgrade_dep(dated_by_name["BW1000"], "flagtree-hcu")["version"],
-                "0.7.1.dev20261015",
-            )
-            self.assertIn("::warning title=FlagTree version fallback::", dated_output)
-            self.assertIn(
-                "910B: flagtree-ascend-cann9.0.0==0.7.0.dev20261015 is unavailable",
-                dated_output,
-            )
-            full_daily = "0.8.0.dev20261201"
-            overridden, overridden_output = self.build_matrix(
-                "FlagAttention",
-                flagtree_version=full_daily,
-                vendors="Nvidia,Ascend,Hygon",
-                cwd=root,
-                return_output=True,
-            )
-            overridden_by_name = {
-                backend["name"]: backend for backend in overridden["include"]
-            }
-            self.assertEqual(
-                self.upgrade_dep(overridden_by_name["H800"], "flagtree-nvidia")[
-                    "version"
-                ],
-                full_daily,
-            )
-            self.assertEqual(
-                self.upgrade_dep(
-                    overridden_by_name["910B"], "flagtree-ascend-cann9.0.0"
-                )["version"],
-                full_daily,
-            )
-            self.assertEqual(
-                self.upgrade_dep(overridden_by_name["BW1000"], "flagtree-hcu")[
-                    "version"
-                ],
-                "0.7.1.dev20261104",
-            )
-            self.assertIn(
-                "BW1000: flagtree-hcu==0.8.0.dev20261201 is unavailable",
-                overridden_output,
-            )
-
-            release_version = "0.7.1a2+hcu3.6"
-            released, released_output = self.build_matrix(
-                "FlagAttention",
-                flagtree_version=release_version,
-                vendors="Nvidia,Ascend,Hygon",
-                cwd=root,
-                return_output=True,
-            )
-            released_by_name = {
-                backend["name"]: backend for backend in released["include"]
-            }
-            self.assertEqual(
-                self.upgrade_dep(released_by_name["BW1000"], "flagtree-hcu")["version"],
-                release_version,
-            )
-            self.assertEqual(
-                self.upgrade_dep(released_by_name["H800"], "flagtree-nvidia")[
-                    "version"
-                ],
-                "0.7.1.dev20261115",
-            )
-            self.assertEqual(
-                self.upgrade_dep(released_by_name["910B"], "flagtree-ascend-cann9.0.0")[
-                    "version"
-                ],
-                "0.7.0.dev20261115",
-            )
-            self.assertIn(
-                "H800: flagtree-nvidia==0.7.1a2+hcu3.6 is unavailable",
-                released_output,
-            )
-
-            prefix_collision, collision_output = self.build_matrix(
-                "FlagAttention",
-                flagtree_version="0.7.1",
-                vendors="Nvidia",
-                cwd=root,
-                return_output=True,
-            )
-            self.assertEqual(
-                self.upgrade_dep(prefix_collision["include"][0], "flagtree-nvidia")[
-                    "version"
-                ],
-                "0.7.1.dev20261115",
-            )
-            self.assertIn(
-                "H800: flagtree-nvidia==0.7.1 is unavailable",
-                collision_output,
-            )
-
-            h800_path = root / ".github/configs/backends/H800.yaml"
-            h800 = yaml.safe_load(h800_path.read_text(encoding="utf-8"))
-            h800["deps"]["flagtree-nvidia"]["index_url"] = (
-                root / "missing-index"
-            ).as_uri()
-            h800_path.write_text(
-                yaml.safe_dump(h800, sort_keys=False),
-                encoding="utf-8",
-            )
-            failed_query, failed_query_output = self.build_matrix(
-                "FlagAttention",
-                flagtree_version=full_daily,
-                vendors="Nvidia",
-                cwd=root,
-                return_output=True,
-            )
-            self.assertEqual(
-                self.upgrade_dep(failed_query["include"][0], "flagtree-nvidia")[
-                    "version"
-                ],
-                "0.7.1.dev20261115",
-            )
-            self.assertIn(
-                "H800: failed to check flagtree-nvidia==0.8.0.dev20261201",
-                failed_query_output,
-            )
-            self.assertIn(
-                "using configured version 0.7.1.dev20261115", failed_query_output
-            )
+        prepare_steps = self.workflow["jobs"]["prepare"]["steps"]
+        build_matrix = next(
+            step for step in prepare_steps if step.get("id") == "build-matrix"
+        )
+        self.assertNotIn("FLAGTREE_VERSION_INPUT", build_matrix["env"])
+        self.assertNotIn("urlopen", build_matrix["run"])
+        self.assertNotIn("flagtree_version", build_matrix["run"])
 
     def test_dependency_layers_enablement_precedence_and_install_order(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -767,7 +573,6 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     **os.environ,
                     "REPO_INPUT": "FlagAttention",
                     "REF_INPUT": "",
-                    "FLAGTREE_VERSION_INPUT": "",
                     "VENDORS_INPUT": "Nvidia",
                     "OPS_INPUT": "",
                     "EXCLUDE_OPS_INPUT": "",

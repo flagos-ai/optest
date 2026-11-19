@@ -665,7 +665,6 @@ deps:
   flagtree-nvidia:
     display_name: FlagTree
     priority: 100
-    version_input: flagtree_version
     version: 0.7.1.dev20261115
     index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
     no_deps: true
@@ -680,18 +679,9 @@ BW1000 使用 FlagOS daily index 中的 `flagtree-hcu==0.7.1.dev20261104`。
 其 backend YAML 将之前兼容的 `flagtree==0.7.1a1+hcu3.6` release 配置保留为
 注释状态，以便必要时回退。
 
-可选的 workflow-dispatch 输入 `flagtree_version` 支持以下覆盖形式：
-
-- 完整的 daily 或 release 版本（例如 `0.7.1.dev20261015` 或
-  `0.7.1a1+hcu3.6`）会在每个选中后端上原样检查。
-- 8 位日期（例如 `20261015`）会保留各后端配置的版本基线。因此同一次运行中，
-  H800 会解析为 `0.7.1.dev20261015`，910B 会解析为 `0.7.0.dev20261015`。
-
-prepare job 会先在各后端的 package key 和 `index_url` 中检查精确版本，再将覆盖值
-写入 matrix。如果版本不存在或 index 查询失败，job 会打印 `FlagTree version fallback`
-warning，并继续使用该后端 YAML 的默认版本。其他后端仍可独立使用自身存在的覆盖版本，
-因此单个厂商缺少构建不会导致整个运行失败。日期无法从固定 release 默认值展开；此时该后端
-会 warning 并保留 release pin。输入为空时直接使用各后端默认值，不查询 index。
+backend YAML 是 FlagTree 版本的唯一来源。升级 wheel 时需要修改对应 backend 的精确
+`version`，并确认制品存在于配置的 `index_url`。workflow-dispatch 页面不提供运行时
+FlagTree 版本覆盖，prepare job 也不会查询 package index。
 
 `Upgrade configured packages (FlagTree, FlagGems)` 通用步骤通过
 `uv pip install --no-deps --target /opt/flagtree.new` 将精确配置的厂商 wheel
@@ -782,7 +772,7 @@ package key：
 `1000`）安装；相同 priority 再按 package name 的字典序安装。
 
 `version` 只用于生成 `package==version`；省略时安装裸 package name。控制字段
-（`enabled`、`display_name`、`priority`、`version`、`version_input`）不会传给 uv。
+（`enabled`、`display_name`、`priority`、`version`）不会传给 uv。
 其他字段会将下划线转换为连字符并成为 `uv pip install` 参数：`index_url` 转为
 `--index-url VALUE`，`no_deps: true` 转为 `--no-deps`，列表值会重复该选项，省略字段则
 不产生参数。`target` 还会启用 `<target>.new` staging 替换，并将该路径持久写入

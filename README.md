@@ -730,7 +730,6 @@ deps:
   flagtree-nvidia:
     display_name: FlagTree
     priority: 100
-    version_input: flagtree_version
     version: 0.7.1.dev20261115
     index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
     no_deps: true
@@ -745,23 +744,11 @@ BW1000 uses `flagtree-hcu==0.7.1.dev20261104` from the FlagOS daily index. Its
 backend YAML retains the previous compatible `flagtree==0.7.1a1+hcu3.6`
 release mapping as a commented fallback.
 
-The optional `flagtree_version` workflow-dispatch input requests an override in
-one of these forms:
-
-- A complete daily or release version, such as `0.7.1.dev20261015` or
-  `0.7.1a1+hcu3.6`, is checked unchanged for every selected backend.
-- An eight-digit date such as `20261015` keeps each backend's configured
-  version base. The same run therefore resolves H800 to
-  `0.7.1.dev20261015` and 910B to `0.7.0.dev20261015`.
-
-Before adding an override to the matrix, the prepare job checks the package key
-and its `index_url`. If that exact version does not exist, or the
-index cannot be queried, the job emits a `FlagTree version fallback` warning
-and keeps that backend's YAML default. Other backends independently use the
-override when their package contains it, so one missing vendor build does not
-fail the whole run. A date cannot be expanded from a fixed release default; in
-that case the backend warns and keeps its release pin. An empty input uses
-every backend default without querying the indexes.
+The backend YAML is the sole source of the FlagTree version. Updating a wheel
+therefore requires changing that backend's exact `version` and confirming that
+the artifact exists at its configured `index_url`. The workflow-dispatch form
+does not expose a runtime FlagTree version override, and the prepare job does
+not query package indexes.
 
 The `Upgrade configured packages (FlagTree, FlagGems)` step installs the exact
 vendor wheel with `uv pip install --no-deps --target
@@ -871,7 +858,7 @@ packages are removed, enabled packages are installed by ascending `priority`
 
 `version` is metadata used to build `package==version`; when omitted, the bare
 package name is installed. Control keys (`enabled`, `display_name`, `priority`,
-`version`, and `version_input`) are not passed to uv. Every other key becomes a
+and `version`) are not passed to uv. Every other key becomes a
 `uv pip install` option with underscores changed to hyphens: `index_url` becomes
 `--index-url VALUE`, `no_deps: true` becomes `--no-deps`, lists repeat the
 option, and omitted keys produce no argument. `target` additionally enables

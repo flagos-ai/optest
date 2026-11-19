@@ -67,10 +67,10 @@ defaults:
   # selection under repos.<repo>.backends is separate: a disabled backend is
   # removed before any package settings are resolved.
   #
-  # `version` pins the requirement. `display_name`, `enabled`, `priority`, and
-  # `version_input` control workflow behavior; every other key is converted
-  # from snake_case to a `uv pip install --kebab-case` option. Enabled packages
-  # are installed by ascending `priority` (default 1000), then package name.
+  # `version` pins the requirement. `display_name`, `enabled`, and `priority`
+  # control workflow behavior; every other key is converted from snake_case to
+  # a `uv pip install --kebab-case` option. Enabled packages are installed by
+  # ascending `priority` (default 1000), then package name.
   # Artifact: packages/flag-gems/5.5.0.dev20261118/
   #           flag_gems-5.5.0.dev20261118-py3-none-any.whl
   deps:

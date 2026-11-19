@@ -147,10 +147,7 @@ class NotifyFeishuRefTest(unittest.TestCase):
         self.assertIn(
             "Empty = exclude none", dispatch_inputs["exclude_ops"]["description"]
         )
-        self.assertIn("flagtree_version", dispatch_inputs)
-        self.assertEqual(dispatch_inputs["flagtree_version"]["default"], "")
-        self.assertIn("YYYYMMDD", dispatch_inputs["flagtree_version"]["description"])
-        self.assertIn("fall back", dispatch_inputs["flagtree_version"]["description"])
+        self.assertNotIn("flagtree_version", dispatch_inputs)
         prepare_steps = workflow["jobs"]["prepare"]["steps"]
         build_matrix = next(
             step for step in prepare_steps if step.get("id") == "build-matrix"
@@ -163,6 +160,7 @@ class NotifyFeishuRefTest(unittest.TestCase):
             build_matrix["env"]["EXCLUDE_OPS_INPUT"],
             "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.exclude_ops || '' }}",
         )
+        self.assertNotIn("FLAGTREE_VERSION_INPUT", build_matrix["env"])
         self.assertIn(
             "checkout_ref = os.environ.get('REF_INPUT', '').strip() "
             "or rc['default_branch']",

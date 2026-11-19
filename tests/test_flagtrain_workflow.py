@@ -839,7 +839,11 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             step["run"] for step in prepare_steps if step.get("id") == "build-matrix"
         )
 
-        for repo, expected_timeout in (("FlagTrain", 1800), ("FlagGems", 1800)):
+        for repo, expected_timeout in (
+            ("FlagTrain", 1800),
+            ("FlagGems", 1800),
+            ("FlagAttention", 900),
+        ):
             with self.subTest(repo=repo), tempfile.TemporaryDirectory() as directory:
                 output = Path(directory) / "github-output"
                 environment = {
@@ -1011,10 +1015,10 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         self.assertEqual(self.repos["defaults"]["op_cmd_timeout"], 600)
         self.assertEqual(self.repos["repos"]["FlagGems"]["op_cmd_timeout"], 1800)
         self.assertEqual(self.repos["repos"]["FlagTrain"]["op_cmd_timeout"], 1800)
+        self.assertEqual(self.repos["repos"]["FlagAttention"]["op_cmd_timeout"], 900)
         for repo in (
             "FlagGems-vllm",
             "FlagGems-sglang",
-            "FlagAttention",
         ):
             self.assertNotIn("op_cmd_timeout", self.repos["repos"][repo])
 

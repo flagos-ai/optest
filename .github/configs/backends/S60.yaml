@@ -38,8 +38,8 @@ container_options: >-
   --shm-size=16g
   --workdir=/root
 
-# Backend-specific FlagTree daily wheel. The workflow uses this full version
-# unless workflow_dispatch supplies a full version or YYYYMMDD override.
+# Backend-specific FlagTree daily wheel. This backend mapping is the workflow's
+# sole source for the exact package version and index.
 deps:
   flagtree-enflame:
     display_name: FlagTree

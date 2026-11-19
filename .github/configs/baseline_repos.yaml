@@ -37,7 +37,10 @@
 # Note: the per-operator `label` (the framework version each operator was
 # collected against) is detected automatically by the collector from the
 # packages installed in the container, so it needs no per-repo configuration
-# here.
+# here. The nv-baseline workflow's default `incremental` mode compares that
+# label against the committed data/<output> and re-collects only the operators
+# that are missing from it or whose label changed, so a repo whose baseline is
+# published with up-to-date labels costs almost no GPU time to refresh.
 
 org: flagos-ai
 default_repo: FlagGems-vllm

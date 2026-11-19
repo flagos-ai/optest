@@ -230,6 +230,53 @@ When changing the cache derivation, keep it keyed on `output_base_dir` and
 `vendor` (not repository) so vendors share one cache across repositories, and
 update the matching sections in `README.md` and `README.zh-CN.md`.
 
+## NV Baseline Incremental Refresh
+
+`.github/workflows/nv_baseline.yaml` refreshes a published baseline
+(`data/op_<short>_perf_baseline.json`) instead of rebuilding it. Its `mode`
+dispatch input selects how:
+
+- `incremental` (default) re-collects only operators that are absent from the
+  committed baseline or whose stored `label` differs from the framework version
+  installed in the collecting container, and carries every other published
+  entry into the new output unchanged. The produced file is therefore the
+  merged, complete baseline.
+- `full` ignores the committed baseline and re-collects every selected
+  operator, the behavior before the modes existed.
+
+The decision lives in one place, `src/nv_baseline/baseline_refresh.py`
+(`plan_refresh`), which both the single-card collector and the multi-GPU
+scheduler call; neither re-implements the comparison. It also owns
+`detect_label`, the probe for the framework version (`vllm`, `sglang`,
+`deepspeed`) that each operator entry is labeled with. Add a framework to
+`LABEL_FRAMEWORKS` there, not in the collectors.
+
+Behavior worth preserving when changing this flow:
+
+- An operator queued for re-collection whose collection produces nothing
+  (failed, skipped, timed out) keeps its previously published entry and its old
+  label, so a refresh never deletes a known-good operator and the next run
+  retries it. `restored_after_failure` in the output's `_incremental` block
+  records that.
+- An incremental run that finds nothing stale collects nothing and runs no
+  operator subprocess. The classify step grades that as a pass (it tells it
+  apart from a crash by the recorded plan), and the scheduler carries
+  `_environment` and `_scaling_factors` over from the baseline, flagged with
+  `environment_from_baseline`.
+- The `data/` update step refuses to commit an incremental result that holds
+  fewer operators than the file it replaces. Full mode stays exempt, since
+  there a failed operator is intentionally absent and the commit is marked
+  forced.
+- Each published baseline records the plan under `_incremental` (mode, label,
+  collected, retained, per-operator decisions), so a file states which of its
+  operators the run measured. Keep new bookkeeping keys `_`-prefixed; consumers
+  identify operators by the absence of that prefix.
+
+`tests/test_baseline_refresh.py` covers the planner, the scheduler path with a
+stubbed collector subprocess, and the workflow's classify/update steps. The
+published baselines are asserted to be fully labeled: an unlabeled operator
+would make every refresh a full one.
+
 ## Conventions
 
 - Preserve UTF-8 without BOM and Unix line endings.

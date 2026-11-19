@@ -24,13 +24,25 @@
 # Per-repo image + output json name live in .github/configs/baseline_repos.yaml;
 # the `prepare` job resolves them so onboarding a repo is a config-only change.
 #
+# Refresh modes (the `mode` input, default incremental):
+#   incremental - compare every operator module against the committed
+#                 data/<output>.json. An operator whose stored `label` (the
+#                 framework version it was collected against: vllm / sglang /
+#                 deepspeed) equals the version installed in this container is
+#                 carried over unchanged; one that is absent from the baseline
+#                 or carries a different label is re-collected. The produced
+#                 file is the merged baseline, so GPU time is spent only on
+#                 what actually changed.
+#   full        - ignore the committed baseline and re-collect every operator.
+#
 # Example of the collector command this workflow runs:
 #   python3 src/nv_baseline/collect_baseline_nvidia.py \
 #     --device 7 --output op_vllm_perf_baseline.json \
-#     --ops-dir target/baseline
+#     --ops-dir target/baseline \
+#     --mode incremental --baseline data/op_vllm_perf_baseline.json
 name: nv-baseline
-# Per-run title in the Actions list, e.g. "nv-baseline-FlagTrain".
-run-name: nv-baseline-${{ github.event.inputs.repo }}
+# Per-run title in the Actions list, e.g. "nv-baseline-FlagTrain (incremental)".
+run-name: nv-baseline-${{ github.event.inputs.repo }} (${{ github.event.inputs.mode || 'incremental' }})
 
 permissions:
   contents: read
@@ -59,6 +71,14 @@ on:
         description: 'Target repository ref. Empty = the repo default branch.'
         required: false
         default: ''
+      mode:
+        description: 'incremental = only collect operators missing from data/ or whose framework version changed; full = re-collect everything.'
+        required: false
+        type: choice
+        default: incremental
+        options:
+          - incremental
+          - full
       auto_update:
         description: 'Commit the generated baseline json into the optest data/ dir.'
         required: false
@@ -157,6 +177,10 @@ jobs:
       TARGET_REF: ${{ github.event.inputs.ref }}
       # When true, the generated baseline json is committed into data/.
       AUTO_UPDATE: ${{ github.event.inputs.auto_update }}
+      # incremental (default) compares every operator against the committed
+      # data/${OUTPUT} and only re-collects what is missing from it or whose
+      # framework version label changed; full ignores it and re-collects all.
+      MODE: ${{ github.event.inputs.mode || 'incremental' }}
       # Optional vllm version to install before collection (FlagGems-vllm only);
       # empty keeps the baseline image's bundled vllm.
       VLLM_VERSION: ${{ needs.prepare.outputs.vllm_version }}
@@ -402,10 +426,22 @@ jobs:
         run: |
           set -e
           OPS_DIR="${GITHUB_WORKSPACE}/target/baseline"
+          # The committed baseline this refresh compares against. Incremental
+          # mode re-collects only the operators absent from it or whose
+          # framework version label changed, and carries the rest over into
+          # ${OUTPUT} unchanged, so the produced file stays a complete baseline.
+          # A missing file (new repo) simply makes every operator new.
+          BASE_JSON="${GITHUB_WORKSPACE}/data/${OUTPUT}"
           echo "[Collect] Target repo: ${TARGET_REPO}"
           echo "[Collect] Operator dir: ${OPS_DIR}"
           echo "[Collect] Device: ${DEVICE}"
           echo "[Collect] Output: ${OUTPUT}"
+          echo "[Collect] Mode: ${MODE}"
+          if [ -f "${BASE_JSON}" ]; then
+            echo "[Collect] Baseline to compare: ${BASE_JSON}"
+          else
+            echo "[Collect] Baseline to compare: ${BASE_JSON} (absent; every operator counts as new)"
+          fi
           if [ ! -d "${OPS_DIR}" ]; then
             echo "[Collect] ERROR: baseline operator dir not found: ${OPS_DIR}"
             echo "[Collect] The target repo must provide a baseline/ directory."
@@ -415,7 +451,7 @@ jobs:
           # hangs); 3600 = 1h. Overrides the collector's 1800s default.
           OP_TIMEOUT=3600
           echo "[Collect] Per-op timeout: ${OP_TIMEOUT}s"
-          echo "[Collect] Command: python3 src/nv_baseline/collect_baseline_nvidia.py --device ${DEVICE} --output ${OUTPUT} --ops-dir ${OPS_DIR} --op-timeout ${OP_TIMEOUT}"
+          echo "[Collect] Command: python3 src/nv_baseline/collect_baseline_nvidia.py --device ${DEVICE} --output ${OUTPUT} --ops-dir ${OPS_DIR} --op-timeout ${OP_TIMEOUT} --mode ${MODE} --baseline ${BASE_JSON}"
           # Capture the collector's exit code without failing the step; the
           # classify step makes the final call from the produced JSON.
           set +e
@@ -423,7 +459,9 @@ jobs:
             --device "${DEVICE}" \
             --output "${OUTPUT}" \
             --ops-dir "${OPS_DIR}" \
-            --op-timeout "${OP_TIMEOUT}"
+            --op-timeout "${OP_TIMEOUT}" \
+            --mode "${MODE}" \
+            --baseline "${BASE_JSON}"
           rc=$?
           echo "[Collect] collector exit code: ${rc}"
 
@@ -488,7 +526,20 @@ jobs:
               sys.exit(1)
 
           tasks = status.get("tasks", {})
+          incremental = status.get("incremental") or {}
           if not tasks:
+              # An incremental refresh that found nothing stale runs no operator
+              # at all. That is a legitimate pass (the published baseline is
+              # already current), told apart from a crash by the plan the
+              # collector recorded: it exists and collected nothing.
+              if incremental and not incremental.get("collected"):
+                  retained = len(incremental.get("retained", []))
+                  print(
+                      f"[Classify] incremental refresh: nothing to re-collect, "
+                      f"{retained} operator(s) carried over"
+                  )
+                  emit("pass", True)
+                  sys.exit(0)
               print("::error::no operator tasks recorded; collector likely crashed")
               emit("failed", False)
               sys.exit(1)
@@ -532,11 +583,14 @@ jobs:
           else:
               emit("pass", True)
 
-      # Print which operators were newly added, which failed, and which were
-      # skipped in this run. Runs on always() so the summary is available even
+      # Print the refresh decision (what this run re-collected and why, what it
+      # carried over from the committed baseline), plus which operators are new,
+      # failed, or skipped. Runs on always() so the summary is available even
       # when the run is graded failed. Must run BEFORE the data/ update step:
       # "newly added" is the freshly produced operators minus those already in
       # the committed data/${OUTPUT}, and the update step overwrites that file.
+      # In incremental mode the produced file also contains the carried-over
+      # operators, so "newly added" stays the genuinely new ones.
       - name: Summarize collected operators
         if: always()
         shell: python3 {0}
@@ -565,8 +619,11 @@ jobs:
 
           status_path = pathlib.Path(f"{output}.work") / "status.json"
           failed, skipped = [], []
+          incremental = {}
           try:
-              tasks = json.loads(status_path.read_text()).get("tasks", {})
+              status = json.loads(status_path.read_text())
+              tasks = status.get("tasks", {})
+              incremental = status.get("incremental") or {}
               failed = sorted(n for n, t in tasks.items() if t.get("status") == "failed")
               skipped = sorted(
                   n for n, t in tasks.items() if t.get("status") == "skipped"
@@ -579,6 +636,24 @@ jobs:
               print(f"[Summary] {label} ({len(names)}): {body}")
 
           print("::group::Operator summary")
+          if incremental:
+              label = incremental.get("label") or {}
+              label_text = ", ".join(f"{k}={v}" for k, v in sorted(label.items()))
+              print(
+                  f"[Summary] mode: {incremental.get('mode')} "
+                  f"(framework: {label_text or 'none detected'})"
+              )
+              # Measured in this run vs. carried over from data/${OUTPUT}.
+              line("re-collected now", incremental.get("collected", []))
+              print(
+                  f"[Summary] carried over from the committed baseline: "
+                  f"{len(incremental.get('retained', []))}"
+              )
+              # Why each re-collected operator was selected (absent from the
+              # baseline, changed framework version, no comparable label).
+              decisions = incremental.get("decisions") or {}
+              for name in incremental.get("collected", []):
+                  print(f"[Summary]   {name}: {decisions.get(name, 'unknown')}")
           line("newly added", added)
           line("failed", failed)
           line("skipped", skipped)
@@ -604,6 +679,52 @@ jobs:
           if [ ! -f "${SRC}" ]; then
             echo "[Update] ERROR: expected baseline not found: ${SRC}"
             exit 1
+          fi
+          # An incremental refresh republishes the whole baseline (re-collected
+          # plus carried-over operators), so it must never contain fewer
+          # operators than the file it replaces: a failed re-collection keeps
+          # the previous entry instead of dropping it. Refuse rather than commit
+          # a baseline that silently loses operators. Full mode is exempt: there
+          # a failed operator is intentionally absent and the commit message
+          # records the run as forced.
+          if [ "${MODE}" = "incremental" ]; then
+            SRC="${SRC}" DEST="${DEST}" python3 - <<'GUARD'
+          import json
+          import os
+          import pathlib
+          import sys
+
+
+          def ops(path):
+              try:
+                  data = json.loads(pathlib.Path(path).read_text())
+              except (ValueError, OSError):
+                  return None
+              if not isinstance(data, dict):
+                  return None
+              return {k for k in data if not k.startswith("_")}
+
+
+          produced = ops(os.environ["SRC"])
+          committed = ops(os.environ["DEST"])
+          if produced is None:
+              print("::error::produced baseline is unreadable; refusing to commit")
+              sys.exit(1)
+          if committed is None:
+              print("[Update] no readable committed baseline to compare; proceeding")
+              sys.exit(0)
+          lost = sorted(committed - produced)
+          if lost:
+              print(
+                  f"::error::produced baseline drops {len(lost)} operator(s) present "
+                  f"in data/: {', '.join(lost)}; refusing to commit"
+              )
+              sys.exit(1)
+          print(
+              f"[Update] operator count {len(committed)} -> {len(produced)}, "
+              "no operator lost"
+          )
+          GUARD
           fi
           mkdir -p "${DEST_DIR}"
           cp "${SRC}" "${DEST}"

@@ -1041,6 +1041,13 @@ UV_LINK_MODE  = copy
 - `UV_LINK_MODE=copy` is required because the cache and the environment live on
   different filesystems; it also silences the hardlink-fallback warning.
 
+The optest-install step also checks that the runner's `uv` supports
+`uv pip show --target` (known supported baseline: `0.11.30`). An older
+image-provided binary first runs `uv self update 0.11.30`, which inherits
+`UV_CACHE_DIR`; if self-update is unavailable, the step installs
+`uv>=0.11.30` through the existing pip index fallback and `PIP_CACHE_DIR`, then
+activates that Python environment's scripts directory for later steps.
+
 How this behaves across runs:
 
 - **First run (cold cache):** `uv` downloads each wheel once from the configured

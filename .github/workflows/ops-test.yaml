@@ -643,14 +643,38 @@ jobs:
           printf '[Package index] - %s\n' "${PACKAGE_INDEX_URLS[@]}"
 
           ACTIVE_PYTHON=$(command -v python3)
-          if command -v uv >/dev/null 2>&1; then
-            echo "[Install dependencies] uv is already available; skipping installation."
-          else
-            echo "[Install dependencies] Purpose: install uv for target repository dependency resolution"
-            run_with_index_fallback \
-              pip \
-              "uv installation" \
-              "${ACTIVE_PYTHON}" -m pip install uv
+          UV_MIN_VERSION=0.11.30
+
+          uv_supports_target_show() {
+            command -v uv >/dev/null 2>&1 \
+              && uv pip show --help 2>&1 | grep -F -- '--target' >/dev/null
+          }
+
+          if ! uv_supports_target_show; then
+            if command -v uv >/dev/null 2>&1; then
+              echo "[Install dependencies] Existing $(uv --version) lacks 'uv pip show --target'; trying self update."
+              uv self update "${UV_MIN_VERSION}" || true
+              hash -r
+            fi
+            if ! uv_supports_target_show; then
+              echo "[Install dependencies] Installing uv>=${UV_MIN_VERSION} through pip; PIP_CACHE_DIR=${PIP_CACHE_DIR:-<default>}"
+              run_with_index_fallback \
+                pip \
+                "uv installation or upgrade" \
+                "${ACTIVE_PYTHON}" -m pip install --upgrade "uv>=${UV_MIN_VERSION}"
+              UV_SCRIPTS_DIR=$("${ACTIVE_PYTHON}" -c \
+                'import sysconfig; print(sysconfig.get_path("scripts"))')
+              export PATH="${UV_SCRIPTS_DIR}:${PATH}"
+              if [ -n "${GITHUB_PATH:-}" ]; then
+                echo "${UV_SCRIPTS_DIR}" >> "${GITHUB_PATH}"
+              fi
+              hash -r
+            fi
+          fi
+
+          if ! uv_supports_target_show; then
+            echo "[Install dependencies] ERROR: uv pip show --target remains unsupported after upgrade."
+            exit 1
           fi
           echo "[Install dependencies] uv version: $(uv --version)"
           # Install this optest checkout so the workflow exercises the same

@@ -935,6 +935,12 @@ UV_LINK_MODE  = copy
 - 需要设置 `UV_LINK_MODE=copy`，因为缓存目录与环境位于不同的文件系统；它同时也会
   抑制 hardlink 回退的告警。
 
+安装 optest 的步骤还会检查 runner 中的 `uv` 是否支持 `uv pip show --target`
+（已验证的版本基线为 `0.11.30`）。镜像自带版本过旧时，先执行继承
+`UV_CACHE_DIR` 的 `uv self update 0.11.30`；若 self-update 不可用，则通过现有的
+pip 镜像 fallback 和 `PIP_CACHE_DIR` 安装 `uv>=0.11.30`，并为后续步骤启用该
+Python 环境的 scripts 目录。
+
 跨运行的行为如下：
 
 - **首次运行（冷缓存）：** `uv` 从配置的软件包索引下载每个 wheel 一次，并存入

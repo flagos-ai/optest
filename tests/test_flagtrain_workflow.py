@@ -1095,6 +1095,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             uv.write_text(
                 "#!/bin/sh\n"
                 'if [ "$1" = "--version" ]; then echo "uv 0.13.6"; exit 0; fi\n'
+                'if [ "$*" = "pip show --help" ]; then echo "  --target"; exit 0; fi\n'
                 'printf "[fake uv index=%s] %s\\n" "$UV_DEFAULT_INDEX" "$*"\n'
                 'case "$UV_DEFAULT_INDEX" in *tuna*) exit 23 ;; esac\n',
                 encoding="utf-8",
@@ -1129,6 +1130,136 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             self.assertIn(
                 "UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/",
                 github_env.read_text(encoding="utf-8"),
+            )
+
+    def test_old_uv_self_updates_for_target_show_support(self):
+        steps = self.workflow["jobs"]["test-container"]["steps"]
+        script = next(
+            step["run"]
+            for step in steps
+            if step.get("name") == "Configure package index and install optest"
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            updated = root / "uv-updated"
+            uv_log = root / "uv.log"
+            uv = root / "uv"
+            uv.write_text(
+                "#!/bin/sh\n"
+                'printf "UV_CACHE_DIR=%s ARGS=%s\\n" '
+                '"${UV_CACHE_DIR:-}" "$*" >> "$UV_LOG"\n'
+                'if [ "$1" = "--version" ]; then\n'
+                '  if [ -f "$UV_UPDATED" ]; then echo "uv 0.11.30"; '
+                'else echo "uv 0.7.12"; fi\n'
+                "  exit 0\n"
+                "fi\n"
+                'if [ "$*" = "pip show --help" ]; then\n'
+                '  if [ -f "$UV_UPDATED" ]; then echo "  --target"; fi\n'
+                "  exit 0\n"
+                "fi\n"
+                'if [ "$*" = "self update 0.11.30" ]; then '
+                'touch "$UV_UPDATED"; exit 0; fi\n'
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            uv.chmod(0o755)
+            completed = subprocess.run(
+                ["bash", "-e", "-o", "pipefail", "-c", script],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "GITHUB_ENV": str(root / "github-env"),
+                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                    "UV_CACHE_DIR": str(root / "uv-cache"),
+                    "UV_LOG": str(uv_log),
+                    "UV_UPDATED": str(updated),
+                },
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            uv_output = uv_log.read_text(encoding="utf-8")
+            self.assertIn(f"UV_CACHE_DIR={root / 'uv-cache'}", uv_output)
+            self.assertIn("ARGS=self update 0.11.30", uv_output)
+            self.assertIn("uv version: uv 0.11.30", completed.stdout)
+            self.assertNotIn("uv installation or upgrade", completed.stdout)
+
+    def test_old_uv_falls_back_to_cached_pip_upgrade(self):
+        steps = self.workflow["jobs"]["test-container"]["steps"]
+        script = next(
+            step["run"]
+            for step in steps
+            if step.get("name") == "Configure package index and install optest"
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pip_log = root / "pip.log"
+            uv = root / "uv"
+            uv.write_text(
+                "#!/bin/sh\n"
+                'if [ "$1" = "--version" ]; then echo "uv 0.7.12"; exit 0; fi\n'
+                'if [ "$*" = "pip show --help" ]; then exit 0; fi\n'
+                'if [ "$*" = "self update 0.11.30" ]; then exit 42; fi\n'
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            uv.chmod(0o755)
+            scripts_dir = root / "new-bin"
+            scripts_dir.mkdir()
+            new_uv = scripts_dir / "uv"
+            new_uv.write_text(
+                "#!/bin/sh\n"
+                'if [ "$1" = "--version" ]; then echo "uv 0.11.30"; exit 0; fi\n'
+                'if [ "$*" = "pip show --help" ]; then echo "  --target"; exit 0; fi\n'
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            new_uv.chmod(0o755)
+            python = root / "python3"
+            python.write_text(
+                "#!/bin/sh\n"
+                'if [ "$1" = "-m" ] && [ "$2" = "pip" ]; then\n'
+                '  printf "PIP_CACHE_DIR=%s ARGS=%s\\n" '
+                '"${PIP_CACHE_DIR:-}" "$*" >> "$PIP_LOG"\n'
+                "  exit 0\n"
+                "fi\n"
+                'if [ "$1" = "-c" ]; then echo "$UV_SCRIPTS_DIR"; exit 0; fi\n'
+                'exec "$REAL_PYTHON" "$@"\n',
+                encoding="utf-8",
+            )
+            python.chmod(0o755)
+            pip_cache = root / "pip-cache"
+            github_path = root / "github-path"
+            completed = subprocess.run(
+                ["bash", "-e", "-o", "pipefail", "-c", script],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "GITHUB_ENV": str(root / "github-env"),
+                    "GITHUB_PATH": str(github_path),
+                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                    "PIP_CACHE_DIR": str(pip_cache),
+                    "PIP_LOG": str(pip_log),
+                    "REAL_PYTHON": sys.executable,
+                    "UV_SCRIPTS_DIR": str(scripts_dir),
+                },
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            pip_output = pip_log.read_text(encoding="utf-8")
+            self.assertIn(f"PIP_CACHE_DIR={pip_cache}", pip_output)
+            self.assertIn("-m pip install --upgrade uv>=0.11.30", pip_output)
+            self.assertIn("uv version: uv 0.11.30", completed.stdout)
+            self.assertEqual(
+                github_path.read_text(encoding="utf-8"),
+                f"{scripts_dir}\n",
             )
 
     def test_target_install_logs_dependency_sources_commands_and_results(self):

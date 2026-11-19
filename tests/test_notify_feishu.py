@@ -367,10 +367,15 @@ class NotifyFeishuRefTest(unittest.TestCase):
             install_optest["run"],
         )
         self.assertIn(
-            '"${ACTIVE_PYTHON}" -m pip install uv',
+            "UV_MIN_VERSION=0.11.30",
             install_optest["run"],
         )
-        self.assertNotIn("pip install --upgrade uv", install_optest["run"])
+        self.assertIn("uv pip show --help", install_optest["run"])
+        self.assertIn('uv self update "${UV_MIN_VERSION}"', install_optest["run"])
+        self.assertIn(
+            '"${ACTIVE_PYTHON}" -m pip install --upgrade "uv>=${UV_MIN_VERSION}"',
+            install_optest["run"],
+        )
         self.assertIn("FLAGOS_GPU_VENDOR", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_DRIVER", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_RUNTIME", gpu_check["run"])

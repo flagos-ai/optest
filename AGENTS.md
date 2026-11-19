@@ -335,6 +335,12 @@ packages, so a single per-vendor cache lets them share one set of wheels.
 - `PIP_CACHE_DIR` = `<output_base_dir>/pip-cache/<vendor>`.
 - `UV_LINK_MODE` defaults to `copy` so the cache and the venv can live on
   different filesystems without hardlink failures.
+- The optest-install step must ensure `uv pip show --target` is supported
+  (known baseline `uv 0.11.30`). For an older image-provided binary, try
+  `uv self update 0.11.30` first so `UV_CACHE_DIR` is reused, then fall back to
+  the existing pip index retry with `uv>=0.11.30` so `PIP_CACHE_DIR` is reused.
+  After pip fallback, prepend the active Python scripts directory to `PATH` and
+  persist it through `GITHUB_PATH`; do not leave an older `uv` first on `PATH`.
 
 Notes for debugging and future changes:
 

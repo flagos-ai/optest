@@ -136,6 +136,88 @@ def test_unknown_mode_is_rejected():
         refresh.plan_refresh(["a"], {}, VLLM_32, mode="delta")
 
 
+# --- IGNORE_LOCAL_VERSION: temporary workaround for DeepSpeed from git main ---
+
+DS_OLD = {"deepspeed": "0.20.1+4a9efc1"}
+DS_NEW = {"deepspeed": "0.20.1+b5e0ba6"}
+
+
+def test_deepspeed_local_version_change_does_not_trigger_recollection():
+    baseline = {"lamb": entry(DS_OLD), "packbits": entry(DS_OLD)}
+    plan = refresh.plan_refresh(["lamb", "packbits"], baseline, DS_NEW)
+    assert plan.collect == []
+    assert set(plan.retained) == {"lamb", "packbits"}
+    assert plan.reasons["lamb"].startswith(refresh.REASON_LABEL_MATCH_LOCAL_IGNORED)
+    assert (
+        "deepspeed=0.20.1+4a9efc1 vs deepspeed=0.20.1+b5e0ba6" in plan.reasons["lamb"]
+    )
+    # Recorded per operator, with both builds, so the published file shows it.
+    assert plan.metadata()["local_version_ignored"]["lamb"] == {
+        "baseline": "deepspeed=0.20.1+4a9efc1",
+        "installed": "deepspeed=0.20.1+b5e0ba6",
+    }
+
+
+def test_ignored_local_version_is_warned_about_in_the_log():
+    baseline = {"lamb": entry(DS_OLD)}
+    plan = refresh.plan_refresh(["lamb"], baseline, DS_NEW)
+    text = "\n".join(plan.summary_lines())
+    assert "WARNING" in text
+    assert "deepspeed=0.20.1+4a9efc1 vs deepspeed=0.20.1+b5e0ba6" in text
+    # The log must say how to undo the workaround.
+    assert "IGNORE_LOCAL_VERSION" in text
+    assert "Pin the install" in text
+
+
+def test_a_real_deepspeed_version_change_still_triggers_recollection():
+    baseline = {"lamb": entry(DS_OLD)}
+    plan = refresh.plan_refresh(["lamb"], baseline, {"deepspeed": "0.21.0+b5e0ba6"})
+    assert plan.collect == ["lamb"]
+    assert plan.local_version_ignored == {}
+    assert plan.reasons["lamb"].startswith(refresh.REASON_LABEL_CHANGED)
+
+
+def test_identical_deepspeed_labels_are_a_plain_match():
+    baseline = {"lamb": entry(DS_OLD)}
+    plan = refresh.plan_refresh(["lamb"], baseline, DS_OLD)
+    assert plan.reasons["lamb"] == refresh.REASON_LABEL_MATCH
+    assert plan.local_version_ignored == {}
+    assert plan.metadata()["local_version_ignored"] == {}
+    assert not any("WARNING" in line for line in plan.summary_lines())
+
+
+def test_the_workaround_is_scoped_to_the_listed_frameworks():
+    # vllm is not in IGNORE_LOCAL_VERSION, so a local-version change is a change.
+    baseline = {"a": entry({"vllm": "0.32.0+abc1234"})}
+    plan = refresh.plan_refresh(["a"], baseline, {"vllm": "0.32.0+def5678"})
+    assert plan.collect == ["a"]
+    assert refresh.IGNORE_LOCAL_VERSION == frozenset({"deepspeed"})
+
+
+def test_comparable_label_only_strips_the_listed_frameworks():
+    assert refresh.comparable_label(DS_NEW) == {"deepspeed": "0.20.1"}
+    assert refresh.comparable_label({"vllm": "0.32.0+x"}) == {"vllm": "0.32.0+x"}
+    assert refresh.comparable_label(None) == {}
+    assert refresh.comparable_label({**DS_NEW, "vllm": "0.32.0"}) == {
+        "deepspeed": "0.20.1",
+        "vllm": "0.32.0",
+    }
+
+
+def test_published_flagtrain_baseline_survives_a_main_bump():
+    """The real FlagTrain baseline against a different DeepSpeed main commit:
+    without the workaround all 32 operators would be re-collected."""
+    baseline = refresh.load_baseline(ROOT / "data/op_flagtrain_perf_baseline.json")
+    entries = refresh.operator_entries(baseline)
+    stored = refresh.stored_label(next(iter(entries.values())))
+    public = stored["deepspeed"].split("+")[0]
+    plan = refresh.plan_refresh(
+        list(entries), baseline, {"deepspeed": f"{public}+0000000"}
+    )
+    assert plan.collect == []
+    assert len(plan.local_version_ignored) == len(entries)
+
+
 def test_candidates_are_deduplicated_and_sorted():
     plan = refresh.plan_refresh(["b", "a", "b"], {}, VLLM_32)
     assert plan.collect == ["a", "b"]
@@ -479,6 +561,52 @@ class TestWorkflowWiring:
         assert 'incremental = status.get("incremental")' in run
         assert "re-collected now" in run
         assert "carried over from the committed baseline" in run
+
+    def test_summary_step_annotates_an_ignored_local_version(self):
+        """The IGNORE_LOCAL_VERSION workaround must raise a GitHub warning
+        annotation, not just a log line."""
+        script = self.step("Summarize collected operators")["run"]
+        import os
+        import tempfile
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "op_flagtrain_perf_baseline.json"
+            output.write_text(json.dumps({"lamb": entry(DS_OLD)}))
+            work = Path(f"{output}.work")
+            work.mkdir()
+            (work / "status.json").write_text(
+                json.dumps(
+                    {
+                        "tasks": {},
+                        "incremental": {
+                            "mode": refresh.MODE_INCREMENTAL,
+                            "label": DS_NEW,
+                            "collected": [],
+                            "retained": ["lamb"],
+                            "local_version_ignored": {
+                                "lamb": {
+                                    "baseline": "deepspeed=0.20.1+4a9efc1",
+                                    "installed": "deepspeed=0.20.1+b5e0ba6",
+                                }
+                            },
+                            "decisions": {},
+                        },
+                    }
+                )
+            )
+            buffer = StringIO()
+            with mock.patch.dict(os.environ, {"OUTPUT": str(output)}):
+                with redirect_stdout(buffer):
+                    exec(compile(script, "summary", "exec"), {"__name__": "summary"})
+        printed = buffer.getvalue()
+        assert "::warning::1 operator(s) kept despite a differing framework build" in (
+            printed
+        )
+        assert "deepspeed=0.20.1+4a9efc1 vs deepspeed=0.20.1+b5e0ba6" in printed
+        assert "IGNORE_LOCAL_VERSION" in printed
 
     # The data/ update step guards against publishing a baseline that lost
     # operators. Exercised as a real bash script (it is a heredoc inside an

@@ -251,6 +251,20 @@ scheduler call; neither re-implements the comparison. It also owns
 `deepspeed`) that each operator entry is labeled with. Add a framework to
 `LABEL_FRAMEWORKS` there, not in the collectors.
 
+`IGNORE_LOCAL_VERSION` in that module is a **temporary workaround**, currently
+holding `deepspeed`: its entries are compared on the public version only, with
+the PEP 440 local segment dropped (`0.20.1+b5e0ba6` -> `0.20.1`). FlagTrain
+installs DeepSpeed from an unpinned `git clone` of main (both the workflow step
+and FlagTrain's `baseline/README.md` prescribe that), and DeepSpeed appends the
+checkout's commit hash to its version, so without this every FlagTrain refresh
+re-collected all 32 operators. The cost is that a DeepSpeed main commit which
+does change a baseline kernel no longer triggers a refresh. Each affected run
+prints a `[refresh] WARNING` line, the workflow summary raises a `::warning::`
+annotation, and the published `_incremental.local_version_ignored` names the
+operators and both builds. Pin the install to a fixed ref or a PyPI release
+(DeepSpeed publishes plain versions) and then drop `deepspeed` from the set;
+no other code changes.
+
 Behavior worth preserving when changing this flow:
 
 - An operator queued for re-collection whose collection produces nothing

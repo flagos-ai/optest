@@ -649,6 +649,22 @@ jobs:
                   f"[Summary] carried over from the committed baseline: "
                   f"{len(incremental.get('retained', []))}"
               )
+              # Temporary workaround at IGNORE_LOCAL_VERSION in
+              # baseline_refresh.py: operators kept although the installed
+              # framework build differs in its local version (DeepSpeed from an
+              # unpinned git main). Annotated so it stays visible in the run.
+              ignored = incremental.get("local_version_ignored") or {}
+              if ignored:
+                  builds = sorted(
+                      {(v.get("baseline"), v.get("installed")) for v in ignored.values()}
+                  )
+                  detail = "; ".join(f"{old} vs {new}" for old, new in builds)
+                  print(
+                      f"::warning::{len(ignored)} operator(s) kept despite a "
+                      f"differing framework build ({detail}); their baselines may "
+                      f"predate the installed one. Pin the install, then drop the "
+                      f"framework from IGNORE_LOCAL_VERSION in baseline_refresh.py"
+                  )
               # Why each re-collected operator was selected (absent from the
               # baseline, changed framework version, no comparable label).
               decisions = incremental.get("decisions") or {}

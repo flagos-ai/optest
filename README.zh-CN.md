@@ -26,6 +26,7 @@
   - [配置测试与厂商 extra](#配置测试与厂商-extra)
   - [集中式工作流行为](#集中式工作流行为)
   - [FlagTree 升级](#flagtree-升级)
+  - [FlagGems 升级](#flaggems-升级)
   - [持久化软件包缓存](#持久化软件包缓存)
 - [仓库布局](#仓库布局)
   - [仓库配置](#仓库配置)
@@ -655,18 +656,23 @@ uv pip install --python /path/to/active/python -e '.[test,nvidia]'
 
 ### FlagTree 升级
 
-工作流会在安装 `optest` 之后、探测 GPU 之前，用后端配置的 wheel 替换镜像自带的
-FlagTree 源码目录。后端通过共享硬件配置中的 `flagtree` 块启用该行为：
+工作流会在安装 `optest` 之后、探测 GPU 之前，由通用 package 升级步骤用后端配置的
+wheel 替换镜像自带的 FlagTree 源码目录。后端在 `deps` 中以 package name 为 key：
 
 ```yaml
 # .github/configs/backends/H800.yaml
-flagtree:
-  package_name: flagtree-nvidia
-  version: 0.7.1.dev20261115
-  index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+deps:
+  flagtree-nvidia:
+    display_name: FlagTree
+    priority: 100
+    version_input: flagtree_version
+    version: 0.7.1.dev20261115
+    index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+    no_deps: true
+    target: /opt/flagtree
 ```
 
-三个字段必须同时存在。大多数后端使用完整的默认 daily 版本。不同运行时可能具有不同的
+大多数后端使用完整的默认 daily 版本。不同运行时可能具有不同的
 版本基线：例如 CANN 9.0.0 使用 `0.7.0.devYYYYMMDD`，而大多数 daily distribution
 使用 `0.7.1.devYYYYMMDD`。
 
@@ -681,13 +687,13 @@ BW1000 使用 FlagOS daily index 中的 `flagtree-hcu==0.7.1.dev20261104`。
 - 8 位日期（例如 `20261015`）会保留各后端配置的版本基线。因此同一次运行中，
   H800 会解析为 `0.7.1.dev20261015`，910B 会解析为 `0.7.0.dev20261015`。
 
-prepare job 会先在各后端自己的 `package_name` 和 `index_url` 中检查精确版本，再将覆盖值
+prepare job 会先在各后端的 package key 和 `index_url` 中检查精确版本，再将覆盖值
 写入 matrix。如果版本不存在或 index 查询失败，job 会打印 `FlagTree version fallback`
 warning，并继续使用该后端 YAML 的默认版本。其他后端仍可独立使用自身存在的覆盖版本，
 因此单个厂商缺少构建不会导致整个运行失败。日期无法从固定 release 默认值展开；此时该后端
 会 warning 并保留 release pin。输入为空时直接使用各后端默认值，不查询 index。
 
-只有所选后端存在 `flagtree` 配置时，`Upgrade Flagtree` 步骤才会运行。该步骤通过
+`Upgrade configured packages (FlagTree, FlagGems)` 通用步骤通过
 `uv pip install --no-deps --target /opt/flagtree.new` 将精确配置的厂商 wheel
 安装到 staging 目录，安装成功后才删除原来的 `/opt/flagtree` 并将 staging 目录移动到
 该路径。因此解析或安装失败时，镜像原有目录保持不变。安装命令继承按厂商持久化的
@@ -696,22 +702,20 @@ release 元数据，并在替换后通过 target 目录输出后端 distribution
 `/opt/flagtree` 是否已在 `PYTHONPATH` 中：存在时打印并保留，缺失时将其前置；最终值写入
 `GITHUB_ENV`，确保后续 Python 和 pytest 命令默认使用替换后的目录。最后再通过
 `ACTIVE_PYTHON` 校验配置的 distribution 是否为精确请求版本，避免将无法看到未激活
-target 目录的裸 `pip show` 误当成安装检查。没有 `flagtree` 配置的后端会跳过该步骤并保留镜像自带目录；目前只有
+target 目录的裸 `pip show` 误当成安装检查。没有在 `deps` 中配置 FlagTree 的后端会保留镜像自带目录；目前只有
 Cambricon 使用此行为。
 
-目标仓库可以在不修改共享后端默认值的情况下选择跳过升级：
+目标仓库可在最具体的依赖层禁用继承的软件包：
 
 ```yaml
 repos:
-  KeepImageFlagTreeEverywhere:
-    skip_flagtree_upgrade: true
-
-  KeepImageFlagTreeOnSelectedHardware:
-    skip_flagtree_upgrade: [H800, 910B]
+  FlagGems:
+    deps:
+      910B:
+        flagtree-ascend-cann9.0.0:
+          enabled: false
 ```
 
-布尔值形式会为整个仓库的所有后端跳过该步骤；列表形式只跳过列出的后端，其余已配置
-后端仍安装配置的 wheel。正常升级行为应省略 `skip_flagtree_upgrade`。
 当前 `FlagGems` 的 910B 例外使用 CANN 9.2.1 runtime 镜像，并保留镜像自带的
 FlagTree，因为共享 910B daily wheel 面向 CANN 9.0.0。FlagGems 的其他后端以及其他
 仓库的 910B 后端仍按各自的正常配置升级 FlagTree。`FlagGems` 还通过仓库专用覆盖使用
@@ -719,6 +723,55 @@ FlagTree，因为共享 910B daily wheel 面向 CANN 9.0.0。FlagGems 的其他�
 配置的 FlagTree daily wheel。其 Cambricon 后端同样使用当前的 Neuware 4.7.2
 共享后端镜像，但由于未配置 Cambricon daily distribution，会保留镜像自带的 FlagTree。
 目前只有 FlagGems 启用该后端，因此无需仓库专用镜像覆盖。
+
+### FlagGems 升级
+
+工作流会在后端专用的 FlagTree 步骤之后、GPU 探测之前，将共享的 FlagGems daily
+wheel 安装到活动 Python 环境。该 wheel 不区分厂商，因此只需在
+`.github/configs/repos.yaml` 的 `defaults.deps` 中配置一次，无需在每个 backend
+YAML 中重复：
+
+```yaml
+defaults:
+  deps:
+    flag-gems:
+      display_name: FlagGems
+      priority: 200
+      version: 5.5.0.dev20261118
+      index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+      no_deps: true
+```
+
+当前配置对应的制品为
+`packages/flag-gems/5.5.0.dev20261118/flag_gems-5.5.0.dev20261118-py3-none-any.whl`。
+通用升级步骤按 priority 100 先处理 FlagTree，再按 priority 200 处理 FlagGems。它使用
+配置的 index 执行 `uv pip install --no-deps`，并通过活动 Python 解释器校验已安装
+distribution 与配置版本完全一致。
+
+必须跳过 daily wheel 的仓库使用 package override：
+
+```yaml
+repos:
+  FlagGems:
+    deps:
+      default:
+        flag-gems:
+          enabled: false
+```
+
+FlagGems 自身需要该例外，因为任务稍后会以 editable 模式安装其 checkout 源码。
+
+通用依赖映射按具体程度由低到高合并：`defaults.deps`、所选 backend 的 `deps`、
+`repos.<repo>.deps.default`、`repos.<repo>.deps.<backend>`。后层只覆盖同名 package
+中显式提供的字段；`enabled: false` 会移除继承项。package 按 `priority` 升序、再按名称
+排序安装。
+
+`version` 只用于生成 `package==version`；省略时安装裸 package name。控制字段
+（`enabled`、`display_name`、`priority`、`version`、`version_input`）不会传给 uv。
+其他字段会将下划线转换为连字符并成为 `uv pip install` 参数：`index_url` 转为
+`--index-url VALUE`，`no_deps: true` 转为 `--no-deps`，列表值会重复该选项，省略字段则
+不产生参数。`target` 还会启用 `<target>.new` staging 替换，并将该路径持久写入
+`PYTHONPATH`。
 
 ### 持久化软件包缓存
 
@@ -750,7 +803,7 @@ UV_LINK_MODE  = copy
   `uv` 以软件包版本以及 wheel 的 URL 或哈希作为缓存键，因此版本不变时始终命中缓存；
   版本升级或直接 URL 依赖发生变化时，仅自动重新下载发生变化的 wheel，无需手动清理缓存。
 
-optest、FlagTree 和目标依赖安装步骤都使用正常的 `uv pip install` 输出。三个步骤都会在
+optest、通用 package 升级和目标依赖安装步骤都使用正常的 `uv pip install` 输出。三个步骤都会在
 安装前后打印 `[Cache debug]` 报告
 （解析出的 `UV_CACHE_DIR`/`PIP_CACHE_DIR`/`UV_LINK_MODE`，以及缓存是 `COLD`
 还是 `WARM`，并附上其大小与文件数量），因此步骤日志能够清晰显示哪些 wheel 来自本地
@@ -808,9 +861,8 @@ src/flagos_optest/        Python 软件包、调度器、报告和 GPU 检查
 | `default_branch` | 工作流没有收到显式 ref 时使用的目标分支。 |
 | `backends.<name>.enabled` | 为该仓库启用或禁用共享硬件后端。 |
 | `container_images.<backend>` | 某个后端的仓库专用镜像覆盖项。 |
-| `skip_flagtree_upgrade` | 可选；设为 `true` 时所有后端保留镜像 FlagTree，或填写后端名称列表以跳过指定后端。 |
-| `deps.default` | 为每个已启用后端安装的显式回退软件包。优先使用目标 `pyproject.toml` 中的厂商 extra。 |
-| `deps.<backend>` | 只为某个后端安装的显式回退软件包。优先使用目标 `pyproject.toml` 中的厂商 extra。 |
+| `deps.default.<package>` | 为所有已启用后端提供仓库级 package 覆盖或新增项。 |
+| `deps.<backend>.<package>` | 为单个 backend 提供最终覆盖、新增项，或用 `enabled: false` 移除继承项。 |
 | `base_data` | 目标 checkout 中可选的性能基线 JSON 路径。 |
 | `op_cmd_timeout` | 每个精度或性能子进程的超时时间（秒）。继承 `defaults.op_cmd_timeout`。 |
 | `ops_test_timeout_minutes` | 每个仓库的算子测试步骤超时时间。 |
@@ -829,13 +881,14 @@ repos:
 ```
 
 `repos.<repo>.container_images.<backend>` 的优先级高于后端的 `container_image`。
-如果不存在仓库覆盖项，则使用共享后端镜像。对于特殊的后端要求，显式依赖列表仍会累加：
+如果不存在仓库覆盖项，则使用共享后端镜像。package map 按 package name 和字段由低到高
+合并：
 
 ```text
-backend deps + repo deps.default + repo deps.<backend>
+defaults.deps -> backend deps -> repo deps.default -> repo deps.<backend>
 ```
 
-普通的目标专用厂商依赖不应使用这些列表。工作流会根据 `flagos-gpu-check` 报告的厂商键，
+普通的目标专用厂商依赖不应使用这些 map。工作流会根据 `flagos-gpu-check` 报告的厂商键，
 选择目标仓库的可选依赖组。
 
 ### 后端配置
@@ -850,10 +903,9 @@ backend deps + repo deps.default + repo deps.<backend>
 | `container_image` | 默认镜像，除非所选仓库覆盖它。 |
 | `container_volumes` | 挂载到作业容器中的主机路径。 |
 | `container_options` | 设备映射、权限、IPC、共享内存和其他容器运行时选项。 |
-| `flagtree` | 可选的后端 wheel 映射，必须包含 `package_name`、完整默认 `version` 和 `index_url`；省略时保留镜像 FlagTree。 |
+| `deps.<package>` | 合并到通用升级映射中的硬件专用 package 默认值。 |
 | `test_gpus` | 可选的设备 ID 覆盖项；省略时由 `flagos-gpu-check` 提供可用设备。 |
 | `test_env` | 注入算子测试步骤的环境变量。 |
-| `deps` | 添加到仓库依赖组之前的硬件专用软件包。 |
 | `output_base_dir` | 结果目录和归档文件的基础目录。 |
 
 当前后端默认配置覆盖 H800/NVIDIA、910B/昇腾、C550/沐曦、BW1000/海光、

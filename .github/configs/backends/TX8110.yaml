@@ -47,10 +47,15 @@ container_options: >-
 
 # Backend-specific FlagTree daily wheel. The workflow uses this full version
 # unless workflow_dispatch supplies a full version or YYYYMMDD override.
-flagtree:
-  package_name: flagtree-tsingmicro
-  version: 0.7.1.dev20261115
-  index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+deps:
+  flagtree-tsingmicro:
+    display_name: FlagTree
+    priority: 100
+    version_input: flagtree_version
+    version: 0.7.1.dev20261115
+    index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+    no_deps: true
+    target: /opt/flagtree
 
 # Override the GPUs detected by flagos-gpu-check. The physical host exposes
 # more than 16 cards, but tests deliberately use only the first 16 (0-15).

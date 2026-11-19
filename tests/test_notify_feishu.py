@@ -327,8 +327,10 @@ class NotifyFeishuRefTest(unittest.TestCase):
             for step in steps
             if step.get("name") == "Install target repository and dependencies"
         )
-        upgrade_flagtree = next(
-            step for step in steps if step.get("name") == "Upgrade Flagtree"
+        upgrade_packages = next(
+            step
+            for step in steps
+            if step.get("name") == "Upgrade configured packages (FlagTree, FlagGems)"
         )
         gpu_check = next(
             step for step in steps if step.get("name") == "Check GPU availability"
@@ -375,13 +377,8 @@ class NotifyFeishuRefTest(unittest.TestCase):
         self.assertIn("FLAGOS_GPU_DRIVER", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_RUNTIME", gpu_check["run"])
         self.assertIn("FLAGOS_GPU_RUNTIME_VERSION", gpu_check["run"])
-        self.assertIn("Detected explicit backend dependencies", install_target["run"])
         self.assertIn("run_uv_with_index_fallback", install_target["run"])
         self.assertIn("env -u UV_INDEX", install_target["run"])
-        self.assertIn(
-            'uv pip install --python "${ACTIVE_PYTHON}" "${EXTRA_DEPS_ARGS[@]}"',
-            install_target["run"],
-        )
         self.assertIn("Detected test extra", install_target["run"])
         self.assertIn("Detected vendor extra", install_target["run"])
         self.assertIn("[tool.uv].exclude-dependencies", install_target["run"])
@@ -394,7 +391,11 @@ class NotifyFeishuRefTest(unittest.TestCase):
         # All three install steps emit the package-cache debug report so runs make
         # the cold/warm cache behavior and the resolved cache environment
         # obvious in the logs.
-        for cache_step in (install_optest, upgrade_flagtree, install_target):
+        for cache_step in (
+            install_optest,
+            upgrade_packages,
+            install_target,
+        ):
             self.assertIn("print_cache_debug()", cache_step["run"])
             self.assertIn("[Cache debug] UV_CACHE_DIR=", cache_step["run"])
             self.assertIn("[Cache debug] PIP_CACHE_DIR=", cache_step["run"])

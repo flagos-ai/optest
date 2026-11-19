@@ -27,7 +27,8 @@ runner_labels: mlu590-m9de-flaggems-weekly
 container_image: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-cambricon-neuware4.7.2:2.3.0
 
 # Cambricon FlagTree daily packages are not supported yet. Keep this backend
-# without a `flagtree` mapping so the workflow retains the image-provided tree.
+# without a FlagTree entry under `deps` so the workflow retains the
+# image-provided tree.
 
 # Container volumes to mount for this backends
 container_volumes:

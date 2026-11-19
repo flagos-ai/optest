@@ -49,10 +49,15 @@ container_options: >-
 
 # Backend-specific FlagTree daily wheel. The workflow uses this full version
 # unless workflow_dispatch supplies a full version or YYYYMMDD override.
-flagtree:
-  package_name: flagtree-metax
-  version: 0.7.1.dev20261115
-  index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+deps:
+  flagtree-metax:
+    display_name: FlagTree
+    priority: 100
+    version_input: flagtree_version
+    version: 0.7.1.dev20261115
+    index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+    no_deps: true
+    target: /opt/flagtree
 
 # Extra environment variables injected only into the "Run ops tests" step
 test_env:

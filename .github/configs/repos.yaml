@@ -31,9 +31,10 @@
 #
 # To onboard a new repo: add one block under `repos:` with its default_branch,
 # enabled backends, and (optionally) container_images / deps / base_data /
-# timeout overrides. Set `skip_flagtree_upgrade: true` only when the whole repo
-# must retain image-provided FlagTree, or provide a backend list such as
-# `skip_flagtree_upgrade: [H800, 910B]` for targeted exceptions. Also add its
+# timeout overrides. Use `deps.default.<package>` for repository-wide package
+# overrides and `deps.<backend>.<package>` for hardware-specific overrides.
+# Set `enabled: false` at either level to disable an inherited package (for
+# example, when testing FlagGems itself). Also add its
 # (import_name, display_name) pair to _KNOWN_LIBS in
 # src/flagos_optest/run_tests.py so runtime metadata reaches summary.json.
 # ---------------------------------------------------------------------------
@@ -52,6 +53,20 @@ defaults:
   # matrix value for a job-level timeout); the real per-repo limit lives on the
   # test step. Override per repo via `ops_test_timeout_minutes`.
   ops_test_timeout_minutes: 240
+  # Shared packages merged with backend-specific packages. Package names are
+  # the mapping keys. `version` pins the requirement. `display_name`,
+  # `enabled`, `priority`, and `version_input` control workflow behavior;
+  # every other key is converted from snake_case to a
+  # `uv pip install --kebab-case` option.
+  # Artifact: packages/flag-gems/5.5.0.dev20261118/
+  #           flag_gems-5.5.0.dev20261118-py3-none-any.whl
+  deps:
+    flag-gems:
+      display_name: FlagGems
+      priority: 200
+      version: 5.5.0.dev20261118
+      index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+      no_deps: true
 
 repos:
   # =========================================================================
@@ -70,7 +85,16 @@ repos:
       910B: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.2.1:2.3.0
       PPU-ZW810E: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-thead-ppu2.1.0:2.3.0
       W7900D: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-amd-rocm7.2.4:2.3.0
-    skip_flagtree_upgrade: [910B]
+    # Disable inherited packages only where this repository needs a different
+    # source/runtime. The checkout itself is installed editable later, and the
+    # 910B image must retain its CANN 9.2.1-compatible FlagTree.
+    deps:
+      default:
+        flag-gems:
+          enabled: false
+      910B:
+        flagtree-ascend-cann9.0.0:
+          enabled: false
     # Backends this repo runs. enabled:false skips the backend entirely.
     backends:
       H800: {enabled: true}
@@ -199,40 +223,34 @@ repos:
       S60: {enabled: true}
 
 # ---------------------------------------------------------------------------
-# Optional explicit dependency install (example; omit the whole key to skip):
-# Target-specific vendor dependencies should normally live under
-# [project.optional-dependencies] in the target repository's pyproject.toml;
-# the workflow automatically installs the group matching flagos-gpu-check's
-# normalized vendor key.
-# If a runtime image already supplies a hardware-specific package that must not
-# be selected from a vendor extra's transitive dependency graph, declare it in
-# the target repository's [tool.uv].exclude-dependencies list. The workflow
-# installs the available test and detected-vendor extras with `uv pip install`.
+# Optional shared dependency overrides/additions use the same package map as
+# `defaults.deps`. Target-project dependencies themselves should remain in the
+# target repository's pyproject.toml optional-dependencies.
 #
 #   repos:
 #     SomeRepo:
 #       deps:
-#         default: ["extra-pkg==1.2.3"]   # installed on every enabled backend
-#         910B: ["ascend-only==0.4"]      # ADDED only on the 910B backend
+#         default:
+#           extra-pkg:
+#             version: 1.2.3
+#             index_url: https://example.invalid/simple
+#             no_deps: true
+#           flag-gems:
+#             enabled: false
 #
-# Resolution order appended together: backends/<NAME>.yaml `deps` (hardware
-# default) + repo deps.default + repo deps.<backend>. Empty -> install skipped.
-# Backend-level `deps` and `container_image` in backends/<NAME>.yaml act as
-# defaults; the per-repo `deps` here EXTEND them and `container_images` here
-# OVERRIDE the image.
-#
-# Optional FlagTree upgrade exclusions (omit by default):
+# Optional backend-package exclusions (omit by default):
 #
 #   repos:
-#     WholeRepoException:
-#       skip_flagtree_upgrade: true
-#     BackendExceptions:
-#       skip_flagtree_upgrade: [H800, 910B]
+#     BackendException:
+#       deps:
+#         H800:
+#           flagtree-nvidia:
+#             enabled: false
 #
-# The boolean form skips the "Upgrade Flagtree" step on every backend for that
-# repository. The list form skips only the named backends. Backends without a
-# `flagtree` block in .github/configs/backends/<NAME>.yaml also skip the step
-# automatically and retain the image-provided /opt/flagtree tree. Package,
-# version, and index choices (including temporary fixed releases) belong in the
-# shared backend YAML rather than in this repository-specific file.
+# The effective dependency map is merged in this order: `defaults.deps`, the
+# selected backend's `deps`, `repos.<repo>.deps.default`, then
+# `repos.<repo>.deps.<backend>`. Later definitions override fields on the same
+# package. `enabled: false` removes an inherited package. FlagTree packages use
+# `target: /opt/flagtree`, so the workflow stages the target and replaces it
+# only after installation succeeds.
 # ---------------------------------------------------------------------------

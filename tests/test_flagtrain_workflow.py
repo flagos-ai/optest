@@ -86,6 +86,18 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             return matrix, completed.stdout
         return matrix
 
+    @staticmethod
+    def upgrade_deps(backend):
+        return json.loads(backend["upgrade_deps"])
+
+    @classmethod
+    def upgrade_dep(cls, backend, package_name):
+        return next(
+            dependency
+            for dependency in cls.upgrade_deps(backend)
+            if dependency["package_name"] == package_name
+        )
+
     def test_flagtrain_images_and_enabled_backends(self):
         config = self.repos["repos"]["FlagTrain"]
         self.assertEqual(config["default_branch"], "main")
@@ -131,6 +143,18 @@ class FlagTrainWorkflowTest(unittest.TestCase):
     def test_flaggems_runtime_images_and_910b_flagtree_exception(self):
         config = self.repos["repos"]["FlagGems"]
         self.assertEqual(
+            self.repos["defaults"]["deps"]["flag-gems"],
+            {
+                "display_name": "FlagGems",
+                "priority": 200,
+                "version": "5.5.0.dev20261118",
+                "index_url": (
+                    "https://resource.flagos.net/repository/flagos-pypi-daily/simple"
+                ),
+                "no_deps": True,
+            },
+        )
+        self.assertEqual(
             config["container_images"],
             {
                 "910B": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.2.1:2.3.0",
@@ -138,7 +162,8 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 "W7900D": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-amd-rocm7.2.4:2.3.0",
             },
         )
-        self.assertEqual(config["skip_flagtree_upgrade"], ["910B"])
+        self.assertFalse(config["deps"]["default"]["flag-gems"]["enabled"])
+        self.assertFalse(config["deps"]["910B"]["flagtree-ascend-cann9.0.0"]["enabled"])
         self.assertEqual(
             [
                 repo_name
@@ -164,12 +189,24 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 self.assertEqual(
                     flaggems_by_name[backend_name]["container_image"], image
                 )
-        self.assertTrue(flaggems_by_name["910B"]["skip_flagtree_upgrade"])
-        self.assertFalse(flaggems_by_name["H800"]["skip_flagtree_upgrade"])
-        self.assertFalse(flaggems_by_name["PPU-ZW810E"]["skip_flagtree_upgrade"])
-        self.assertFalse(flaggems_by_name["W7900D"]["skip_flagtree_upgrade"])
-        self.assertFalse(flaggems_by_name["MLU590-M9DE"]["skip_flagtree_upgrade"])
-        self.assertEqual(flaggems_by_name["MLU590-M9DE"]["flagtree_package_name"], "")
+        self.assertEqual(self.upgrade_deps(flaggems_by_name["910B"]), [])
+        self.assertEqual(self.upgrade_deps(flaggems_by_name["MLU590-M9DE"]), [])
+        self.assertEqual(
+            [
+                dependency["package_name"]
+                for dependency in self.upgrade_deps(flaggems_by_name["H800"])
+            ],
+            ["flagtree-nvidia"],
+        )
+        for backend in flaggems_by_name.values():
+            with self.subTest(flaggems_backend=backend["name"]):
+                self.assertNotIn(
+                    "flag-gems",
+                    {
+                        dependency["package_name"]
+                        for dependency in self.upgrade_deps(backend)
+                    },
+                )
 
         flaggems_vllm = self.build_matrix(
             "FlagGems-vllm",
@@ -178,7 +215,13 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         flaggems_vllm_by_name = {
             backend["name"]: backend for backend in flaggems_vllm["include"]
         }
-        self.assertFalse(flaggems_vllm_by_name["910B"]["skip_flagtree_upgrade"])
+        self.assertEqual(
+            [
+                dependency["package_name"]
+                for dependency in self.upgrade_deps(flaggems_vllm_by_name["910B"])
+            ],
+            ["flagtree-ascend-cann9.0.0", "flag-gems"],
+        )
         self.assertEqual(
             flaggems_vllm_by_name["PPU-ZW810E"]["container_image"],
             "harbor.baai.ac.cn/flagos-app/vllm0.32.0-thead-ppu2.1.0:2.3.0-0.5.0.dev0_g814b6d3.d20261117",
@@ -259,15 +302,19 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         for backend_name, (package_name, version, index_url) in expected.items():
             with self.subTest(backend=backend_name):
                 self.assertEqual(
-                    backend_configs[backend_name]["flagtree"],
+                    backend_configs[backend_name]["deps"][package_name],
                     {
-                        "package_name": package_name,
+                        "display_name": "FlagTree",
+                        "priority": 100,
+                        "version_input": "flagtree_version",
                         "version": version,
                         "index_url": index_url,
+                        "no_deps": True,
+                        "target": "/opt/flagtree",
                     },
                 )
 
-        self.assertNotIn("flagtree", backend_configs["MLU590-M9DE"])
+        self.assertNotIn("deps", backend_configs["MLU590-M9DE"])
         self.assertEqual(
             backend_configs["MLU590-M9DE"]["container_image"],
             "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-cambricon-neuware4.7.2:2.3.0",
@@ -334,14 +381,15 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             for backend_name in ("H800", "910B", "BW1000"):
                 backend_path = root / f".github/configs/backends/{backend_name}.yaml"
                 backend = yaml.safe_load(backend_path.read_text(encoding="utf-8"))
-                backend["flagtree"]["index_url"] = index_url
+                package_name = next(iter(backend["deps"]))
+                backend["deps"][package_name]["index_url"] = index_url
                 backend_path.write_text(
                     yaml.safe_dump(backend, sort_keys=False),
                     encoding="utf-8",
                 )
 
             defaults = self.build_matrix(
-                "FlagGems",
+                "FlagAttention",
                 vendors="Nvidia,Ascend,Hygon",
                 cwd=root,
             )
@@ -349,20 +397,22 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 backend["name"]: backend for backend in defaults["include"]
             }
             self.assertEqual(
-                default_by_name["H800"]["flagtree_version"],
+                self.upgrade_dep(default_by_name["H800"], "flagtree-nvidia")["version"],
                 "0.7.1.dev20261115",
             )
             self.assertEqual(
-                default_by_name["910B"]["flagtree_version"],
+                self.upgrade_dep(default_by_name["910B"], "flagtree-ascend-cann9.0.0")[
+                    "version"
+                ],
                 "0.7.0.dev20261115",
             )
             self.assertEqual(
-                default_by_name["BW1000"]["flagtree_version"],
+                self.upgrade_dep(default_by_name["BW1000"], "flagtree-hcu")["version"],
                 "0.7.1.dev20261104",
             )
 
             dated, dated_output = self.build_matrix(
-                "FlagGems",
+                "FlagAttention",
                 flagtree_version="20261015",
                 vendors="Nvidia,Ascend,Hygon",
                 cwd=root,
@@ -370,15 +420,17 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             )
             dated_by_name = {backend["name"]: backend for backend in dated["include"]}
             self.assertEqual(
-                dated_by_name["H800"]["flagtree_version"],
+                self.upgrade_dep(dated_by_name["H800"], "flagtree-nvidia")["version"],
                 "0.7.1.dev20261015",
             )
             self.assertEqual(
-                dated_by_name["910B"]["flagtree_version"],
+                self.upgrade_dep(dated_by_name["910B"], "flagtree-ascend-cann9.0.0")[
+                    "version"
+                ],
                 "0.7.0.dev20261115",
             )
             self.assertEqual(
-                dated_by_name["BW1000"]["flagtree_version"],
+                self.upgrade_dep(dated_by_name["BW1000"], "flagtree-hcu")["version"],
                 "0.7.1.dev20261015",
             )
             self.assertIn("::warning title=FlagTree version fallback::", dated_output)
@@ -388,7 +440,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             )
             full_daily = "0.8.0.dev20261201"
             overridden, overridden_output = self.build_matrix(
-                "FlagGems",
+                "FlagAttention",
                 flagtree_version=full_daily,
                 vendors="Nvidia,Ascend,Hygon",
                 cwd=root,
@@ -398,15 +450,21 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 backend["name"]: backend for backend in overridden["include"]
             }
             self.assertEqual(
-                overridden_by_name["H800"]["flagtree_version"],
+                self.upgrade_dep(overridden_by_name["H800"], "flagtree-nvidia")[
+                    "version"
+                ],
                 full_daily,
             )
             self.assertEqual(
-                overridden_by_name["910B"]["flagtree_version"],
+                self.upgrade_dep(
+                    overridden_by_name["910B"], "flagtree-ascend-cann9.0.0"
+                )["version"],
                 full_daily,
             )
             self.assertEqual(
-                overridden_by_name["BW1000"]["flagtree_version"],
+                self.upgrade_dep(overridden_by_name["BW1000"], "flagtree-hcu")[
+                    "version"
+                ],
                 "0.7.1.dev20261104",
             )
             self.assertIn(
@@ -416,7 +474,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
 
             release_version = "0.7.1a2+hcu3.6"
             released, released_output = self.build_matrix(
-                "FlagGems",
+                "FlagAttention",
                 flagtree_version=release_version,
                 vendors="Nvidia,Ascend,Hygon",
                 cwd=root,
@@ -426,15 +484,19 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 backend["name"]: backend for backend in released["include"]
             }
             self.assertEqual(
-                released_by_name["BW1000"]["flagtree_version"],
+                self.upgrade_dep(released_by_name["BW1000"], "flagtree-hcu")["version"],
                 release_version,
             )
             self.assertEqual(
-                released_by_name["H800"]["flagtree_version"],
+                self.upgrade_dep(released_by_name["H800"], "flagtree-nvidia")[
+                    "version"
+                ],
                 "0.7.1.dev20261115",
             )
             self.assertEqual(
-                released_by_name["910B"]["flagtree_version"],
+                self.upgrade_dep(released_by_name["910B"], "flagtree-ascend-cann9.0.0")[
+                    "version"
+                ],
                 "0.7.0.dev20261115",
             )
             self.assertIn(
@@ -443,14 +505,16 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             )
 
             prefix_collision, collision_output = self.build_matrix(
-                "FlagGems",
+                "FlagAttention",
                 flagtree_version="0.7.1",
                 vendors="Nvidia",
                 cwd=root,
                 return_output=True,
             )
             self.assertEqual(
-                prefix_collision["include"][0]["flagtree_version"],
+                self.upgrade_dep(prefix_collision["include"][0], "flagtree-nvidia")[
+                    "version"
+                ],
                 "0.7.1.dev20261115",
             )
             self.assertIn(
@@ -460,20 +524,24 @@ class FlagTrainWorkflowTest(unittest.TestCase):
 
             h800_path = root / ".github/configs/backends/H800.yaml"
             h800 = yaml.safe_load(h800_path.read_text(encoding="utf-8"))
-            h800["flagtree"]["index_url"] = (root / "missing-index").as_uri()
+            h800["deps"]["flagtree-nvidia"]["index_url"] = (
+                root / "missing-index"
+            ).as_uri()
             h800_path.write_text(
                 yaml.safe_dump(h800, sort_keys=False),
                 encoding="utf-8",
             )
             failed_query, failed_query_output = self.build_matrix(
-                "FlagGems",
+                "FlagAttention",
                 flagtree_version=full_daily,
                 vendors="Nvidia",
                 cwd=root,
                 return_output=True,
             )
             self.assertEqual(
-                failed_query["include"][0]["flagtree_version"],
+                self.upgrade_dep(failed_query["include"][0], "flagtree-nvidia")[
+                    "version"
+                ],
                 "0.7.1.dev20261115",
             )
             self.assertIn(
@@ -484,14 +552,27 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 "using configured version 0.7.1.dev20261115", failed_query_output
             )
 
-    def test_repo_can_skip_flagtree_upgrade_globally_or_by_backend(self):
+    def test_repo_dependency_layers_override_and_disable_packages(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             copytree(ROOT / ".github/configs", root / ".github/configs")
             repos_path = root / ".github/configs/repos.yaml"
             repos = yaml.safe_load(repos_path.read_text(encoding="utf-8"))
 
-            repos["repos"]["FlagAttention"]["skip_flagtree_upgrade"] = ["H800"]
+            repos["repos"]["FlagAttention"]["deps"] = {
+                "default": {
+                    "flag-gems": {"version": "5.6.0.dev20261119"},
+                },
+                "H800": {
+                    "flagtree-nvidia": {"enabled": False},
+                    "extra-pkg": {
+                        "version": "1.2.3",
+                        "index_url": "https://example.invalid/simple",
+                        "no_deps": True,
+                    },
+                    "plain-pkg": {},
+                },
+            }
             repos_path.write_text(
                 yaml.safe_dump(repos, sort_keys=False),
                 encoding="utf-8",
@@ -504,32 +585,87 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             selected_by_name = {
                 backend["name"]: backend for backend in selected["include"]
             }
-            self.assertTrue(selected_by_name["H800"]["skip_flagtree_upgrade"])
-            self.assertFalse(selected_by_name["910B"]["skip_flagtree_upgrade"])
+            h800_deps = self.upgrade_deps(selected_by_name["H800"])
+            self.assertNotIn(
+                "UPGRADE_DEPS_JSON",
+                json.loads(selected_by_name["H800"]["test_env"]),
+            )
+            self.assertEqual(
+                json.loads(selected_by_name["H800"]["upgrade_env"])[
+                    "UPGRADE_DEPS_JSON"
+                ],
+                selected_by_name["H800"]["upgrade_deps"],
+            )
+            self.assertEqual(
+                [dependency["package_name"] for dependency in h800_deps],
+                ["flag-gems", "extra-pkg", "plain-pkg"],
+            )
+            self.assertEqual(h800_deps[0]["version"], "5.6.0.dev20261119")
+            self.assertEqual(
+                h800_deps[1]["uv_options"],
+                ["--index-url", "https://example.invalid/simple", "--no-deps"],
+            )
+            self.assertEqual(h800_deps[2]["requirement"], "plain-pkg")
+            self.assertEqual(h800_deps[2]["uv_options"], [])
+            self.assertEqual(
+                [
+                    dependency["package_name"]
+                    for dependency in self.upgrade_deps(selected_by_name["910B"])
+                ],
+                ["flagtree-ascend-cann9.0.0", "flag-gems"],
+            )
 
-            repos["repos"]["FlagAttention"]["skip_flagtree_upgrade"] = True
-            repos_path.write_text(
-                yaml.safe_dump(repos, sort_keys=False),
+    def test_matrix_rejects_non_normalized_dependency_target(self):
+        prepare_steps = self.workflow["jobs"]["prepare"]["steps"]
+        script = next(
+            step["run"] for step in prepare_steps if step.get("id") == "build-matrix"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            copytree(ROOT / ".github/configs", root / ".github/configs")
+            backend_path = root / ".github/configs/backends/H800.yaml"
+            backend = yaml.safe_load(backend_path.read_text(encoding="utf-8"))
+            backend["deps"]["flagtree-nvidia"]["target"] = "/opt/../etc"
+            backend_path.write_text(
+                yaml.safe_dump(backend, sort_keys=False),
                 encoding="utf-8",
             )
-            skipped = self.build_matrix(
-                "FlagAttention",
-                vendors="Nvidia,Ascend",
+            completed = subprocess.run(
+                [sys.executable, "-c", script],
                 cwd=root,
+                check=False,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "REPO_INPUT": "FlagAttention",
+                    "REF_INPUT": "",
+                    "FLAGTREE_VERSION_INPUT": "",
+                    "VENDORS_INPUT": "Nvidia",
+                    "OPS_INPUT": "",
+                    "EXCLUDE_OPS_INPUT": "",
+                    "UPLOAD_LOG_INPUT": "",
+                    "SEND_FEISHU_INPUT": "",
+                    "GITHUB_OUTPUT": str(root / "github-output"),
+                },
+                text=True,
             )
-            self.assertTrue(
-                all(backend["skip_flagtree_upgrade"] for backend in skipped["include"])
-            )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn(
+            "H800: flagtree-nvidia.target must be a specific normalized "
+            "absolute path such as /opt/flagtree",
+            completed.stderr,
+        )
 
     def test_gpu_probe_precedes_vendor_dependency_install(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]
         names = [step.get("name") for step in steps]
         self.assertLess(
             names.index("Configure package index and install optest"),
-            names.index("Upgrade Flagtree"),
+            names.index("Upgrade configured packages (FlagTree, FlagGems)"),
         )
         self.assertLess(
-            names.index("Upgrade Flagtree"),
+            names.index("Upgrade configured packages (FlagTree, FlagGems)"),
             names.index("Check GPU availability"),
         )
         self.assertLess(
@@ -547,77 +683,42 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             install,
         )
 
-        upgrade = next(step for step in steps if step.get("name") == "Upgrade Flagtree")
+        upgrade = next(
+            step
+            for step in steps
+            if step.get("name") == "Upgrade configured packages (FlagTree, FlagGems)"
+        )
         self.assertEqual(
             upgrade["if"],
-            "${{ matrix.flagtree_package_name != '' && matrix.skip_flagtree_upgrade != true }}",
+            "${{ matrix.upgrade_deps != '[]' }}",
         )
-        self.assertEqual(upgrade["env"], "${{ fromJSON(matrix.test_env) }}")
-        self.assertNotIn("flagtree_backup", upgrade["run"])
-        self.assertNotIn("uv pip uninstall", upgrade["run"])
-        self.assertIn("uv pip install", upgrade["run"])
-        self.assertNotIn("uv pip install -v", upgrade["run"])
-        self.assertIn("--no-deps", upgrade["run"])
-        self.assertIn('--target "${FLAGTREE_STAGING_DIR}"', upgrade["run"])
-        self.assertIn('--index-url "${FLAGTREE_INDEX_URL}"', upgrade["run"])
-        self.assertNotIn("--no-cache", upgrade["run"])
-        self.assertIn('rm -rf -- "${FLAGTREE_STAGING_DIR}"', upgrade["run"])
-        self.assertIn('rm -rf -- "${FLAGTREE_INSTALL_DIR}"', upgrade["run"])
-        self.assertIn(
-            'mv "${FLAGTREE_STAGING_DIR}" "${FLAGTREE_INSTALL_DIR}"',
-            upgrade["run"],
-        )
-        self.assertIn("uv pip show", upgrade["run"])
-        self.assertIn('print_cache_debug "FlagTree install: before"', upgrade["run"])
-        self.assertIn('print_cache_debug "FlagTree install: after"', upgrade["run"])
-        self.assertIn(
-            'uv pip show --python "${ACTIVE_PYTHON}" flagtree', upgrade["run"]
-        )
-        self.assertNotIn('"show staged ${FLAGTREE_PACKAGE_NAME}"', upgrade["run"])
-        self.assertIn(
-            'uv pip show --target "${FLAGTREE_INSTALL_DIR}" "${FLAGTREE_PACKAGE_NAME}"',
-            upgrade["run"],
-        )
-        self.assertNotIn(
-            '"show installed ${FLAGTREE_PACKAGE_NAME} through uv environment"',
-            upgrade["run"],
-        )
-        self.assertNotIn('pip show "${FLAGTREE_PACKAGE_NAME}"', upgrade["run"])
-        self.assertIn(
-            '":${PYTHONPATH:-}:"',
-            upgrade["run"],
-        )
-        self.assertIn(
-            'export PYTHONPATH="${FLAGTREE_INSTALL_DIR}${PYTHONPATH:+:${PYTHONPATH}}"',
-            upgrade["run"],
-        )
-        self.assertIn(
-            'printf \'PYTHONPATH=%s\\n\' "${PYTHONPATH}" >> "${GITHUB_ENV}"',
-            upgrade["run"],
-        )
-        self.assertIn('"${ACTIVE_PYTHON}" -c', upgrade["run"])
-        self.assertIn("actual = metadata.version(package)", upgrade["run"])
+        self.assertEqual(upgrade["env"], "${{ fromJSON(matrix.upgrade_env) }}")
+        self.assertIn("dependencies = json.loads", upgrade["run"])
+        self.assertIn("dependencies", upgrade["run"])
+        self.assertIn("'install',", upgrade["run"])
+        self.assertIn("options[target_index] = staging", upgrade["run"])
+        self.assertIn("shutil.move(staging, target)", upgrade["run"])
+        self.assertIn("shutil.rmtree", upgrade["run"])
+        self.assertNotIn("ignore_errors=True", upgrade["run"])
+        self.assertIn("explicit_index_options.intersection(options)", upgrade["run"])
+        self.assertIn("metadata.version(package)", upgrade["run"])
         self.assertIn("actual == expected", upgrade["run"])
-        self.assertLess(
-            upgrade["run"].index('"show installed flagtree before upgrade"'),
-            upgrade["run"].index('rm -rf -- "${FLAGTREE_INSTALL_DIR}"'),
+        self.assertIn(
+            'print_cache_debug "configured package install: before"',
+            upgrade["run"],
+        )
+        self.assertIn(
+            'print_cache_debug "configured package install: after"',
+            upgrade["run"],
         )
 
     def test_flagtree_upgrade_stages_and_activates_exact_hcu_daily(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]
         script = next(
-            step["run"] for step in steps if step.get("name") == "Upgrade Flagtree"
+            step["run"]
+            for step in steps
+            if step.get("name") == "Upgrade configured packages (FlagTree, FlagGems)"
         )
-        replacements = {
-            "${{ matrix.flagtree_package_name }}": "flagtree-hcu",
-            "${{ matrix.flagtree_version }}": "0.7.1.dev20261104",
-            "${{ matrix.flagtree_index_url }}": (
-                "https://resource.flagos.net/repository/flagos-pypi-daily/simple"
-            ),
-            "${{ matrix.name }}": "BW1000",
-        }
-        for expression, value in replacements.items():
-            script = script.replace(expression, value)
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -625,9 +726,6 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             staging = root / "flagtree.new"
             source.mkdir()
             (source / "marker").write_text("image source", encoding="utf-8")
-            script = script.replace("/opt/flagtree.new", str(staging)).replace(
-                "/opt/flagtree", str(source)
-            )
             uv_log = root / "uv.log"
             uv = root / "uv"
             uv.write_text(
@@ -666,6 +764,25 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     "UV_LOG": str(uv_log),
                     "GITHUB_ENV": str(github_env),
                     "PYTHONPATH": "",
+                    "UPGRADE_DEPS_JSON": json.dumps(
+                        [
+                            {
+                                "package_name": "flagtree-hcu",
+                                "display_name": "FlagTree",
+                                "priority": 100,
+                                "version": "0.7.1.dev20261104",
+                                "requirement": "flagtree-hcu==0.7.1.dev20261104",
+                                "target": str(source),
+                                "uv_options": [
+                                    "--no-deps",
+                                    "--target",
+                                    str(source),
+                                    "--index-url",
+                                    "https://resource.flagos.net/repository/flagos-pypi-daily/simple",
+                                ],
+                            }
+                        ]
+                    ),
                 },
                 text=True,
             )
@@ -698,7 +815,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             pre_upgrade_show = next(
                 line for line in commands.splitlines() if "pip show --python" in line
             )
-            self.assertTrue(pre_upgrade_show.endswith(" flagtree"))
+            self.assertTrue(pre_upgrade_show.endswith(" flagtree-hcu"))
             self.assertNotIn(f"pip show --target {staging}", commands)
             target_show_commands = [
                 line
@@ -712,18 +829,33 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             )
 
             self.assertIn(
-                f"[FlagTree] {source} is not present in PYTHONPATH; prepending it.",
+                f"[FlagTree] {source} was not in PYTHONPATH; prepended it.",
                 completed.stdout,
             )
             self.assertIn(
-                f"[FlagTree] Effective PYTHONPATH: {source}", completed.stdout
-            )
-            self.assertIn(
-                "[FlagTree] Active Python sees flagtree-hcu==0.7.1.dev20261104",
+                "[flagtree-hcu] Active Python sees flagtree-hcu==0.7.1.dev20261104",
                 completed.stdout,
             )
 
-            github_env.write_text("", encoding="utf-8")
+    def test_generic_upgrade_without_index_option_keeps_selected_index(self):
+        steps = self.workflow["jobs"]["test-container"]["steps"]
+        script = next(
+            step["run"]
+            for step in steps
+            if step.get("name") == "Upgrade configured packages (FlagTree, FlagGems)"
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            uv_log = root / "uv.log"
+            uv = root / "uv"
+            uv.write_text(
+                "#!/bin/sh\n"
+                'printf "UV_DEFAULT_INDEX=%s ARGS=%s\\n" '
+                '"${UV_DEFAULT_INDEX:-}" "$*" >> "$UV_LOG"\n',
+                encoding="utf-8",
+            )
+            uv.chmod(0o755)
             completed = subprocess.run(
                 ["bash", "-e", "-o", "pipefail", "-c", script],
                 cwd=ROOT,
@@ -732,68 +864,44 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 env={
                     **os.environ,
                     "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
-                    "UV_CACHE_DIR": str(root / "uv-cache"),
                     "UV_DEFAULT_INDEX": "https://pypi.example/simple",
                     "UV_LOG": str(uv_log),
-                    "GITHUB_ENV": str(github_env),
-                    "PYTHONPATH": str(source),
+                    "UPGRADE_DEPS_JSON": json.dumps(
+                        [
+                            {
+                                "package_name": "plain-pkg",
+                                "display_name": "Plain package",
+                                "priority": 1000,
+                                "version": "",
+                                "requirement": "plain-pkg",
+                                "target": "",
+                                "uv_options": [],
+                            }
+                        ]
+                    ),
                 },
                 text=True,
             )
 
             self.assertEqual(completed.returncode, 0, completed.stderr)
-            self.assertIn(
-                f"[FlagTree] {source} already exists in PYTHONPATH; skipping prepend.",
-                completed.stdout,
+            install_log = next(
+                line
+                for line in uv_log.read_text(encoding="utf-8").splitlines()
+                if "ARGS=pip install " in line
             )
-            self.assertIn(
-                f"[FlagTree] Effective PYTHONPATH: {source}", completed.stdout
-            )
-            self.assertEqual(
-                github_env.read_text(encoding="utf-8"),
-                f"PYTHONPATH={source}\n",
-            )
-
-            completed = subprocess.run(
-                ["bash", "-e", "-o", "pipefail", "-c", script],
-                cwd=ROOT,
-                check=False,
-                capture_output=True,
-                env={
-                    **os.environ,
-                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
-                    "UV_CACHE_DIR": str(root / "uv-cache"),
-                    "UV_DEFAULT_INDEX": "https://pypi.example/simple",
-                    "UV_LOG": str(uv_log),
-                    "GITHUB_ENV": str(github_env),
-                    "PYTHONPATH": str(source),
-                    "FAKE_FLAGTREE_VERSION": "0.7.1.dev20261103",
-                },
-                text=True,
-            )
-
-            self.assertNotEqual(completed.returncode, 0)
-            self.assertIn(
-                "flagtree-hcu: active Python sees version 0.7.1.dev20261103, "
-                "expected 0.7.1.dev20261104",
-                completed.stderr,
+            self.assertTrue(
+                install_log.startswith(
+                    "UV_DEFAULT_INDEX=https://pypi.example/simple ARGS="
+                )
             )
 
     def test_flagtree_upgrade_preserves_image_tree_when_staging_fails(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]
         script = next(
-            step["run"] for step in steps if step.get("name") == "Upgrade Flagtree"
+            step["run"]
+            for step in steps
+            if step.get("name") == "Upgrade configured packages (FlagTree, FlagGems)"
         )
-        replacements = {
-            "${{ matrix.flagtree_package_name }}": "flagtree-nvidia",
-            "${{ matrix.flagtree_version }}": "0.7.1.dev20261115",
-            "${{ matrix.flagtree_index_url }}": (
-                "https://resource.flagos.net/repository/flagos-pypi-daily/simple"
-            ),
-            "${{ matrix.name }}": "H800",
-        }
-        for expression, value in replacements.items():
-            script = script.replace(expression, value)
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -801,9 +909,6 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             staging = root / "flagtree.new"
             source.mkdir()
             (source / "marker").write_text("image source", encoding="utf-8")
-            script = script.replace("/opt/flagtree.new", str(staging)).replace(
-                "/opt/flagtree", str(source)
-            )
             uv = root / "uv"
             uv.write_text(
                 '#!/bin/sh\ncase " $* " in *" pip install "*) exit 42 ;; esac\n',
@@ -818,6 +923,25 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 env={
                     **os.environ,
                     "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                    "UPGRADE_DEPS_JSON": json.dumps(
+                        [
+                            {
+                                "package_name": "flagtree-nvidia",
+                                "display_name": "FlagTree",
+                                "priority": 100,
+                                "version": "0.7.1.dev20261115",
+                                "requirement": "flagtree-nvidia==0.7.1.dev20261115",
+                                "target": str(source),
+                                "uv_options": [
+                                    "--no-deps",
+                                    "--target",
+                                    str(source),
+                                    "--index-url",
+                                    "https://resource.flagos.net/repository/flagos-pypi-daily/simple",
+                                ],
+                            }
+                        ]
+                    ),
                 },
                 text=True,
             )
@@ -829,7 +953,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             )
             self.assertFalse(staging.exists())
             self.assertNotIn(
-                "Starting: remove image-provided FlagTree directory",
+                "show installed flagtree-nvidia in target directory",
                 completed.stdout,
             )
 
@@ -1081,13 +1205,6 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             for step in steps
             if step.get("name") == "Install target repository and dependencies"
         )
-        replacements = {
-            "${{ matrix.deps }}": "",
-            "${{ matrix.name }}": "H800",
-        }
-        for expression, value in replacements.items():
-            script = script.replace(expression, value)
-
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             # The target repo is now checked out into a per-repo directory
@@ -1169,9 +1286,6 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         output = completed.stdout
         expected = [
-            "repos.FlagTrain.deps.default + repos.FlagTrain.deps.H800",
-            "Detected explicit backend dependencies: <empty>",
-            "No explicit backend dependencies configured; skipping.",
             "Target project source: ./FlagTrain/pyproject.toml",
             "Detected test extra: true",
             "Detected GPU vendor from flagos-gpu-check: nvidia",

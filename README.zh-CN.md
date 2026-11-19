@@ -761,10 +761,25 @@ repos:
 
 FlagGems 自身需要该例外，因为任务稍后会以 editable 模式安装其 checkout 源码。
 
-通用依赖映射按具体程度由低到高合并：`defaults.deps`、所选 backend 的 `deps`、
-`repos.<repo>.deps.default`、`repos.<repo>.deps.<backend>`。后层只覆盖同名 package
-中显式提供的字段；`enabled: false` 会移除继承项。package 按 `priority` 升序、再按名称
-排序安装。
+通用依赖映射按 package name 独立解析；需要覆盖同一 package 时，各层必须使用完全相同的
+package key：
+
+| 优先级 | 配置层 | 作用范围 |
+| ---: | --- | --- |
+| 1（最低） | `defaults.deps` | 所有仓库的所有已启用 backend。 |
+| 2 | `.github/configs/backends/<backend>.yaml` 中的 `deps` | 在启用了该硬件 backend 的所有仓库中生效。 |
+| 3 | `repos.<repo>.deps.default` | 指定仓库的所有已启用 backend。 |
+| 4（最高） | `repos.<repo>.deps.<backend>` | 指定仓库和 backend 的组合。 |
+
+合并按字段进行，而不是用整个 package mapping 替换前层。后层未提供的字段继续继承。
+最终合并后的 `enabled` 决定是否安装：所有层均未设置时默认为 `true`；前层的 `false`
+会穿过未设置 `enabled` 的后层继续生效；只有后层显式设置 `enabled: true` 才能重新启用；
+反过来，后层显式设置 `enabled: false` 总会禁用从前层继承的 package。
+这与 `repos.<repo>.backends.<name>.enabled` 相互独立：被禁用的 backend 会在 package
+解析前从矩阵中移除，因此 package 的 `enabled: true` 不能恢复整个 backend。
+
+配置合并优先级不决定安装顺序。移除禁用项后，package 按 `priority` 升序（默认
+`1000`）安装；相同 priority 再按 package name 的字典序安装。
 
 `version` 只用于生成 `package==version`；省略时安装裸 package name。控制字段
 （`enabled`、`display_name`、`priority`、`version`、`version_input`）不会传给 uv。
@@ -861,8 +876,8 @@ src/flagos_optest/        Python 软件包、调度器、报告和 GPU 检查
 | `default_branch` | 工作流没有收到显式 ref 时使用的目标分支。 |
 | `backends.<name>.enabled` | 为该仓库启用或禁用共享硬件后端。 |
 | `container_images.<backend>` | 某个后端的仓库专用镜像覆盖项。 |
-| `deps.default.<package>` | 为所有已启用后端提供仓库级 package 覆盖或新增项。 |
-| `deps.<backend>.<package>` | 为单个 backend 提供最终覆盖、新增项，或用 `enabled: false` 移除继承项。 |
+| `deps.default.<package>` | 为所有已启用 backend 提供仓库级覆盖或新增项；字段覆盖全局和 backend 值。 |
+| `deps.<backend>.<package>` | 单个 backend 的最高优先级覆盖；显式 `enabled: true` 可重新启用，`false` 可禁用继承项。 |
 | `base_data` | 目标 checkout 中可选的性能基线 JSON 路径。 |
 | `op_cmd_timeout` | 每个精度或性能子进程的超时时间（秒）。继承 `defaults.op_cmd_timeout`。 |
 | `ops_test_timeout_minutes` | 每个仓库的算子测试步骤超时时间。 |
@@ -881,12 +896,15 @@ repos:
 ```
 
 `repos.<repo>.container_images.<backend>` 的优先级高于后端的 `container_image`。
-如果不存在仓库覆盖项，则使用共享后端镜像。package map 按 package name 和字段由低到高
-合并：
+如果不存在仓库覆盖项，则使用共享后端镜像。package map 按完全相同的 package name 和
+字段由低到高合并：
 
 ```text
 defaults.deps -> backend deps -> repo deps.default -> repo deps.<backend>
 ```
+
+每个字段最后一次显式设置的值生效。尤其是 `enabled`：最后一次显式值生效，省略则继承
+前一层状态。package 的 `priority` 只控制最终安装顺序，不会改变上述配置覆盖优先级。
 
 普通的目标专用厂商依赖不应使用这些 map。工作流会根据 `flagos-gpu-check` 报告的厂商键，
 选择目标仓库的可选依赖组。

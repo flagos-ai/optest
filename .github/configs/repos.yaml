@@ -53,11 +53,24 @@ defaults:
   # matrix value for a job-level timeout); the real per-repo limit lives on the
   # test step. Override per repo via `ops_test_timeout_minutes`.
   ops_test_timeout_minutes: 240
-  # Shared packages merged with backend-specific packages. Package names are
-  # the mapping keys. `version` pins the requirement. `display_name`,
-  # `enabled`, `priority`, and `version_input` control workflow behavior;
-  # every other key is converted from snake_case to a
-  # `uv pip install --kebab-case` option.
+  # Shared packages merged with backend and repository package settings.
+  # Resolution is performed independently for each package name and each field
+  # in this exact order (later layers override earlier fields):
+  #   1. defaults.deps
+  #   2. .github/configs/backends/<backend>.yaml: deps
+  #   3. repos.<repo>.deps.default
+  #   4. repos.<repo>.deps.<backend>
+  # A package or field absent from a later layer remains inherited. `enabled`
+  # defaults to true only when no layer sets it. A later `enabled: false`
+  # disables the merged package; that false remains inherited until an even
+  # later layer explicitly sets `enabled: true` to re-enable it. Backend
+  # selection under repos.<repo>.backends is separate: a disabled backend is
+  # removed before any package settings are resolved.
+  #
+  # `version` pins the requirement. `display_name`, `enabled`, `priority`, and
+  # `version_input` control workflow behavior; every other key is converted
+  # from snake_case to a `uv pip install --kebab-case` option. Enabled packages
+  # are installed by ascending `priority` (default 1000), then package name.
   # Artifact: packages/flag-gems/5.5.0.dev20261118/
   #           flag_gems-5.5.0.dev20261118-py3-none-any.whl
   deps:
@@ -225,7 +238,8 @@ repos:
 # ---------------------------------------------------------------------------
 # Optional shared dependency overrides/additions use the same package map as
 # `defaults.deps`. Target-project dependencies themselves should remain in the
-# target repository's pyproject.toml optional-dependencies.
+# target repository's pyproject.toml optional-dependencies. The same exact
+# package key must be used in every layer that intends to override it.
 #
 #   repos:
 #     SomeRepo:
@@ -237,6 +251,9 @@ repos:
 #             no_deps: true
 #           flag-gems:
 #             enabled: false
+#         H800:
+#           flag-gems:
+#             enabled: true  # re-enables the repo-default exception on H800
 #
 # Optional backend-package exclusions (omit by default):
 #
@@ -247,10 +264,12 @@ repos:
 #           flagtree-nvidia:
 #             enabled: false
 #
-# The effective dependency map is merged in this order: `defaults.deps`, the
-# selected backend's `deps`, `repos.<repo>.deps.default`, then
-# `repos.<repo>.deps.<backend>`. Later definitions override fields on the same
-# package. `enabled: false` removes an inherited package. FlagTree packages use
-# `target: /opt/flagtree`, so the workflow stages the target and replaces it
-# only after installation succeeds.
+# Merge precedence is `defaults.deps` < backend `deps` < repo `deps.default` <
+# repo `deps.<backend>`. Merge is field-by-field for each package, not a whole
+# package replacement. An inherited `enabled: false` remains false when later
+# layers omit `enabled`; only a later explicit `enabled: true` re-enables it.
+# After disabled packages are removed, install order is ascending `priority`
+# and then package name. This install order does not change merge precedence.
+# FlagTree packages use `target: /opt/flagtree`, so the workflow stages the
+# target and replaces it only after installation succeeds.
 # ---------------------------------------------------------------------------

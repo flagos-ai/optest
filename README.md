@@ -845,12 +845,29 @@ repos:
 This exception applies to FlagGems itself because its checked-out source is
 installed editable later in the job.
 
-The generic dependency map is merged from least to most specific:
-`defaults.deps`, the selected backend's `deps`,
-`repos.<repo>.deps.default`, and `repos.<repo>.deps.<backend>`. A later layer
-overrides only the fields it specifies for the same package. `enabled: false`
-removes an inherited package. Packages are installed by ascending `priority`
-and then package name.
+The generic dependency map is resolved independently for every package name.
+Use the exact same package key in multiple layers to override it:
+
+| Precedence | Configuration layer | Scope |
+| ---: | --- | --- |
+| 1 (lowest) | `defaults.deps` | Every enabled backend of every repository. |
+| 2 | `.github/configs/backends/<backend>.yaml` `deps` | That hardware backend in every repository where it is enabled. |
+| 3 | `repos.<repo>.deps.default` | Every enabled backend of one repository. |
+| 4 (highest) | `repos.<repo>.deps.<backend>` | One repository/backend combination. |
+
+Merging is field-by-field, not whole-package replacement. A field omitted by a
+later layer keeps its inherited value. The final merged `enabled` value decides
+whether the package is installed: it defaults to `true` when no layer sets it;
+an inherited `false` remains false through later layers that omit `enabled`;
+and only a later explicit `enabled: true` re-enables it. Conversely, a later
+explicit `enabled: false` always disables values inherited from lower layers.
+This is independent from `repos.<repo>.backends.<name>.enabled`: a disabled
+backend is removed from the matrix before package resolution, so package-level
+`enabled: true` cannot restore it.
+
+Merge precedence does not determine installation order. After disabled
+packages are removed, enabled packages are installed by ascending `priority`
+(default `1000`), then lexicographically by package name for equal priorities.
 
 `version` is metadata used to build `package==version`; when omitted, the bare
 package name is installed. Control keys (`enabled`, `display_name`, `priority`,
@@ -961,8 +978,8 @@ form the GitHub checkout target. Each repository entry can define:
 | `default_branch` | Target branch used when the workflow does not receive an explicit ref. |
 | `backends.<name>.enabled` | Enables or disables a shared hardware backend for that repository. |
 | `container_images.<backend>` | Repository-specific image override for a backend. |
-| `deps.default.<package>` | Repository-wide package override or addition for every enabled backend. |
-| `deps.<backend>.<package>` | Final package override, addition, or `enabled: false` removal for one backend. |
+| `deps.default.<package>` | Repository-wide package override or addition for every enabled backend; fields override global and backend values. |
+| `deps.<backend>.<package>` | Highest-precedence package override for one backend; explicit `enabled: true` can re-enable and `false` can disable the inherited package. |
 | `base_data` | Optional performance-baseline JSON path in the target checkout. |
 | `op_cmd_timeout` | Timeout in seconds for each accuracy or performance subprocess. Inherits `defaults.op_cmd_timeout`. |
 | `ops_test_timeout_minutes` | Per-repository timeout for the operator-test step. |
@@ -982,12 +999,17 @@ repos:
 
 `repos.<repo>.container_images.<backend>` takes precedence over the backend's
 `container_image`. If no repository override exists, the shared backend image
-is used. Package maps are merged by package name and field, from least to most
-specific:
+is used. Package maps are merged by exact package name and then by field, from
+least to most specific:
 
 ```text
 defaults.deps -> backend deps -> repo deps.default -> repo deps.<backend>
 ```
+
+The last explicit value for each field wins. In particular, the last explicit
+`enabled` value wins; omitting it inherits the prior state. Package
+`priority` controls only the resulting install order and never changes this
+configuration precedence.
 
 Normal target-specific vendor dependencies should not use these maps. The
 workflow instead selects the target's optional-dependency group from the vendor

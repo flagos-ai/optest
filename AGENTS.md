@@ -68,10 +68,12 @@ For every new hardware backend:
 1. Add `.github/configs/backends/<hardware>.yaml` with the normalized `vendor`,
    runner label, container configuration, device access, `test_env`,
    `output_base_dir`, and any exceptional hardware-level dependencies. When
-   FlagTree publishes a compatible backend wheel, also add a `flagtree`
-   mapping with its exact `package_name`, full default `version`, and
-   `index_url`. Omit the mapping when no compatible distribution exists;
-   the workflow then retains the image-provided `/opt/flagtree` tree.
+   FlagTree publishes a compatible backend wheel, add it under `deps` using the
+   exact distribution name as the key, with its full default `version`,
+   `index_url`, `priority: 100`, `version_input: flagtree_version`,
+   `no_deps: true`, and `target: /opt/flagtree`. Omit that package when no
+   compatible distribution exists; the workflow then retains the
+   image-provided `/opt/flagtree` tree.
 2. Add the backend under `backends` for each applicable repository in
    `.github/configs/repos.yaml`, plus repository-specific image overrides only
    when the shared backend image is unsuitable.
@@ -123,51 +125,75 @@ lists are desired, and that its backend `output_base_dir` is durable. Run the
 full test suite after onboarding; this repository requires 100% statement and
 branch coverage.
 
-## FlagTree Upgrade
+## Configured Package Upgrades
 
-The `Upgrade Flagtree` workflow step runs after optest installation and before
-GPU detection only when the selected backend YAML contains `flagtree`. That
-mapping requires `package_name`, a full daily `version` such as
-`0.7.1.dev20261115`, or a fixed release version, plus `index_url`. The optional
-`flagtree_version` dispatch input accepts a full daily or release version, or
-`YYYYMMDD`; the date form keeps each daily backend's configured version base,
-which is important for Ascend CANN distributions whose base can differ from
-other backends. Before applying an override, the matrix builder checks the
-exact version in that backend's package and index. Missing versions and index
-query failures must emit a GitHub Actions warning and fall back only that
-backend to its configured default. A date cannot be derived from a fixed
-release default, but a complete release version can override it when available.
+The `Upgrade configured packages (FlagTree, FlagGems)` step runs after optest
+installation and before GPU detection. Its generic `deps` configuration is
+resolved independently for each exact package key, in this order from lowest
+to highest precedence:
 
-The step installs the exact configured wheel with `uv pip install --no-deps
---target /opt/flagtree.new` and only then replaces `/opt/flagtree`. It inherits
-the per-vendor `UV_CACHE_DIR` but keeps the selected FlagTree index
-command-local. After replacement, keep the target-directory `uv pip show`,
-check whether `/opt/flagtree` is already on `PYTHONPATH`, prepend it when
-missing, and persist the effective value through `GITHUB_ENV` for later steps.
-Verify the exact configured distribution version through `ACTIVE_PYTHON`, not
-bare `pip`: a target directory is not part of an interpreter's normal package
-environment unless `PYTHONPATH` activates it. Never remove `/opt/flagtree`
-before staging succeeds, or on a backend without a configured wheel, because
-those cases must retain the image-provided source tree.
+1. `defaults.deps` in `.github/configs/repos.yaml`, for all repositories and
+   enabled backends.
+2. `deps` in `.github/configs/backends/<backend>.yaml`, for that hardware
+   backend in every repository where it is enabled.
+3. `repos.<repo>.deps.default`, for every enabled backend of one repository.
+4. `repos.<repo>.deps.<backend>`, for one repository/backend combination.
 
-Repository exceptions belong in `.github/configs/repos.yaml`:
+Merge the same package field-by-field; do not replace the whole package map.
+A field omitted by a later layer retains its inherited value. The final
+`enabled` value controls inclusion and has these exact rules:
 
-- `skip_flagtree_upgrade: true` skips replacement for the whole repository.
-- `skip_flagtree_upgrade: [H800, 910B]` skips only the named backends.
-- Omitting the key preserves the normal backend-controlled upgrade behavior.
+- When no layer sets `enabled`, it defaults to `true`.
+- A later explicit `enabled: false` disables an inherited package.
+- An inherited `false` remains false through later layers that omit the field.
+- Only a later explicit `enabled: true` re-enables an inherited disabled
+  package. Therefore, the last explicit `enabled` value wins.
 
-The current `FlagGems` 910B repository exception must retain its image-provided
-FlagTree: its repository-specific runtime image uses CANN 9.2.1, while the
-shared 910B FlagTree daily distribution targets CANN 9.0.0. This exception must
-not affect 910B runs for other repositories. FlagGems also carries
-repository-specific T-Head PPU 2.1.0 and AMD ROCm 7.2.4 runtime image overrides;
-these backends continue to use the shared FlagTree upgrade policy. Its
-Cambricon backend uses the shared Neuware 4.7.2 runtime image and retains the
-image-provided FlagTree because it has no configured daily distribution. Only
-FlagGems currently enables that backend, so keep its image in the backend YAML.
+Package enablement is separate from `repos.<repo>.backends.<name>.enabled`.
+The workflow removes a disabled backend from the matrix before resolving
+packages, and a package-level `enabled: true` cannot re-enable that backend.
+After disabled packages are removed, install order is ascending `priority`
+(default `1000`) and then package name for equal priorities. Installation order
+does not affect configuration precedence.
 
-When changing this flow, update both READMEs, backend configuration coverage,
-matrix version/skip-policy tests, and the workflow-step assertions.
+The package name is the mapping key. `version` produces `package==version`; an
+omitted version installs the bare package. `display_name`, `enabled`,
+`priority`, `version`, and `version_input` are workflow control fields. Every
+other field maps from snake_case to a `uv pip install --kebab-case` option:
+booleans add the flag only when true, scalar values add an option/value pair,
+and lists repeat the option. An omitted `index_url` keeps the workflow-selected
+package index; an explicit index remains command-local.
+
+A package with `target` is installed into `<target>.new`; only a successful
+install may replace the existing target. Targets must be normalized, specific
+absolute paths. Keep removal failures fatal, update `PYTHONPATH` after a
+successful replacement, and verify a pinned version through `ACTIVE_PYTHON`.
+Never remove the old target before staging succeeds.
+
+FlagTree remains a configured-package specialization. Its backend package uses
+`priority: 100`, `version_input: flagtree_version`, and
+`target: /opt/flagtree`. The optional dispatch input accepts a full daily or
+release version, or `YYYYMMDD`; the date form keeps each backend's configured
+version base. Before applying an override, the matrix builder checks the exact
+version in that package and index. A missing version or index failure warns and
+falls back only that backend. A date cannot be derived from a fixed release
+default, but an available complete release version can override it.
+
+FlagGems is the global default package with `priority: 200`, so FlagTree is
+installed first. The `FlagGems` repository disables its inherited `flag-gems`
+package under `deps.default` because its checkout is installed editable later.
+Its 910B scope disables `flagtree-ascend-cann9.0.0` because that repository's
+CANN 9.2.1 image is incompatible with the shared CANN 9.0.0 wheel. Other
+repositories and FlagGems backends keep their inherited package behavior.
+Cambricon retains image-provided FlagTree because its backend has no configured
+FlagTree package.
+
+When changing this flow, keep the resolution rules synchronized in
+`.github/configs/repos.yaml`, both READMEs, and this guide. Tests must cover all
+four layers, field inheritance, default enablement, disable inheritance,
+explicit re-enablement at every later layer, final disablement at every later
+layer, backend-level disablement, priority ordering, and the package-name
+tie-breaker, plus FlagTree version overrides and safe target replacement.
 
 ## FlagGems Per-Vendor Operator Lists
 

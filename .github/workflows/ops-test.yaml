@@ -328,7 +328,9 @@ jobs:
               # Merge package settings from least to most specific:
               # global defaults, hardware backend, repository defaults, then
               # repository/backend overrides. Same-name packages merge by
-              # field; `enabled: false` removes an inherited package.
+              # field. The final inherited `enabled` value decides inclusion,
+              # so omission inherits and a later explicit true can re-enable
+              # an earlier false. Backend enablement is resolved before this.
               backend_deps = backend.pop('deps', {}) or {}
               repo_backend_deps = repo_deps.get(name, {}) or {}
               dep_layers = (
@@ -506,6 +508,7 @@ jobs:
                   })
 
               upgrade_deps.sort(
+                  # Install order is independent of merge precedence.
                   key=lambda item: (item['priority'], item['package_name'])
               )
               backend['upgrade_deps'] = json.dumps(

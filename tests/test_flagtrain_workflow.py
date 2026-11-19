@@ -552,25 +552,86 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 "using configured version 0.7.1.dev20261115", failed_query_output
             )
 
-    def test_repo_dependency_layers_override_and_disable_packages(self):
+    def test_dependency_layers_enablement_precedence_and_install_order(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             copytree(ROOT / ".github/configs", root / ".github/configs")
             repos_path = root / ".github/configs/repos.yaml"
             repos = yaml.safe_load(repos_path.read_text(encoding="utf-8"))
-
+            repos["defaults"]["deps"] = {
+                "global-only": {"version": "1.0", "priority": 300},
+                "all-layers": {
+                    "display_name": "Global",
+                    "version": "1.0",
+                    "index_url": "https://global.example/simple",
+                    "no_deps": True,
+                    "priority": 900,
+                },
+                "reenable-from-default": {
+                    "enabled": False,
+                    "priority": 600,
+                },
+                "reenable-from-backend": {
+                    "enabled": True,
+                    "priority": 610,
+                },
+                "reenable-from-repo-default": {
+                    "enabled": True,
+                    "priority": 620,
+                },
+                "disabled-at-backend": {"enabled": True},
+                "disabled-at-repo-default": {"enabled": True},
+                "disabled-at-repo-backend": {"enabled": True},
+                "disabled-inherited": {"enabled": False, "version": "1.0"},
+                "sort-z": {"priority": 200},
+                "sort-a": {"priority": 200},
+                "implicit-enabled": {"priority": 630},
+                "default-priority": {},
+            }
+            backend_path = root / ".github/configs/backends/H800.yaml"
+            backend = yaml.safe_load(backend_path.read_text(encoding="utf-8"))
+            backend["deps"] = {
+                "backend-only": {"version": "2.0", "priority": 400},
+                "all-layers": {
+                    "display_name": "Backend",
+                    "version": "2.0",
+                    "find_links": "https://backend.example/wheels",
+                },
+                "reenable-from-default": {"enabled": True},
+                "reenable-from-backend": {"enabled": False},
+                "disabled-at-backend": {"enabled": False},
+                "disabled-inherited": {"version": "2.0"},
+            }
+            backend_path.write_text(
+                yaml.safe_dump(backend, sort_keys=False),
+                encoding="utf-8",
+            )
             repos["repos"]["FlagAttention"]["deps"] = {
                 "default": {
-                    "flag-gems": {"version": "5.6.0.dev20261119"},
+                    "repo-default-only": {"version": "3.0", "priority": 500},
+                    "all-layers": {
+                        "display_name": "Repository default",
+                        "version": "3.0",
+                        "index_url": "https://repo.example/simple",
+                        "no_deps": False,
+                    },
+                    "reenable-from-backend": {"enabled": True},
+                    "reenable-from-repo-default": {"enabled": False},
+                    "disabled-at-repo-default": {"enabled": False},
+                    "disabled-inherited": {
+                        "index_url": "https://disabled.example/simple"
+                    },
                 },
                 "H800": {
-                    "flagtree-nvidia": {"enabled": False},
-                    "extra-pkg": {
-                        "version": "1.2.3",
-                        "index_url": "https://example.invalid/simple",
-                        "no_deps": True,
+                    "repo-backend-only": {"version": "4.0", "priority": 50},
+                    "all-layers": {
+                        "display_name": "Repository backend",
+                        "version": "4.0",
+                        "priority": 100,
                     },
-                    "plain-pkg": {},
+                    "reenable-from-repo-default": {"enabled": True},
+                    "disabled-at-repo-backend": {"enabled": False},
+                    "disabled-inherited": {"display_name": "Still disabled"},
                 },
             }
             repos_path.write_text(
@@ -579,41 +640,108 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             )
             selected = self.build_matrix(
                 "FlagAttention",
-                vendors="Nvidia,Ascend",
+                vendors="Nvidia",
                 cwd=root,
             )
-            selected_by_name = {
-                backend["name"]: backend for backend in selected["include"]
-            }
-            h800_deps = self.upgrade_deps(selected_by_name["H800"])
+            self.assertEqual(len(selected["include"]), 1)
+            selected_backend = selected["include"][0]
+            h800_deps = self.upgrade_deps(selected_backend)
             self.assertNotIn(
                 "UPGRADE_DEPS_JSON",
-                json.loads(selected_by_name["H800"]["test_env"]),
+                json.loads(selected_backend["test_env"]),
             )
             self.assertEqual(
-                json.loads(selected_by_name["H800"]["upgrade_env"])[
-                    "UPGRADE_DEPS_JSON"
-                ],
-                selected_by_name["H800"]["upgrade_deps"],
+                json.loads(selected_backend["upgrade_env"])["UPGRADE_DEPS_JSON"],
+                selected_backend["upgrade_deps"],
             )
             self.assertEqual(
                 [dependency["package_name"] for dependency in h800_deps],
-                ["flag-gems", "extra-pkg", "plain-pkg"],
-            )
-            self.assertEqual(h800_deps[0]["version"], "5.6.0.dev20261119")
-            self.assertEqual(
-                h800_deps[1]["uv_options"],
-                ["--index-url", "https://example.invalid/simple", "--no-deps"],
-            )
-            self.assertEqual(h800_deps[2]["requirement"], "plain-pkg")
-            self.assertEqual(h800_deps[2]["uv_options"], [])
-            self.assertEqual(
                 [
-                    dependency["package_name"]
-                    for dependency in self.upgrade_deps(selected_by_name["910B"])
+                    "repo-backend-only",
+                    "all-layers",
+                    "sort-a",
+                    "sort-z",
+                    "global-only",
+                    "backend-only",
+                    "repo-default-only",
+                    "reenable-from-default",
+                    "reenable-from-backend",
+                    "reenable-from-repo-default",
+                    "implicit-enabled",
+                    "default-priority",
                 ],
-                ["flagtree-ascend-cann9.0.0", "flag-gems"],
             )
+            dependencies = {
+                dependency["package_name"]: dependency for dependency in h800_deps
+            }
+            self.assertEqual(
+                dependencies["all-layers"],
+                {
+                    "package_name": "all-layers",
+                    "display_name": "Repository backend",
+                    "priority": 100,
+                    "version": "4.0",
+                    "requirement": "all-layers==4.0",
+                    "target": "",
+                    "uv_options": [
+                        "--index-url",
+                        "https://repo.example/simple",
+                        "--find-links",
+                        "https://backend.example/wheels",
+                    ],
+                },
+            )
+            self.assertTrue(
+                {
+                    "global-only",
+                    "backend-only",
+                    "repo-default-only",
+                    "repo-backend-only",
+                }.issubset(dependencies)
+            )
+            self.assertTrue(
+                {
+                    "reenable-from-default",
+                    "reenable-from-backend",
+                    "reenable-from-repo-default",
+                    "implicit-enabled",
+                }.issubset(dependencies)
+            )
+            self.assertTrue(
+                {
+                    "disabled-at-backend",
+                    "disabled-at-repo-default",
+                    "disabled-at-repo-backend",
+                    "disabled-inherited",
+                }.isdisjoint(dependencies)
+            )
+            self.assertEqual(dependencies["default-priority"]["priority"], 1000)
+            self.assertEqual(
+                dependencies["implicit-enabled"]["requirement"],
+                "implicit-enabled",
+            )
+
+    def test_disabled_backend_is_not_restored_by_enabled_package(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            copytree(ROOT / ".github/configs", root / ".github/configs")
+            repos_path = root / ".github/configs/repos.yaml"
+            repos = yaml.safe_load(repos_path.read_text(encoding="utf-8"))
+            flagattention = repos["repos"]["FlagAttention"]
+            flagattention["backends"]["H800"]["enabled"] = False
+            flagattention["deps"] = {"H800": {"forced-package": {"enabled": True}}}
+            repos_path.write_text(
+                yaml.safe_dump(repos, sort_keys=False),
+                encoding="utf-8",
+            )
+
+            selected = self.build_matrix(
+                "FlagAttention",
+                vendors="Nvidia",
+                cwd=root,
+            )
+
+        self.assertEqual(selected["include"], [])
 
     def test_matrix_rejects_non_normalized_dependency_target(self):
         prepare_steps = self.workflow["jobs"]["prepare"]["steps"]

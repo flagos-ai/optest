@@ -21,9 +21,14 @@ except ImportError:
     from collection_process import run_with_cleanup
 
 try:
-    from .collection_environment import _version, collect_environment
+    from .collection_environment import collect_environment
 except ImportError:
-    from collection_environment import _version, collect_environment
+    from collection_environment import collect_environment
+
+try:
+    from . import baseline_refresh
+except ImportError:
+    import baseline_refresh
 
 # NCU metric names (verified on H800/Hopper; re-check with `ncu --query-metrics`
 # before switching architectures).
@@ -587,30 +592,10 @@ def _measure_latency(
         torch.cuda.synchronize()
 
 
-# Framework packages whose version is pinned per operator as a label. The
-# baseline is always collected inside the target framework's own container, so
-# whichever of these is installed identifies what the baseline tracks: vllm for
-# FlagGems-vllm, sglang for FlagGems-sglang, deepspeed for FlagTrain. torch and
-# triton are deliberately excluded as shared infrastructure, not the framework.
-# Add a package here to start labeling a new framework; detection is automatic.
-_LABEL_FRAMEWORKS = ("vllm", "sglang", "deepspeed")
-
-
-def _detect_operator_label():
-    """Probe the environment for installed framework packages, no args needed.
-
-    Returns a {framework: version} map for every candidate in _LABEL_FRAMEWORKS
-    actually installed in the collecting environment. Absent candidates are
-    omitted (not null) so the label carries only frameworks really present. An
-    empty result means no known framework is installed and the operator entry
-    gets no label.
-    """
-    detected = {}
-    for name in _LABEL_FRAMEWORKS:
-        version = _version(name)
-        if version is not None:
-            detected[name] = version
-    return detected
+# The per-operator label (the framework version an operator was collected
+# against) is detected and compared in baseline_refresh, which also drives the
+# incremental refresh; this collector only attaches what it is given.
+_detect_operator_label = baseline_refresh.detect_label
 
 
 def _collect_one_op_ops(
@@ -877,6 +862,8 @@ def collect_baseline(
     reference_chip=DEFAULT_REFERENCE_CHIP,
     task_exit_status=False,
     ops_dir=None,
+    mode=baseline_refresh.MODE_INCREMENTAL,
+    baseline_path=None,
 ):
     if device is not None:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(device)
@@ -931,6 +918,26 @@ def collect_baseline(
     _flush_results(results, output_path)
 
     print(f"collect device: {device_name}  (operator dir={ops_dir})")
+
+    # Decide what this run has to measure. In incremental mode (the default)
+    # operators whose published label already equals this container's framework
+    # version are carried over from the baseline instead of being re-measured;
+    # the retained entries are seeded into results so every flush writes the
+    # merged baseline, not just this run's operators.
+    plan = baseline_refresh.plan_refresh(
+        [name for name, _ in ops_modules],
+        baseline_refresh.load_baseline(baseline_path),
+        _detect_operator_label(),
+        mode=mode,
+        baseline_path=str(baseline_path) if baseline_path else None,
+    )
+    for line in plan.summary_lines():
+        print(line)
+    results.update(plan.retained)
+    results["_incremental"] = plan.metadata()
+    collect_names = plan.collect_set
+    ops_modules = [(n, m) for n, m in ops_modules if n in collect_names]
+
     sf = build_scaling_factors(reference_chip=reference_chip)
     results["_scaling_factors"] = sf
     if sf.get("_error"):
@@ -941,7 +948,12 @@ def collect_baseline(
             f"covering {len(sf['chips'])} chips"
         )
     if not ops_modules:
-        print("warning: no operators to collect after filtering")
+        if plan.retained:
+            # Incremental run with nothing stale: not a warning, the published
+            # baseline is already current for every selected operator.
+            print("no operators need re-collection; baseline is up to date")
+        else:
+            print("warning: no operators to collect after filtering")
     else:
         print(
             f"operators to collect ({len(ops_modules)}): "
@@ -958,9 +970,22 @@ def collect_baseline(
             failed.append(op_name)
         _flush_results(results, output_path)
 
+    # A re-collection that produced nothing must not delete the operator's
+    # published entry; fall back to it and say so.
+    restored = baseline_refresh.restore_missing(plan, results)
+    if restored:
+        print(
+            f"⚠ {len(restored)} operator(s) kept their previous baseline entry "
+            f"(re-collection produced nothing): {', '.join(restored)}"
+        )
+    results["_incremental"] = plan.metadata()
+
     _flush_results(results, output_path)
     n_ops = sum(1 for k in results if not k.startswith("_"))
-    print(f"\n✓ baseline data written: {output_path}  ({n_ops} operators)")
+    print(
+        f"\n✓ baseline data written: {output_path}  ({n_ops} operators: "
+        f"{len(ops_modules)} collected, {len(plan.retained)} retained)"
+    )
     if failed:
         print(
             f"⚠ {len(failed)} operator subprocess(es) failed (skipped, partial results kept): "
@@ -1019,6 +1044,24 @@ if __name__ == "__main__":
         f"hardware_specs.json (default {DEFAULT_REFERENCE_CHIP})",
     )
     parser.add_argument(
+        "--mode",
+        choices=baseline_refresh.MODES,
+        default=baseline_refresh.MODE_INCREMENTAL,
+        help="refresh mode (default incremental). incremental: compare each "
+        "operator against --baseline and only re-collect those absent from "
+        "it or whose framework version label changed, carrying the rest "
+        "over unchanged. full: ignore the baseline and re-collect every "
+        "selected operator",
+    )
+    parser.add_argument(
+        "--baseline",
+        default=None,
+        help="published baseline JSON the incremental mode compares against "
+        "(e.g. data/op_vllm_perf_baseline.json). A missing file means every "
+        "operator is new. Ignored by --mode full; without it an "
+        "incremental run has nothing to compare and collects everything",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="only check each operator's native interface can be called "
@@ -1058,16 +1101,23 @@ if __name__ == "__main__":
             ops_dir=args.ops_dir,
         )
         sys.exit(1 if n_fail else 0)
-    exit_code = collect_baseline(
-        args.output,
-        report_dir=args.report_dir or "ncu_reports",
-        device=args.device,
-        only=_parse_name_list(args.ops),
-        worker=worker,
-        op_timeout=args.op_timeout,
-        reference_chip=args.reference_chip,
-        task_exit_status=task_exit_status,
-        ops_dir=args.ops_dir,
-    )
+    try:
+        exit_code = collect_baseline(
+            args.output,
+            report_dir=args.report_dir or "ncu_reports",
+            device=args.device,
+            only=_parse_name_list(args.ops),
+            worker=worker,
+            op_timeout=args.op_timeout,
+            reference_chip=args.reference_chip,
+            task_exit_status=task_exit_status,
+            ops_dir=args.ops_dir,
+            mode=args.mode,
+            baseline_path=args.baseline,
+        )
+    except ValueError as exc:
+        # An unreadable --baseline is a usage error, not a crash: report it
+        # without a traceback so the CI log says what to fix.
+        parser.error(str(exc))
 
     sys.exit(exit_code or 0)

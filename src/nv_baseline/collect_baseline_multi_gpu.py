@@ -21,6 +21,11 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+try:
+    from . import baseline_refresh
+except ImportError:  # pragma: no cover - flat-script fallback
+    import baseline_refresh
+
 ROOT = Path(__file__).resolve().parents[1]
 # Directory of this collector package (holds collect_baseline_nvidia.py and
 # hardware_specs.json).
@@ -227,10 +232,45 @@ def _collect(args, *, execute=run_process):
     work = output.with_suffix(output.suffix + ".work")
     if output.exists():
         raise ValueError("output exists; choose another path")
+
+    # Decide what this run measures. Incremental mode (the default) keeps the
+    # baseline entries whose framework version label still matches this
+    # container and only queues the rest, so a refresh costs GPU time
+    # proportional to what actually changed.
+    baseline_path = getattr(args, "baseline", None)
+    mode = getattr(args, "mode", baseline_refresh.MODE_INCREMENTAL)
+    base = baseline_refresh.load_baseline(baseline_path)
+    plan = baseline_refresh.plan_refresh(
+        names,
+        base,
+        baseline_refresh.detect_label(),
+        mode=mode,
+        baseline_path=str(baseline_path) if baseline_path else None,
+    )
+    for line in plan.summary_lines():
+        print(line, flush=True)
+    names = [name for name in names if name in plan.collect_set]
+
     # The published baseline carries no run-time bookkeeping; per-operator task
     # state is tracked separately and written to a sidecar status.json under the
     # .work dir, which the workflow reads to grade the run.
-    results = {}
+    # Retained baseline entries are seeded first so every checkpoint of `output`
+    # is the merged baseline rather than this run's operators alone.
+    results = dict(plan.retained)
+    if not names:
+        # Nothing stale: no child runs, so no child reports an _environment or
+        # scaling factors. Carry the baseline's own forward (flagged) instead of
+        # publishing a file without provenance.
+        for key in ("_environment", "_scaling_factors"):
+            if key in base:
+                results[key] = base[key]
+        plan.environment_from_baseline = True
+        print(
+            "[refresh] no operators need re-collection; "
+            "publishing the baseline unchanged",
+            flush=True,
+        )
+    results["_incremental"] = plan.metadata()
     tasks = {}
     status_path = work / "status.json"
     origins = {}
@@ -239,7 +279,7 @@ def _collect(args, *, execute=run_process):
         pending.put(name)
     work.mkdir(parents=True, exist_ok=True)
     atomic_json(output, results)
-    atomic_json(status_path, {"tasks": tasks})
+    atomic_json(status_path, {"tasks": tasks, "incremental": plan.metadata()})
     stop = threading.Event()
     events = queue.Queue()
 
@@ -359,7 +399,10 @@ def _collect(args, *, execute=run_process):
                         continue
                     merge_event(results, origins, tasks, name, record, data)
                     atomic_json(output, results)
-                    atomic_json(status_path, {"tasks": tasks})
+                    atomic_json(
+                        status_path,
+                        {"tasks": tasks, "incremental": plan.metadata()},
+                    )
                     # Print an overall progress line on each terminal event
                     # (running events carry data=None and are skipped here).
                     if data is not None:
@@ -374,13 +417,32 @@ def _collect(args, *, execute=run_process):
     finally:
         for signum, handler in previous.items():
             signal.signal(signum, handler)
+    # An operator queued for re-collection that produced nothing (failed,
+    # skipped or timed out) keeps its published entry instead of disappearing
+    # from the baseline this run republishes.
+    restored = baseline_refresh.restore_missing(plan, results)
+    if restored:
+        print(
+            f"[refresh] kept the previous baseline entry for {len(restored)} "
+            f"operator(s) whose re-collection produced nothing: "
+            f"{', '.join(restored)}",
+            flush=True,
+        )
+    results["_incremental"] = plan.metadata()
     # The exit status and the final task state live only in the sidecar
     # status.json; the published baseline carries no run-time bookkeeping.
     exit_status = int(
         stop.is_set()
         or any(tasks.get(n, {}).get("status") != "completed" for n in names)
     )
-    atomic_json(status_path, {"tasks": tasks, "interrupted": stop.is_set()})
+    atomic_json(
+        status_path,
+        {
+            "tasks": tasks,
+            "interrupted": stop.is_set(),
+            "incremental": plan.metadata(),
+        },
+    )
     atomic_json(output, results)
     return exit_status
 
@@ -404,6 +466,19 @@ def main():
     )
     parser.add_argument("--op-timeout", type=float, default=1800)
     parser.add_argument("--reference-chip", default="H800")
+    parser.add_argument(
+        "--mode",
+        choices=baseline_refresh.MODES,
+        default=baseline_refresh.MODE_INCREMENTAL,
+        help="refresh mode (default incremental): only re-collect operators "
+        "absent from --baseline or whose framework version label changed; "
+        "full re-collects everything",
+    )
+    parser.add_argument(
+        "--baseline",
+        default=None,
+        help="published baseline JSON the incremental mode compares against",
+    )
     args = parser.parse_args()
     if args.op_timeout <= 0:
         parser.error("--op-timeout must be positive")

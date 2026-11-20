@@ -43,9 +43,7 @@ All test results are written to the directory specified by --output-dir
 (default: logs_results_YYYYMMDD_HHMM). Directory layout::
 
     <output-dir>/
-    ├── summary.json              # Aggregated results (with env info)
-    ├── summary0.json             # Intermediate results for GPU0
-    ├── summary1.json             # Intermediate results for GPU1 (if any)
+    ├── summary.json              # Atomically published aggregated results
     └── <op_name>/
         ├── accuracy_result.json  # Accuracy test pytest records
         ├── accuracy_stdout.log   # Accuracy test stdout (requires --dump-output)
@@ -53,6 +51,10 @@ All test results are written to the directory specified by --output-dir
         ├── performance_result.json
         ├── performance_stdout.log
         └── performance_stderr.log
+
+During a run, each worker writes a summary<N>.json checkpoint. Complete worker
+checkpoints are removed only after summary.json is atomically published and
+verified; incomplete or failed runs retain them for recovery.
 
 CLI Arguments
 -------------
@@ -1430,6 +1432,44 @@ def cleanup_intermediate_files():
                 pass
 
 
+def _write_final_summary(final_data, worker_summary_paths, *, cleanup_workers):
+    """Atomically publish and verify the final summary before removing checkpoints."""
+    json_path = CFG.output_dir / "summary.json"
+    tmp_path = CFG.output_dir / "summary.json.tmp"
+    try:
+        with tmp_path.open("w", encoding="utf-8") as output:
+            json.dump(final_data, output, indent=2)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(tmp_path, json_path)
+    except Exception:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+        raise
+
+    with json_path.open("r", encoding="utf-8") as published:
+        verified_data = json.load(published)
+    verified_result = (
+        verified_data.get("result") if isinstance(verified_data, dict) else None
+    )
+    expected_result = final_data["result"]
+    if (
+        not isinstance(verified_result, dict)
+        or verified_data.get("total_ops") != len(verified_result)
+        or verified_result != expected_result
+    ):
+        raise ValueError(f"Published final summary failed validation: {json_path}")
+
+    if cleanup_workers:
+        for worker_summary in worker_summary_paths:
+            try:
+                worker_summary.unlink()
+            except OSError as error:
+                pwarn(f"Failed to remove worker summary {worker_summary}: {error}")
+
+
 def terminate_workers():
     for p in WORKER_PROCESSES:
         if p.is_alive() and p.pid is not None:
@@ -1978,16 +2018,21 @@ def main():
     total_duration_str = str(datetime.timedelta(seconds=int(total_duration)))
 
     op_data = {}
-    for gpu_id in gpu_ids:
-        gpu_file = CFG.output_dir.joinpath(f"summary{gpu_id}.json")
+    worker_summary_paths = [
+        CFG.output_dir.joinpath(f"summary{gpu_id}.json") for gpu_id in gpu_ids
+    ]
+    worker_summaries_complete = True
+    for gpu_id, gpu_file in zip(gpu_ids, worker_summary_paths, strict=True):
         if not gpu_file.exists():
             perror(f"GPU {gpu_id} failed to produce a summary, recovery needed.")
+            worker_summaries_complete = False
             continue
-        with gpu_file.open("r") as f:
+        with gpu_file.open("r", encoding="utf-8") as f:
             try:
                 result = json.load(f)
             except (json.JSONDecodeError, ValueError):
                 perror(f"GPU {gpu_id} summary is invalid JSON, skipping.")
+                worker_summaries_complete = False
                 continue
             op_data.update(result)
 
@@ -2001,9 +2046,11 @@ def main():
         "result": op_data,
     }
 
-    json_path = CFG.output_dir.joinpath("summary.json")
-    with json_path.open("w") as f:
-        json.dump(final_data, f, indent=2)
+    _write_final_summary(
+        final_data,
+        worker_summary_paths,
+        cleanup_workers=worker_summaries_complete,
+    )
 
     cleanup_intermediate_files()
     pinfo(f"Total operators ... {final_data['total_ops']}")

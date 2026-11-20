@@ -193,13 +193,12 @@ heading. Each parsed exclusion is printed on its own line for readability:
 
 ### Results and `summary.json`
 
-The result directory contains the aggregated summary, per-device intermediate
-summaries, and one directory per operator:
+After a successful run, the result directory contains the aggregated summary
+and one directory per operator:
 
 ```text
 logs_results_YYYYMMDD_HHMM/
 ├── summary.json
-├── summary0.json
 └── <operator>/
     ├── accuracy_result.json
     ├── performance_result.json
@@ -208,6 +207,12 @@ logs_results_YYYYMMDD_HHMM/
     ├── performance_stdout.log    # with --dump-output
     └── performance_stderr.log    # with --dump-output
 ```
+
+During an active run, each worker writes a `summary<N>.json` checkpoint. These
+checkpoints are removed only after every expected worker summary is available
+and valid and the final `summary.json` has been atomically published and
+verified. Incomplete or failed runs retain all existing checkpoints for
+recovery.
 
 `summary.json` contains the run timestamp and duration, `total_ops` (the number
 of operators successfully aggregated into `result`), operator-level

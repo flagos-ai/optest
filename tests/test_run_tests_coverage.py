@@ -620,6 +620,126 @@ def test_count_op_statuses_includes_known_and_unexpected_statuses():
     assert counts["unknown"] == 1
 
 
+def test_write_final_summary_preserves_existing_summary_on_write_failure(
+    tmp_path, monkeypatch
+):
+    old_data = {"total_ops": 1, "result": {"old": {}}}
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(old_data), encoding="utf-8")
+    worker_summary = tmp_path / "summary0.json"
+    worker_summary.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
+
+    with pytest.raises(TypeError):
+        run_tests._write_final_summary(
+            {"total_ops": 1, "result": {"new": object()}},
+            [worker_summary],
+            cleanup_workers=True,
+        )
+
+    assert json.loads(summary_path.read_text(encoding="utf-8")) == old_data
+    assert worker_summary.exists()
+    assert not (tmp_path / "summary.json.tmp").exists()
+
+
+def test_write_final_summary_preserves_existing_summary_on_replace_failure(
+    tmp_path, monkeypatch
+):
+    old_data = {"total_ops": 1, "result": {"old": {}}}
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(old_data), encoding="utf-8")
+    worker_summary = tmp_path / "summary0.json"
+    worker_summary.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
+    monkeypatch.setattr(
+        run_tests.os, "replace", mock.Mock(side_effect=OSError("replace failed"))
+    )
+
+    with pytest.raises(OSError, match="replace failed"):
+        run_tests._write_final_summary(
+            {"total_ops": 1, "result": {"new": {}}},
+            [worker_summary],
+            cleanup_workers=True,
+        )
+
+    assert json.loads(summary_path.read_text(encoding="utf-8")) == old_data
+    assert worker_summary.exists()
+    assert not (tmp_path / "summary.json.tmp").exists()
+
+
+def test_write_final_summary_preserves_original_error_when_temp_cleanup_fails(
+    tmp_path, monkeypatch
+):
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text('{"old": true}', encoding="utf-8")
+    tmp_summary_path = tmp_path / "summary.json.tmp"
+    original_unlink = Path.unlink
+
+    def fail_temp_unlink(path, *args, **kwargs):
+        if path == tmp_summary_path:
+            raise OSError("cleanup failed")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
+    monkeypatch.setattr(Path, "unlink", fail_temp_unlink)
+
+    with pytest.raises(TypeError):
+        run_tests._write_final_summary(
+            {"total_ops": 1, "result": {"new": object()}},
+            [],
+            cleanup_workers=True,
+        )
+
+    assert summary_path.read_text(encoding="utf-8") == '{"old": true}'
+    assert tmp_summary_path.exists()
+
+
+@pytest.mark.parametrize(
+    "published_data",
+    [
+        [],
+        {"total_ops": 0, "result": []},
+        {"total_ops": 1, "result": {}},
+        {"total_ops": 1, "result": {"other": {}}},
+        {"total_ops": 1, "result": {"add": {"changed": True}}},
+    ],
+)
+def test_write_final_summary_retains_workers_when_validation_fails(
+    tmp_path, monkeypatch, published_data
+):
+    worker_summary = tmp_path / "summary0.json"
+    worker_summary.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
+    monkeypatch.setattr(run_tests.json, "load", lambda _input: published_data)
+
+    with pytest.raises(ValueError, match="failed validation"):
+        run_tests._write_final_summary(
+            {"total_ops": 1, "result": {"add": {}}},
+            [worker_summary],
+            cleanup_workers=True,
+        )
+
+    assert worker_summary.exists()
+
+
+def test_write_final_summary_warns_when_worker_cleanup_fails(tmp_path, monkeypatch):
+    worker_summary = mock.Mock()
+    worker_summary.unlink.side_effect = OSError("cleanup failed")
+    monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
+    warning = mock.Mock()
+    monkeypatch.setattr(run_tests, "pwarn", warning)
+
+    final_data = {"total_ops": 1, "result": {"add": {}}}
+    run_tests._write_final_summary(final_data, [worker_summary], cleanup_workers=True)
+
+    assert (
+        json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+        == final_data
+    )
+    warning.assert_called_once()
+    assert "cleanup failed" in warning.call_args.args[0]
+
+
 class _Worker:
     def __init__(self, gpu_id, alive=True):
         self._gpu_id = gpu_id
@@ -1009,6 +1129,7 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys)
         (output / "summary.json").read_text(encoding="utf-8")
     )
     assert incomplete_summary["total_ops"] == 0
+    assert (output / "summary0.json").read_text(encoding="utf-8") == "{"
 
     default_output = tmp_path / "logs_results_20260101_0000"
 
@@ -1023,10 +1144,11 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys)
 
         def start(self):
             default_output.mkdir(exist_ok=True)
-            (default_output / "summary0.json").write_text(
+            op_name = "add" if self._gpu_id == 0 else "mul"
+            (default_output / f"summary{self._gpu_id}.json").write_text(
                 json.dumps(
                     {
-                        "add": {
+                        op_name: {
                             "accuracy": {"status": "Passed"},
                             "performance": {"status": "NotFound"},
                         }
@@ -1052,14 +1174,15 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys)
     ):
         run_tests.main()
     summary = json.loads((default_output / "summary.json").read_text(encoding="utf-8"))
-    assert summary["total_ops"] == 1
-    assert summary["accuracy_counts"]["passed"] == 1
-    assert summary["performance_counts"]["not_found"] == 1
-    assert "add" in summary["result"]
+    assert summary["total_ops"] == 2
+    assert summary["accuracy_counts"]["passed"] == 2
+    assert summary["performance_counts"]["not_found"] == 2
+    assert set(summary["result"]) == {"add", "mul"}
+    assert not list(default_output.glob("summary[0-9]*.json"))
     output_text = capsys.readouterr().out
-    assert "[INFO] Total operators ... 1" in output_text
-    assert "[INFO] Accuracy operators ... passed=1" in output_text
-    assert "[INFO] Performance operators ... not_found=1" in output_text
+    assert "[INFO] Total operators ... 2" in output_text
+    assert "[INFO] Accuracy operators ... passed=2" in output_text
+    assert "[INFO] Performance operators ... not_found=2" in output_text
     assert "failed=0" not in output_text
     assert "[INFO] Total elapsed time ... 0:00:00 (0.0s)" in output_text
 

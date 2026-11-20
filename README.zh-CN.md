@@ -182,12 +182,11 @@ flagos-optest --start mul --stages all --gpus 0
 
 ### 结果与 `summary.json`
 
-结果目录包含聚合汇总、每个设备的中间汇总，以及每个算子对应的目录：
+成功运行后，结果目录包含聚合汇总以及每个算子对应的目录：
 
 ```text
 logs_results_YYYYMMDD_HHMM/
 ├── summary.json
-├── summary0.json
 └── <operator>/
     ├── accuracy_result.json
     ├── performance_result.json
@@ -196,6 +195,10 @@ logs_results_YYYYMMDD_HHMM/
     ├── performance_stdout.log    # with --dump-output
     └── performance_stderr.log    # with --dump-output
 ```
+
+运行期间，每个 worker 会写入一个 `summary<N>.json` 检查点。只有当所有预期的
+worker 汇总都存在且有效，并且最终 `summary.json` 已经原子发布并通过校验后，
+才会删除这些检查点。未完成或失败的运行会保留所有已存在的检查点，以便恢复。
 
 `summary.json` 包含运行时间戳和持续时间、`total_ops`（成功聚合到 `result`
 中的算子数量）、算子级别的 `accuracy_counts` 和 `performance_counts`、

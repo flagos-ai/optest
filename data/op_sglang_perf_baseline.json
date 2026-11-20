@@ -1,4 +1,290 @@
 {
+  "_environment": {
+    "hardware": {
+      "gpu": {
+        "name": "NVIDIA H800",
+        "total_memory_bytes": 85009367040,
+        "total_memory_gib": 79.17,
+        "compute_capability": "9.0",
+        "multiprocessor_count": 132,
+        "driver_version": "610.57.04"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8468V",
+      "cpu_architecture": "x86_64",
+      "cpu_socket_count": 2,
+      "physical_cpu_core_count": 96,
+      "logical_cpu_count": 192,
+      "cpu_threads_per_core": 2,
+      "numa_node_count": 2,
+      "process_cpu_affinity_count": 192,
+      "hypervisor_vendor": null
+    },
+    "software": {
+      "os": "Linux",
+      "os_release": "5.15.0-78-generic",
+      "machine": "x86_64",
+      "python": "3.12.3",
+      "packages": {
+        "torch": "2.13.0",
+        "triton": "3.7.1",
+        "vllm": null,
+        "sglang": "0.5.21"
+      },
+      "torch_cuda_version": "13.0",
+      "nvcc_version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Apr__9_19:24:57_PDT_2025\nCuda compilation tools, release 12.9, V12.9.41\nBuild cuda_12.9.r12.9/compiler.35813241_0",
+      "ncu_version": "NVIDIA (R) Nsight Compute Command Line Profiler\nCopyright (c) 2018-2025 NVIDIA Corporation\nVersion 2025.2.0.0 (build 35613519) (public-release)"
+    },
+    "environment_variables": {
+      "CUDA_DEVICE_ORDER": null
+    },
+    "reference_chip": "H800"
+  },
+  "_scaling_factors": {
+    "reference_chip": "H800",
+    "source_specs": "hardware_specs.json",
+    "chips": [
+      {
+        "vendor": "nvidia",
+        "chip": "H800",
+        "measured": {
+          "bandwidth_gbps": 1.0,
+          "tensor": {
+            "bf16": 1.0,
+            "fp16": 1.0,
+            "fp32": 1.0,
+            "tf32": 1.0,
+            "int8": 1.0,
+            "fp64": 1.0,
+            "fp8": 1.0
+          },
+          "vector": {
+            "bf16": 1.0,
+            "fp16": 1.0,
+            "fp32": 1.0,
+            "int8": 1.0,
+            "fp64": 1.0,
+            "fp8": null
+          }
+        }
+      },
+      {
+        "vendor": "nvidia",
+        "chip": "H100",
+        "measured": {
+          "bandwidth_gbps": 1.0,
+          "tensor": {
+            "bf16": 1.0,
+            "fp16": 1.043177,
+            "fp32": 1.0,
+            "tf32": 0.964248,
+            "int8": 0.988141,
+            "fp64": 58.895238,
+            "fp8": 1.048242
+          },
+          "vector": {
+            "bf16": 0.99985,
+            "fp16": 0.99985,
+            "fp32": 0.992618,
+            "int8": 1.0003,
+            "fp64": 29.304762,
+            "fp8": null
+          }
+        }
+      },
+      {
+        "vendor": "thead",
+        "chip": "PPU-ZW810E",
+        "measured": {
+          "bandwidth_gbps": 0.66226,
+          "tensor": {
+            "bf16": 0.133197,
+            "fp16": 0.142668,
+            "fp32": 0.561111,
+            "tf32": 0.119997,
+            "int8": 0.112969,
+            "fp64": 6.6,
+            "fp8": null
+          },
+          "vector": {
+            "bf16": 0.818522,
+            "fp16": 0.829162,
+            "fp32": 0.416993,
+            "int8": 0.198651,
+            "fp64": 6.114286,
+            "fp8": null
+          }
+        }
+      },
+      {
+        "vendor": "enflame",
+        "chip": "S60",
+        "measured": {
+          "bandwidth_gbps": 0.150341,
+          "tensor": {
+            "bf16": 0.135387,
+            "fp16": 0.144764,
+            "fp32": 0.672634,
+            "tf32": null,
+            "int8": 0.134389,
+            "fp64": null,
+            "fp8": null
+          },
+          "vector": {
+            "bf16": 0.026225,
+            "fp16": 0.026225,
+            "fp32": 0.029527,
+            "int8": 0.013338,
+            "fp64": null,
+            "fp8": null
+          }
+        }
+      },
+      {
+        "vendor": "ascend",
+        "chip": "Ascend910B4",
+        "measured": {
+          "bandwidth_gbps": 0.389412,
+          "tensor": {
+            "bf16": 0.035172,
+            "fp16": 0.037468,
+            "fp32": 0.416872,
+            "tf32": null,
+            "int8": 0.034847,
+            "fp64": null,
+            "fp8": null
+          },
+          "vector": {
+            "bf16": 0.024876,
+            "fp16": 0.03117,
+            "fp32": 0.025008,
+            "int8": 0.004721,
+            "fp64": null,
+            "fp8": null
+          }
+        }
+      },
+      {
+        "vendor": "metax",
+        "chip": "C550",
+        "measured": {
+          "bandwidth_gbps": 0.472539,
+          "tensor": {
+            "bf16": 0.285784,
+            "fp16": 0.298125,
+            "fp32": 0.816461,
+            "tf32": 0.265815,
+            "int8": 0.291016,
+            "fp64": null,
+            "fp8": null
+          },
+          "vector": {
+            "bf16": 0.04166,
+            "fp16": 0.136071,
+            "fp32": 0.542031,
+            "int8": 0.06804,
+            "fp64": 2.152381,
+            "fp8": null
+          }
+        }
+      },
+      {
+        "vendor": "kunlunxin",
+        "chip": "P800",
+        "measured": {
+          "bandwidth_gbps": 0.206687,
+          "tensor": {
+            "bf16": 0.032282,
+            "fp16": 0.034524,
+            "fp32": null,
+            "tf32": 0.062095,
+            "int8": null,
+            "fp64": null,
+            "fp8": null
+          },
+          "vector": {
+            "bf16": 0.017533,
+            "fp16": 0.036565,
+            "fp32": 0.038265,
+            "int8": 0.000899,
+            "fp64": null,
+            "fp8": null
+          }
+        }
+      },
+      {
+        "vendor": "mthreads",
+        "chip": "MTT-S5000",
+        "measured": {
+          "bandwidth_gbps": 0.42387,
+          "tensor": {
+            "bf16": 0.46863,
+            "fp16": 0.499849,
+            "fp32": 0.585391,
+            "tf32": 0.449552,
+            "int8": 0.463452,
+            "fp64": 13.533333,
+            "fp8": 0.504517
+          },
+          "vector": {
+            "bf16": 0.285029,
+            "fp16": 0.284879,
+            "fp32": 0.255348,
+            "int8": 0.095017,
+            "fp64": null,
+            "fp8": null
+          }
+        }
+      },
+      {
+        "vendor": "hygon",
+        "chip": "BW1000",
+        "measured": {
+          "bandwidth_gbps": 0.473529,
+          "tensor": {
+            "bf16": 0.494279,
+            "fp16": 0.526445,
+            "fp32": 1.253704,
+            "tf32": 0.475373,
+            "int8": 0.490587,
+            "fp64": 29.009524,
+            "fp8": 0.268358
+          },
+          "vector": {
+            "bf16": 0.109996,
+            "fp16": 0.454668,
+            "fp32": 0.228834,
+            "int8": 0.114125,
+            "fp64": 14.419048,
+            "fp8": null
+          }
+        }
+      },
+      {
+        "vendor": "iluvatar",
+        "chip": "BI-V150",
+        "measured": {
+          "bandwidth_gbps": 0.356378,
+          "tensor": {
+            "bf16": 0.220302,
+            "fp16": 0.234676,
+            "fp32": 0.940123,
+            "tf32": null,
+            "int8": 0.391076,
+            "fp64": null,
+            "fp8": null
+          },
+          "vector": {
+            "bf16": 0.461262,
+            "fp16": 0.469354,
+            "fp32": 0.230792,
+            "int8": 0.119895,
+            "fp64": null,
+            "fp8": null
+          }
+        }
+      }
+    ]
+  },
   "build_trtllm_mha_page_table": {
     "label": {
       "sglang": "0.5.21"
@@ -430,292 +716,6 @@
         }
       }
     }
-  },
-  "_environment": {
-    "hardware": {
-      "gpu": {
-        "name": "NVIDIA H800",
-        "total_memory_bytes": 85009367040,
-        "total_memory_gib": 79.17,
-        "compute_capability": "9.0",
-        "multiprocessor_count": 132,
-        "driver_version": "610.57.04"
-      },
-      "cpu_model": "Intel(R) Xeon(R) Platinum 8468V",
-      "cpu_architecture": "x86_64",
-      "cpu_socket_count": 2,
-      "physical_cpu_core_count": 96,
-      "logical_cpu_count": 192,
-      "cpu_threads_per_core": 2,
-      "numa_node_count": 2,
-      "process_cpu_affinity_count": 192,
-      "hypervisor_vendor": null
-    },
-    "software": {
-      "os": "Linux",
-      "os_release": "5.15.0-78-generic",
-      "machine": "x86_64",
-      "python": "3.12.3",
-      "packages": {
-        "torch": "2.13.0",
-        "triton": "3.7.1",
-        "vllm": null,
-        "sglang": "0.5.21"
-      },
-      "torch_cuda_version": "13.0",
-      "nvcc_version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Apr__9_19:24:57_PDT_2025\nCuda compilation tools, release 12.9, V12.9.41\nBuild cuda_12.9.r12.9/compiler.35813241_0",
-      "ncu_version": "NVIDIA (R) Nsight Compute Command Line Profiler\nCopyright (c) 2018-2025 NVIDIA Corporation\nVersion 2025.2.0.0 (build 35613519) (public-release)"
-    },
-    "environment_variables": {
-      "CUDA_DEVICE_ORDER": null
-    },
-    "reference_chip": "H800"
-  },
-  "_scaling_factors": {
-    "reference_chip": "H800",
-    "source_specs": "hardware_specs.json",
-    "chips": [
-      {
-        "vendor": "nvidia",
-        "chip": "H800",
-        "measured": {
-          "bandwidth_gbps": 1.0,
-          "tensor": {
-            "bf16": 1.0,
-            "fp16": 1.0,
-            "fp32": 1.0,
-            "tf32": 1.0,
-            "int8": 1.0,
-            "fp64": 1.0,
-            "fp8": 1.0
-          },
-          "vector": {
-            "bf16": 1.0,
-            "fp16": 1.0,
-            "fp32": 1.0,
-            "int8": 1.0,
-            "fp64": 1.0,
-            "fp8": null
-          }
-        }
-      },
-      {
-        "vendor": "nvidia",
-        "chip": "H100",
-        "measured": {
-          "bandwidth_gbps": 1.0,
-          "tensor": {
-            "bf16": 1.0,
-            "fp16": 1.043177,
-            "fp32": 1.0,
-            "tf32": 0.964248,
-            "int8": 0.988141,
-            "fp64": 58.895238,
-            "fp8": 1.048242
-          },
-          "vector": {
-            "bf16": 0.99985,
-            "fp16": 0.99985,
-            "fp32": 0.992618,
-            "int8": 1.0003,
-            "fp64": 29.304762,
-            "fp8": null
-          }
-        }
-      },
-      {
-        "vendor": "thead",
-        "chip": "PPU-ZW810E",
-        "measured": {
-          "bandwidth_gbps": 0.66226,
-          "tensor": {
-            "bf16": 0.133197,
-            "fp16": 0.142668,
-            "fp32": 0.561111,
-            "tf32": 0.119997,
-            "int8": 0.112969,
-            "fp64": 6.6,
-            "fp8": null
-          },
-          "vector": {
-            "bf16": 0.818522,
-            "fp16": 0.829162,
-            "fp32": 0.416993,
-            "int8": 0.198651,
-            "fp64": 6.114286,
-            "fp8": null
-          }
-        }
-      },
-      {
-        "vendor": "enflame",
-        "chip": "S60",
-        "measured": {
-          "bandwidth_gbps": 0.150341,
-          "tensor": {
-            "bf16": 0.135387,
-            "fp16": 0.144764,
-            "fp32": 0.672634,
-            "tf32": null,
-            "int8": 0.134389,
-            "fp64": null,
-            "fp8": null
-          },
-          "vector": {
-            "bf16": 0.026225,
-            "fp16": 0.026225,
-            "fp32": 0.029527,
-            "int8": 0.013338,
-            "fp64": null,
-            "fp8": null
-          }
-        }
-      },
-      {
-        "vendor": "ascend",
-        "chip": "Ascend910B4",
-        "measured": {
-          "bandwidth_gbps": 0.389412,
-          "tensor": {
-            "bf16": 0.035172,
-            "fp16": 0.037468,
-            "fp32": 0.416872,
-            "tf32": null,
-            "int8": 0.034847,
-            "fp64": null,
-            "fp8": null
-          },
-          "vector": {
-            "bf16": 0.024876,
-            "fp16": 0.03117,
-            "fp32": 0.025008,
-            "int8": 0.004721,
-            "fp64": null,
-            "fp8": null
-          }
-        }
-      },
-      {
-        "vendor": "metax",
-        "chip": "C550",
-        "measured": {
-          "bandwidth_gbps": 0.472539,
-          "tensor": {
-            "bf16": 0.285784,
-            "fp16": 0.298125,
-            "fp32": 0.816461,
-            "tf32": 0.265815,
-            "int8": 0.291016,
-            "fp64": null,
-            "fp8": null
-          },
-          "vector": {
-            "bf16": 0.04166,
-            "fp16": 0.136071,
-            "fp32": 0.542031,
-            "int8": 0.06804,
-            "fp64": 2.152381,
-            "fp8": null
-          }
-        }
-      },
-      {
-        "vendor": "kunlunxin",
-        "chip": "P800",
-        "measured": {
-          "bandwidth_gbps": 0.206687,
-          "tensor": {
-            "bf16": 0.032282,
-            "fp16": 0.034524,
-            "fp32": null,
-            "tf32": 0.062095,
-            "int8": null,
-            "fp64": null,
-            "fp8": null
-          },
-          "vector": {
-            "bf16": 0.017533,
-            "fp16": 0.036565,
-            "fp32": 0.038265,
-            "int8": 0.000899,
-            "fp64": null,
-            "fp8": null
-          }
-        }
-      },
-      {
-        "vendor": "mthreads",
-        "chip": "MTT-S5000",
-        "measured": {
-          "bandwidth_gbps": 0.42387,
-          "tensor": {
-            "bf16": 0.46863,
-            "fp16": 0.499849,
-            "fp32": 0.585391,
-            "tf32": 0.449552,
-            "int8": 0.463452,
-            "fp64": 13.533333,
-            "fp8": 0.504517
-          },
-          "vector": {
-            "bf16": 0.285029,
-            "fp16": 0.284879,
-            "fp32": 0.255348,
-            "int8": 0.095017,
-            "fp64": null,
-            "fp8": null
-          }
-        }
-      },
-      {
-        "vendor": "hygon",
-        "chip": "BW1000",
-        "measured": {
-          "bandwidth_gbps": 0.473529,
-          "tensor": {
-            "bf16": 0.494279,
-            "fp16": 0.526445,
-            "fp32": 1.253704,
-            "tf32": 0.475373,
-            "int8": 0.490587,
-            "fp64": 29.009524,
-            "fp8": 0.268358
-          },
-          "vector": {
-            "bf16": 0.109996,
-            "fp16": 0.454668,
-            "fp32": 0.228834,
-            "int8": 0.114125,
-            "fp64": 14.419048,
-            "fp8": null
-          }
-        }
-      },
-      {
-        "vendor": "iluvatar",
-        "chip": "BI-V150",
-        "measured": {
-          "bandwidth_gbps": 0.356378,
-          "tensor": {
-            "bf16": 0.220302,
-            "fp16": 0.234676,
-            "fp32": 0.940123,
-            "tf32": null,
-            "int8": 0.391076,
-            "fp64": null,
-            "fp8": null
-          },
-          "vector": {
-            "bf16": 0.461262,
-            "fp16": 0.469354,
-            "fp32": 0.230792,
-            "int8": 0.119895,
-            "fp64": null,
-            "fp8": null
-          }
-        }
-      }
-    ]
   },
   "add_constant": {
     "label": {

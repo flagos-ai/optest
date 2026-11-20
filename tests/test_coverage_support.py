@@ -224,6 +224,46 @@ def test_add_labels_error_and_success_paths(tmp_path, monkeypatch, capsys):
     assert "Updated 2 operators" in capsys.readouterr().out
 
 
+def test_add_labels_atomic_write_preserves_summary_on_failures(tmp_path, monkeypatch):
+    summary_path = tmp_path / "summary.json"
+    old_summary = {"result": {"add": {"labels": ["old"]}}}
+    summary_path.write_text(json.dumps(old_summary), encoding="utf-8")
+
+    with pytest.raises(TypeError):
+        add_labels._write_summary_atomically(
+            summary_path,
+            {"result": {"add": {"labels": [object()]}}},
+        )
+    assert json.loads(summary_path.read_text(encoding="utf-8")) == old_summary
+    assert not (tmp_path / "summary.json.tmp").exists()
+
+    monkeypatch.setattr(
+        add_labels.os,
+        "replace",
+        mock.Mock(side_effect=OSError("replace failed")),
+    )
+    with pytest.raises(OSError, match="replace failed"):
+        add_labels._write_summary_atomically(
+            summary_path,
+            {"result": {"add": {"labels": ["new"]}}},
+        )
+    assert json.loads(summary_path.read_text(encoding="utf-8")) == old_summary
+    assert not (tmp_path / "summary.json.tmp").exists()
+
+
+def test_add_labels_atomic_write_rejects_mismatched_temp_data(tmp_path, monkeypatch):
+    summary_path = tmp_path / "summary.json"
+    old_summary = {"result": {"add": {"labels": ["old"]}}}
+    summary_path.write_text(json.dumps(old_summary), encoding="utf-8")
+    monkeypatch.setattr(add_labels.json, "load", lambda _input: {"changed": True})
+
+    with pytest.raises(ValueError, match="failed validation"):
+        add_labels._write_summary_atomically(summary_path, {"result": {}})
+
+    assert json.loads(summary_path.read_text(encoding="utf-8")) == old_summary
+    assert not (tmp_path / "summary.json.tmp").exists()
+
+
 def _load_notify_module():
     path = Path(__file__).parents[1] / ".github" / "scripts" / "notify_feishu.py"
     spec = importlib.util.spec_from_file_location("notify_feishu_coverage", path)

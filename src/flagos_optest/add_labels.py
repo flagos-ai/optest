@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import sys
+from contextlib import suppress
 from pathlib import Path
 
 import yaml
@@ -80,6 +81,24 @@ def load_op_labels():
     return op_labels
 
 
+def _write_summary_atomically(summary_path, summary):
+    """Replace summary only after the complete updated JSON has been verified."""
+    tmp_path = summary_path.with_suffix(".json.tmp")
+    try:
+        with tmp_path.open("w", encoding="utf-8") as output:
+            json.dump(summary, output, indent=2)
+            output.flush()
+            os.fsync(output.fileno())
+        with tmp_path.open("r", encoding="utf-8") as output:
+            if json.load(output) != summary:
+                raise ValueError(f"Temporary summary failed validation: {tmp_path}")
+        os.replace(tmp_path, summary_path)
+    except Exception:
+        with suppress(OSError):
+            tmp_path.unlink()
+        raise
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Add operator labels from operators.yaml into summary.json"
@@ -111,7 +130,7 @@ def main():
         sys.exit(1)
 
     # Load summary
-    with summary_path.open("r") as f:
+    with summary_path.open("r", encoding="utf-8") as f:
         summary = json.load(f)
 
     op_data = summary.get("result", {})
@@ -138,9 +157,7 @@ def main():
         op_entry["labels"] = merged
         updated += 1
 
-    # Write back
-    with summary_path.open("w") as f:
-        json.dump(summary, f, indent=2)
+    _write_summary_atomically(summary_path, summary)
 
     pinfo(f"Updated {updated} operators with labels in {summary_path}")
 

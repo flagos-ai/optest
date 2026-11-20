@@ -854,6 +854,7 @@ def parse_accuracy_data(result_file):
             "skipped": 0,
             "failed": 0,
             "passed": 0,
+            "errors": 1,
             "status": "Error",
             "details": {"error": f"Invalid JSON in {result_file}"},
         }
@@ -895,6 +896,7 @@ def parse_accuracy_data(result_file):
         "skipped": num_skipped,
         "failed": num_failed,
         "passed": num_passed,
+        "errors": 0,
         "details": {},
     }
     if len(skipped) == 0 and len(failed) == 0:
@@ -1196,6 +1198,7 @@ def worker_proc(gpu_id, work_queue, display_queue):
         "passed": 0,
         "failed": 0,
         "skipped": 0,
+        "errors": 0,
         "duration": 0,
     }
 

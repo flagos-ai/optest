@@ -15,6 +15,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  op-monitor-contract:
+    name: Op-monitor archive contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: Install test dependencies
+        run: uv sync --python 3.14 --no-default-groups --group test
+
+      - name: Validate downstream archive contract
+        run: uv run --no-sync python -m pytest -q tests/test_op_monitor_contract.py
+
   quality:
     name: Pre-commit and build
     runs-on: ubuntu-latest

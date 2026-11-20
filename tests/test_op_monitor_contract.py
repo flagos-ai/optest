@@ -244,9 +244,12 @@ def test_weekly_workflow_preserves_op_monitor_archive_inputs():
     assert 'tar -czf "${ARCHIVE}"' in package_script
     assert '-C "${OUTPUT_PARENT}" "${OUTPUT_NAME}"' in package_script
     assert '[[ "${OUTPUT_NAME}" != logs_results_*' in package_script
+    archive_created = 'echo "[Package results] Created results archive: ${ARCHIVE}"'
+    cleanup = 'rm -rf -- "${OUTPUT_PARENT}"'
     assert package_script.index('tar -czf "${ARCHIVE}"') < package_script.index(
-        'rm -rf -- "${OUTPUT_PARENT}"'
+        archive_created
     )
+    assert package_script.index(archive_created) < package_script.index(cleanup)
     assert package_index < publish_index
 
 
@@ -277,6 +280,19 @@ def test_package_results_removes_unpacked_directory_after_success(tmp_path):
     assert completed.returncode == 0, completed.stderr
     assert not output_parent.exists()
     assert github_env.read_text(encoding="utf-8") == f"ARCHIVE={archive}\n"
+    command_log = (
+        f'[Package results] Command: tar -czf "{archive}" '
+        f'-C "{output_parent}" "logs_results_contract"'
+    )
+    archive_log = f"[Package results] Created results archive: {archive}"
+    cleanup_log = (
+        f"[Package results] Removed unpacked result directory: {output_parent}"
+    )
+    assert command_log in completed.stdout
+    assert archive_log in completed.stdout
+    assert cleanup_log in completed.stdout
+    assert completed.stdout.index(command_log) < completed.stdout.index(archive_log)
+    assert completed.stdout.index(archive_log) < completed.stdout.index(cleanup_log)
     with tarfile.open(archive, "r:gz") as packaged:
         assert {
             "logs_results_contract",
@@ -314,6 +330,11 @@ def test_package_results_preserves_directory_when_compression_fails(tmp_path):
 
     assert completed.returncode == 1
     assert summary.read_text(encoding="utf-8") == "{}\n"
+    assert "[Package results] Command: tar -czf" in completed.stdout
+    assert "[Package results] Created results archive:" not in completed.stdout
+    assert (
+        "[Package results] Removed unpacked result directory:" not in completed.stdout
+    )
 
 
 def test_package_results_refuses_unexpected_parent_directory(tmp_path):

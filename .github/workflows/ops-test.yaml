@@ -1265,7 +1265,9 @@ jobs:
             echo "[Package results] ERROR: Refusing to remove unexpected result path: ${OUTPUT_PARENT}"
             exit 1
           fi
+          echo "[Package results] Command: tar -czf \"${ARCHIVE}\" -C \"${OUTPUT_PARENT}\" \"${OUTPUT_NAME}\""
           tar -czf "${ARCHIVE}" -C "${OUTPUT_PARENT}" "${OUTPUT_NAME}"
+          echo "[Package results] Created results archive: ${ARCHIVE}"
           echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
           rm -rf -- "${OUTPUT_PARENT}"
           echo "[Package results] Removed unpacked result directory: ${OUTPUT_PARENT}"

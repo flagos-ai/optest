@@ -37,10 +37,14 @@ import os
 import shlex
 import sys
 import types
+from pathlib import Path
 from unittest import mock
+
+import yaml
 
 from flagos_optest import add_labels, run_tests
 
+_REPOSITORY_ROOT = Path(__file__).parents[1]
 _ACCURACY_FIELDS = {
     "passed",
     "failed",
@@ -195,6 +199,36 @@ def _find_summary(archive_root):
         "inside one top-level result directory"
     )
     return candidates[0]
+
+
+def test_weekly_workflow_preserves_op_monitor_archive_inputs():
+    workflow_path = _REPOSITORY_ROOT / ".github/workflows/ops-test.yaml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["test-container"]["steps"]
+
+    run_step = next(step for step in steps if step.get("name") == "Run ops tests")
+    assert "--dump-output" in run_step["run"], (
+        "op-monitor log views require weekly runs to retain operator stdout/stderr"
+    )
+    assert 'flagos-add-labels "${OUTPUT_DIR}"' in run_step["run"]
+
+    package_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("name") == "Package results"
+    )
+    publish_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("name") == "Publish results to op-monitor"
+    )
+    package_script = steps[package_index]["run"]
+    assert 'tar -czf "${ARCHIVE}"' in package_script
+    assert (
+        '-C "$(dirname "${OUTPUT_DIR}")" "$(basename "${OUTPUT_DIR}")"'
+        in package_script
+    )
+    assert package_index < publish_index
 
 
 def test_generated_archive_satisfies_op_monitor_contract(tmp_path, monkeypatch):

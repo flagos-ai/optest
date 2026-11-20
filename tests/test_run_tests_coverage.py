@@ -1408,7 +1408,6 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys)
     ):
         run_tests.main()
     summary = json.loads((default_output / "summary.json").read_text(encoding="utf-8"))
-    assert summary["summary_schema_version"] == 2
     assert summary["total_ops"] == 2
     assert summary["accuracy_counts"]["passed"] == 2
     assert summary["performance_counts"]["not_found"] == 2

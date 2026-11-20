@@ -215,8 +215,8 @@ worker 启动时会原子替换自己的检查点，因此复用输出目录也�
 状态计数包含
 `passed`、`failed`、`skipped`、`not_found`、`error` 和 `timeout`，即使值为零也会保留。
 
-汇总格式版本 2 不再把完整精度 case 和性能 shape 明细写入 `summary.json`；这些明细
-只保存在每个算子的 `accuracy_result.json` 和 `performance_result.json` 中。精度记录
+生成的汇总不再把完整精度 case 和性能 shape 明细写入 `summary.json`；这些明细只保存
+在每个算子的 `accuracy_result.json` 和 `performance_result.json` 中。精度记录
 保留单行 `note`，性能 dtype 记录保留聚合后的 `speedup`、`base`、`gems` 和
 `shape_count`。`data_file` 与 `details_mode: "external"` 指向规范的原始明细文件。
 `flagos-psum-text --single` 和 `--compare` 只会按需读取选中算子的文件，同时继续兼容
@@ -238,7 +238,6 @@ worker 启动时会原子替换自己的检查点，因此复用输出目录也�
 
 ```json
 {
-  "summary_schema_version": 2,
   "timestamp": "2026-10-23 18:50:37",
   "total_duration": "0:01:47",
   "total_ops": 3,

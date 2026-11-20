@@ -23,7 +23,6 @@ if __package__:
 else:
     from performance_report import parse_perf_data  # type: ignore[no-redef]
 
-SUMMARY_SCHEMA_VERSION = 2
 DETAILS_MODE_EXTERNAL = "external"
 
 

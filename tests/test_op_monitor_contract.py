@@ -43,7 +43,7 @@ from unittest import mock
 
 import yaml
 
-from flagos_optest import add_labels, result_details, run_tests
+from flagos_optest import add_labels, run_tests
 
 _REPOSITORY_ROOT = Path(__file__).parents[1]
 _ACCURACY_FIELDS = {
@@ -156,7 +156,6 @@ def _generate_result_directory(tmp_path, monkeypatch):
     accuracy = run_tests.run_accuracy_q(0, "add")
     performance = run_tests.run_benchmark_q(0, "add")
     final_data = {
-        "summary_schema_version": result_details.SUMMARY_SCHEMA_VERSION,
         "timestamp": "2026-11-20 00:00:00",
         "total_duration": "0:00:01",
         "total_ops": 1,
@@ -238,7 +237,6 @@ def test_generated_archive_satisfies_op_monitor_contract(tmp_path, monkeypatch):
     summary_path = _find_summary(archive_root)
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
 
-    assert summary.get("summary_schema_version") == 2
     assert isinstance(summary.get("env"), dict)
     assert summary["env"]
     assert isinstance(summary.get("result"), dict)

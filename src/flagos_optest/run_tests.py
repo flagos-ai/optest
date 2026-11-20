@@ -154,7 +154,6 @@ if __package__:
     from .gpu_check import probe_accelerator_metadata
     from .performance_report import parse_perf_data
     from .result_details import (
-        SUMMARY_SCHEMA_VERSION,
         compact_accuracy_result,
         compact_performance_result,
         parse_accuracy_data,
@@ -163,7 +162,6 @@ else:
     from gpu_check import probe_accelerator_metadata  # type: ignore[no-redef]
     from performance_report import parse_perf_data  # type: ignore[no-redef]
     from result_details import (  # type: ignore[no-redef]
-        SUMMARY_SCHEMA_VERSION,
         compact_accuracy_result,
         compact_performance_result,
         parse_accuracy_data,
@@ -2140,7 +2138,6 @@ def main():
     )
 
     final_data = {
-        "summary_schema_version": SUMMARY_SCHEMA_VERSION,
         "timestamp": test_end_time.strftime("%Y-%m-%d %H:%M:%S"),
         "total_duration": total_duration_str,
         "total_ops": len(op_data),

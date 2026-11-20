@@ -36,7 +36,7 @@ jobs:
         run: uv sync --python 3.14 --no-default-groups --group test
 
       - name: Validate downstream archive contract
-        run: uv run --no-sync python -m pytest -q tests/test_op_monitor_contract.py
+        run: uv run --no-sync python -m pytest --no-cov -q tests/test_op_monitor_contract.py
 
   quality:
     name: Pre-commit and build

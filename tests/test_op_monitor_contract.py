@@ -43,7 +43,7 @@ from unittest import mock
 
 import yaml
 
-from flagos_optest import add_labels, run_tests
+from flagos_optest import add_labels, result_details, run_tests
 
 _REPOSITORY_ROOT = Path(__file__).parents[1]
 _ACCURACY_FIELDS = {
@@ -156,6 +156,7 @@ def _generate_result_directory(tmp_path, monkeypatch):
     accuracy = run_tests.run_accuracy_q(0, "add")
     performance = run_tests.run_benchmark_q(0, "add")
     final_data = {
+        "summary_schema_version": result_details.SUMMARY_SCHEMA_VERSION,
         "timestamp": "2026-11-20 00:00:00",
         "total_duration": "0:00:01",
         "total_ops": 1,
@@ -237,6 +238,7 @@ def test_generated_archive_satisfies_op_monitor_contract(tmp_path, monkeypatch):
     summary_path = _find_summary(archive_root)
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
 
+    assert summary.get("summary_schema_version") == 2
     assert isinstance(summary.get("env"), dict)
     assert summary["env"]
     assert isinstance(summary.get("result"), dict)
@@ -246,6 +248,8 @@ def test_generated_archive_satisfies_op_monitor_contract(tmp_path, monkeypatch):
     operator = summary["result"][operator_name]
     accuracy = operator["accuracy"]
     assert _ACCURACY_FIELDS <= accuracy.keys()
+    assert accuracy.get("details_mode") == "external"
+    assert "details" not in accuracy
     assert accuracy["status"].lower() == "passed"
     count_fields = _ACCURACY_FIELDS - {"status", "exit_code"}
     assert all(isinstance(accuracy[field], int) for field in count_fields)
@@ -259,6 +263,12 @@ def test_generated_archive_satisfies_op_monitor_contract(tmp_path, monkeypatch):
     for dtype_result in performance["data"].values():
         assert "speedup" in dtype_result
         assert isinstance(dtype_result["speedup"], int | float)
+        assert "details" not in dtype_result
+        assert dtype_result["base"] == 2.0
+        assert dtype_result["gems"] == 1.0
+        assert dtype_result["shape_count"] == 1
+    assert performance.get("details_mode") == "external"
+    assert performance.get("speedup_source") == "origin"
 
     assert isinstance(operator.get("customized"), bool)
     assert isinstance(operator.get("labels"), list)

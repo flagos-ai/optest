@@ -117,6 +117,78 @@ class ReportDirectoryTest(unittest.TestCase):
             text=True,
         )
 
+    def create_external_summary(self, directory, *, speedup=2.0, base=2.0):
+        operator_dir = directory / "add"
+        operator_dir.mkdir()
+        (operator_dir / "accuracy_result.json").write_text(
+            json.dumps(
+                {
+                    "test_add[x]": {
+                        "result": "failed",
+                        "reason": "mismatch\nfull trace",
+                        "params": {"shape": [1]},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        (operator_dir / "performance_result.json").write_text(
+            json.dumps(
+                {
+                    "add": {
+                        "result": "passed",
+                        "details": [
+                            {
+                                "dtype": "torch.float32",
+                                "result": [
+                                    {
+                                        "shape_detail": [2, 2],
+                                        "latency_base": base,
+                                        "latency": 1.0,
+                                        "speedup": speedup,
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        self.create_summary(
+            directory,
+            {
+                "add": {
+                    "accuracy": {
+                        "status": "Failed",
+                        "passed": 0,
+                        "failed": 1,
+                        "skipped": 0,
+                        "duration": 1.0,
+                        "note": "mismatch",
+                        "details_mode": "external",
+                        "data_file": "add/accuracy_result.json",
+                    },
+                    "performance": {
+                        "status": "Passed",
+                        "duration": 2.0,
+                        "details_mode": "external",
+                        "data_file": "add/performance_result.json",
+                        "speedup_source": "origin",
+                        "data": {
+                            "fp32": {
+                                "result": "OK",
+                                "speedup": speedup,
+                                "base": base,
+                                "gems": 1.0,
+                                "shape_count": 1,
+                            }
+                        },
+                    },
+                }
+            },
+        )
+
     def test_text_and_html_default_to_current_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             results = Path(directory)
@@ -214,6 +286,171 @@ class ReportDirectoryTest(unittest.TestCase):
             for filename, marker in result_markers.items():
                 self.assertNotIn(filename, logs_html)
                 self.assertNotIn(marker, logs_html)
+
+    def test_text_single_lazily_loads_external_details(self):
+        with tempfile.TemporaryDirectory() as directory:
+            results = Path(directory)
+            self.create_external_summary(results)
+            output = results / "single.md"
+
+            completed = self.run_report(
+                "psum_text",
+                results,
+                results,
+                "--format",
+                "markdown",
+                "--single",
+                "-o",
+                output,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            report = output.read_text(encoding="utf-8")
+            self.assertIn("mismatch", report)
+            self.assertIn("test_add:[1]", report)
+            self.assertIn("`[2,2]`", report)
+
+    def test_html_compact_summary_does_not_load_external_details(self):
+        with tempfile.TemporaryDirectory() as directory:
+            results = Path(directory)
+            self.create_external_summary(results)
+            (results / "add" / "accuracy_result.json").unlink()
+            (results / "add" / "performance_result.json").unlink()
+            output = results / "result.html"
+
+            completed = self.run_report("psum_html", results, results, "-o", output)
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            report = output.read_text(encoding="utf-8")
+            self.assertIn("Failed", report)
+            self.assertIn("Passed", report)
+
+    def test_text_multi_base_uses_summary_without_loading_raw_details(self):
+        with tempfile.TemporaryDirectory() as directory:
+            results = Path(directory)
+            self.create_external_summary(results, base=4.0)
+            (results / "add" / "performance_result.json").write_text(
+                "invalid", encoding="utf-8"
+            )
+            output = results / "base.csv"
+
+            completed = self.run_report(
+                "psum_text",
+                results,
+                results,
+                "--metric",
+                "base",
+                "-o",
+                output,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertNotIn("Warning:", completed.stderr)
+            self.assertIn("4.000", output.read_text(encoding="utf-8"))
+
+    def test_text_single_keeps_legacy_inline_details_compatible(self):
+        with tempfile.TemporaryDirectory() as directory:
+            results = Path(directory)
+            self.create_summary(
+                results,
+                {
+                    "add": {
+                        "accuracy": {
+                            "status": "Failed",
+                            "passed": 0,
+                            "failed": 1,
+                            "skipped": 0,
+                            "details": {"failed": {"legacy": ["case"]}},
+                        },
+                        "performance": {
+                            "status": "Passed",
+                            "data": {
+                                "fp32": {
+                                    "speedup": 2.0,
+                                    "details": {
+                                        "[1]": {
+                                            "speedup": 2.0,
+                                            "base": 2.0,
+                                            "gems": 1.0,
+                                        }
+                                    },
+                                }
+                            },
+                        },
+                    }
+                },
+            )
+            output = results / "legacy.md"
+
+            completed = self.run_report(
+                "psum_text",
+                results,
+                results,
+                "--format",
+                "markdown",
+                "--single",
+                "-o",
+                output,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            report = output.read_text(encoding="utf-8")
+            self.assertIn("legacy", report)
+            self.assertIn("`[1]`", report)
+
+    def test_text_compare_lazily_loads_both_external_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            before = root / "before"
+            after = root / "after"
+            before.mkdir()
+            after.mkdir()
+            self.create_external_summary(before, speedup=2.0)
+            self.create_external_summary(after, speedup=3.0)
+            output = root / "compare.md"
+
+            completed = self.run_report(
+                "psum_text",
+                root,
+                root,
+                "--format",
+                "markdown",
+                "--single",
+                "--compare",
+                "-o",
+                output,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            report = output.read_text(encoding="utf-8")
+            self.assertIn("2.000 -> 3.000", report)
+            self.assertIn("Cases  Before", report)
+            self.assertIn("Cases  After", report)
+
+    def test_web_uses_compact_accuracy_note_without_loading_raw_details(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = root / "raw"
+            result_dir = raw / "ascend-flagtree-20260101"
+            output_dir = root / "web"
+            result_dir.mkdir(parents=True)
+            self.create_external_summary(result_dir)
+            (result_dir / "add" / "accuracy_result.json").unlink()
+
+            completed = self.run_report(
+                "psum_web",
+                root,
+                "--raw-dir",
+                raw,
+                "--output-dir",
+                output_dir,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            web_data = json.loads(
+                (output_dir / "ascend.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(web_data["operators"][0]["note"], "mismatch")
 
 
 if __name__ == "__main__":

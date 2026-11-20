@@ -214,6 +214,15 @@ worker 启动时会原子替换自己的检查点，因此复用输出目录也�
 公共实现用了 tle 则所有芯片都标注,因此按芯片区分。
 状态计数包含
 `passed`、`failed`、`skipped`、`not_found`、`error` 和 `timeout`，即使值为零也会保留。
+
+汇总格式版本 2 不再把完整精度 case 和性能 shape 明细写入 `summary.json`；这些明细
+只保存在每个算子的 `accuracy_result.json` 和 `performance_result.json` 中。精度记录
+保留单行 `note`，性能 dtype 记录保留聚合后的 `speedup`、`base`、`gems` 和
+`shape_count`。`data_file` 与 `details_mode: "external"` 指向规范的原始明细文件。
+`flagos-psum-text --single` 和 `--compare` 只会按需读取选中算子的文件，同时继续兼容
+包含内联 `details` 的旧汇总。如果复制结果后仍需生成详细报告，必须将算子目录与
+`summary.json` 一起保留。
+
 `env` 对象集中记录调度器检测到的关键测试环境和依赖版本：
 
 - CPU 架构、操作系统和 Python 版本；
@@ -229,6 +238,7 @@ worker 启动时会原子替换自己的检查点，因此复用输出目录也�
 
 ```json
 {
+  "summary_schema_version": 2,
   "timestamp": "2026-10-23 18:50:37",
   "total_duration": "0:01:47",
   "total_ops": 3,
@@ -368,7 +378,9 @@ flagos-psum-text /tmp/optest-results \
 ```
 
 其他模式包括 `--metric {speedup,base}`、用于生成详细单算子 Markdown 报告的
-`--single`，以及用于比较 `before/` 和 `after/` 单算子结果的 `--compare`。
+`--single`，以及用于比较 `before/` 和 `after/` 单算子结果的 `--compare`。多算子报告
+直接使用 `summary.json` 中的聚合值；详细的单算子/对比报告才会按需读取引用的原始
+结果文件。
 
 #### `flagos-psum-html`
 

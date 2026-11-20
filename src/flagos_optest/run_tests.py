@@ -57,6 +57,10 @@ Complete worker checkpoints are removed only after their protocol and operator
 coverage have been validated and summary.json is atomically published and
 verified; incomplete or failed runs retain them for recovery.
 
+The final summary stores status counts and dtype aggregates. Complete accuracy
+cases and performance shapes remain in each operator's referenced result JSON
+and are loaded on demand by detailed report commands.
+
 CLI Arguments
 -------------
   --ops OPS           Comma-separated operator ID list. Directly specify which
@@ -149,9 +153,21 @@ import yaml
 if __package__:
     from .gpu_check import probe_accelerator_metadata
     from .performance_report import parse_perf_data
+    from .result_details import (
+        SUMMARY_SCHEMA_VERSION,
+        compact_accuracy_result,
+        compact_performance_result,
+        parse_accuracy_data,
+    )
 else:
     from gpu_check import probe_accelerator_metadata  # type: ignore[no-redef]
     from performance_report import parse_perf_data  # type: ignore[no-redef]
+    from result_details import (  # type: ignore[no-redef]
+        SUMMARY_SCHEMA_VERSION,
+        compact_accuracy_result,
+        compact_performance_result,
+        parse_accuracy_data,
+    )
 
 # Known FlagOS libraries probed at runtime: (import_name, display_name).
 # The script does NOT take a library-name argument; it try-imports each entry
@@ -844,92 +860,6 @@ def run_cmd(
             stderr_file.close()
 
 
-def parse_accuracy_data(result_file):
-    raw_data = {}
-    try:
-        with result_file.open("r") as f:
-            raw_data = json.load(f)
-    except (json.JSONDecodeError, ValueError):
-        return {
-            "total": 0,
-            "skipped": 0,
-            "failed": 0,
-            "passed": 0,
-            "errors": 1,
-            "status": "Error",
-            "details": {"error": f"Invalid JSON in {result_file}"},
-        }
-
-    passed = []
-    skipped: dict[str, Any] = {}
-    failed: dict[str, Any] = {}
-    num_skipped = 0
-    num_failed = 0
-    num_passed = 0
-    skipped_with_issue = False
-    for test_case, item in raw_data.items():
-        case_str = test_case[: test_case.find("[")]
-        result = item.get("result", "")
-        params = [case_str]
-        for _key, v in item.get("params", {}).items():
-            params.append(str(v).replace(" ", ""))
-        param_str = ":".join(params)
-
-        if result == "passed":
-            passed.append(param_str)
-            num_passed += 1
-        elif result == "skipped":
-            reason = item.get("reason", "Unknown")
-            if "Issue" in reason:
-                skipped_with_issue = True
-            skipped.setdefault(reason, set())
-            skipped[reason].add(param_str)
-            num_skipped += 1
-        else:
-            reason = item.get("reason", "Unknown")
-            failed.setdefault(reason, set())
-            failed[reason].add(param_str)
-            num_failed += 1
-
-    num_total = num_passed + num_skipped + num_failed
-    result = {
-        "total": num_total,
-        "skipped": num_skipped,
-        "failed": num_failed,
-        "passed": num_passed,
-        "errors": 0,
-        "details": {},
-    }
-    if len(skipped) == 0 and len(failed) == 0:
-        if len(passed) == 0:
-            result["status"] = "NotFound"
-        else:
-            result["status"] = "Passed"
-        return result
-
-    if num_failed > 0:
-        result["status"] = "Failed"
-        for k, v in failed.items():
-            failed[k] = list(v)
-        result["details"]["failed"] = failed
-        return result
-
-    # Some tests skipped but none failed.
-    # If there are also passing tests, treat overall status as Passed
-    # (e.g. to_copy skips "same dtype conversion" but other cases pass).
-    if num_passed > 0:
-        result["status"] = "Passed"
-    elif skipped_with_issue:
-        result["status"] = "Failed"
-    else:
-        result["status"] = "Skipped"
-
-    for k, v in skipped.items():
-        skipped[k] = list(v)
-    result["details"]["skipped"] = skipped
-    return result
-
-
 def op_marker(op):
     """Return the pytest marker name for an operator id.
 
@@ -1021,7 +951,7 @@ def run_accuracy_q(gpu_id, op):
     result["exit_code"] = code
     result["duration"] = dur
     result["data_file"] = str(result_file.relative_to(CFG.output_dir))
-    return result
+    return compact_accuracy_result(result)
 
 
 def run_benchmark_q(gpu_id, op):
@@ -1081,12 +1011,9 @@ def run_benchmark_q(gpu_id, op):
         "data_file": str(result_file.relative_to(CFG.output_dir)),
         "data": {},
     }
-    record.update(
-        parse_perf_data(
-            op, result_file, speedup_source=getattr(CFG, "speedup_source", "origin")
-        )
-    )
-    return record
+    speedup_source = getattr(CFG, "speedup_source", "origin")
+    record.update(parse_perf_data(op, result_file, speedup_source=speedup_source))
+    return compact_performance_result(record, speedup_source=speedup_source)
 
 
 # Textual marker of a Triton experimental language-extension (TLE) dependency.
@@ -2213,6 +2140,7 @@ def main():
     )
 
     final_data = {
+        "summary_schema_version": SUMMARY_SCHEMA_VERSION,
         "timestamp": test_end_time.strftime("%Y-%m-%d %H:%M:%S"),
         "total_duration": total_duration_str,
         "total_ops": len(op_data),

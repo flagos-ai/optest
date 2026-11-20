@@ -114,15 +114,15 @@ def convert_summary(data_dir, platform, compiler):
             row[dtype] = round(spd, 3) if spd is not None else None
 
         # Extract note from failure/skip reasons
-        note = ""
+        note = acc.get("note", "")
         if perf_status in ("Failed", "Skipped") and perf.get("reason"):
             note = perf["reason"].split("\n")[0]
-        elif acc_status == "Failed":
+        elif not note and acc_status == "Failed":
             details = acc.get("details", {})
             for reason in details.get("failed", {}):
                 note = reason.split("\n")[0]
                 break
-        elif acc.get("skipped", 0) > 0 and acc.get("passed", 0) == 0:
+        elif not note and acc.get("skipped", 0) > 0 and acc.get("passed", 0) == 0:
             details = acc.get("details", {})
             for reason in details.get("skipped", {}):
                 note = reason.split("\n")[0]

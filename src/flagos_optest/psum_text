@@ -21,6 +21,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import result_details
+
 DTYPE_MAP = {
     "torch.float16": "fp16",
     "torch.float32": "fp32",
@@ -37,7 +39,7 @@ DTYPE_MAP = {
 }
 DATA: dict[str, Any] = {}
 DEBUG = False
-DATA_DIR = None
+DATA_DIR: Any = None
 ARGS = argparse.Namespace()
 
 
@@ -551,25 +553,16 @@ def parse_lines():
                 if ARGS.metric == "speedup":
                     # Process `speedup`
                     metric = dobj.get("speedup", None)
+                elif "base" in dobj:
+                    metric = dobj.get("base")
                 else:
-                    # Process `base` by averaging across all shapes
-                    total = 0
-                    count = 0
-                    if item["performance"].get("native_baseline_skip_reason"):
-                        for sdata in dobj.get("details", {}).values():
-                            value = sdata.get("base")
-                            if value is not None:
-                                total += value
-                                count += 1
-                    else:
-                        for sdata in dobj.get("details", {}).values():
-                            total += sdata.get("base", 0)
-                            count += 1
-
-                    if count == 0:
-                        metric = None
-                    else:
-                        metric = total / count
+                    # Legacy summaries store base only in inline shape details.
+                    values = [
+                        shape.get("base")
+                        for shape in dobj.get("details", {}).values()
+                        if isinstance(shape.get("base"), (int, float))
+                    ]
+                    metric = sum(values) / len(values) if values else None
 
                 if metric is None:
                     fields.append("")
@@ -591,10 +584,38 @@ def parse_lines():
 
 
 def parse_single():
+    _hydrate_single_details()
     lines = []
     lines.extend(parse_single_accuracy())
     lines.extend(parse_single_performance())
     return lines
+
+
+def _hydrate_single_details():
+    datasets: list[tuple[str, dict[str, Any], Path]]
+    if ARGS.compare:
+        before_data = DATA["before"].get("result", {})
+        after_data = DATA["after"].get("result", {})
+        op = next(iter(before_data), None) or next(iter(after_data), None)
+        datasets = [
+            ("before", DATA["before"], DATA_DIR["before"]),
+            ("after", DATA["after"], DATA_DIR["after"]),
+        ]
+    else:
+        result = DATA.get("result", {})
+        op = next(iter(result), None)
+        datasets = [("result", DATA, DATA_DIR)]
+
+    if op is None:
+        return
+    for label, summary, summary_dir in datasets:
+        operator_result = summary.get("result", {}).get(op)
+        if not isinstance(operator_result, dict):
+            continue
+        for warning in result_details.hydrate_operator_details(
+            summary_dir, op, operator_result
+        ):
+            print(f"Warning: {label} {warning}", file=sys.stderr)
 
 
 def parse_multi():
@@ -634,6 +655,7 @@ def parse_multi():
 
 def main():
     global DATA
+    global DATA_DIR
     global ARGS
 
     parser = argparse.ArgumentParser()
@@ -692,6 +714,7 @@ def main():
         DATA, res = load_data(data_path)
         if not res:
             return 1
+        DATA_DIR = Path(ARGS.dir)
     else:
         data_path1 = data_path = Path(ARGS.dir) / "before" / "summary.json"
         before, res = load_data(data_path1)
@@ -702,6 +725,10 @@ def main():
         DATA = {
             "before": before,
             "after": after,
+        }
+        DATA_DIR = {
+            "before": Path(ARGS.dir) / "before",
+            "after": Path(ARGS.dir) / "after",
         }
 
     lines = parse_env()

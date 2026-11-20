@@ -233,6 +233,18 @@ operator, so a vendor kernel that uses TLE is tagged on that vendor while a
 generic TLE path is tagged everywhere; it is therefore per-chip. Status counts
 include zero values for `passed`, `failed`, `skipped`, `not_found`, `error`, and
 `timeout`.
+
+Summary schema version 2 keeps `summary.json` compact by storing complete
+accuracy cases and performance shape records only in each operator's
+`accuracy_result.json` and `performance_result.json`. Accuracy records retain a
+single-line `note`; performance dtype records retain aggregate `speedup`,
+`base`, `gems`, and `shape_count` values. `data_file` and
+`details_mode: "external"` identify the canonical raw detail file. Detailed
+`flagos-psum-text --single` and `--compare` reports load only the selected
+operator files and remain compatible with older summaries that contain inline
+`details`. Keep the operator directories with `summary.json` when copying a
+result if detailed reports must remain available.
+
 The `env` object centralizes the test-critical environment and dependency
 versions detected by the scheduler:
 
@@ -252,6 +264,7 @@ selected image):
 
 ```json
 {
+  "summary_schema_version": 2,
   "timestamp": "2026-10-23 18:50:37",
   "total_duration": "0:01:47",
   "total_ops": 3,
@@ -402,7 +415,9 @@ flagos-psum-text /tmp/optest-results \
 
 Additional modes include `--metric {speedup,base}`, `--single` for a detailed
 single-operator Markdown report, and `--compare` for a `before/` versus
-`after/` single-operator comparison.
+`after/` single-operator comparison. Multi-operator reports use the aggregates
+in `summary.json`; detailed single/compare reports lazily read the referenced
+raw result files.
 
 #### `flagos-psum-html`
 

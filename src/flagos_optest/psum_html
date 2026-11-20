@@ -29,6 +29,7 @@ DATA: dict[str, Any] = {}
 DATA_DIR = None
 
 ASSETS_DIR = Path(__file__).resolve().parent / "html_assets"
+LOG_SUFFIXES = ("stdout.log", "stderr.log")
 
 
 def wrap_html(lines):
@@ -55,7 +56,7 @@ def wrap_html(lines):
 
 
 def read_log_files(op_name, prefix):
-    """Read log files for an operator with the given prefix (accuracy_ or performance_).
+    """Read stdout and stderr logs for an operator and test stage.
 
     Returns a list of (filename, content) tuples, or None if no files found.
     """
@@ -64,7 +65,8 @@ def read_log_files(op_name, prefix):
     op_dir = Path(DATA_DIR) / op_name
     if not op_dir.is_dir():
         return None
-    log_files = sorted(op_dir.glob(f"{prefix}*"))
+    log_files = [op_dir / f"{prefix}{suffix}" for suffix in LOG_SUFFIXES]
+    log_files = [log_file for log_file in log_files if log_file.is_file()]
     if not log_files:
         return None
     results = []
@@ -453,6 +455,11 @@ def main():
         action=argparse.BooleanOptionalAction,
         help="flag for printing verbose information for debugging",
     )
+    parser.add_argument(
+        "--include-logs",
+        action="store_true",
+        help="embed per-operator stdout and stderr logs (disabled by default)",
+    )
     args = parser.parse_args()
 
     data_path = Path(args.dir) / "summary.json"
@@ -460,7 +467,7 @@ def main():
     if not res:
         return 1
 
-    DATA_DIR = args.dir
+    DATA_DIR = args.dir if args.include_logs else None
 
     result_heading = ["<h3>Test Result</h3>"]
     lines = parse_env() + result_heading + parse_data()

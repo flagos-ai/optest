@@ -96,13 +96,13 @@ class AddLabelsDirectoryTest(unittest.TestCase):
 
 
 class ReportDirectoryTest(unittest.TestCase):
-    def create_summary(self, directory):
+    def create_summary(self, directory, result=None):
         (directory / "summary.json").write_text(
             json.dumps(
                 {
                     "timestamp": "2026-01-01T00:00:00",
                     "env": {"os_name": "Linux", "os_release": "test"},
-                    "result": {},
+                    "result": {} if result is None else result,
                 }
             ),
             encoding="utf-8",
@@ -152,6 +152,68 @@ class ReportDirectoryTest(unittest.TestCase):
             self.assertEqual(html_result.returncode, 0, html_result.stderr)
             self.assertTrue(text_output.is_file())
             self.assertTrue(html_output.is_file())
+
+    def test_html_logs_are_opt_in_and_exclude_result_json(self):
+        with tempfile.TemporaryDirectory() as directory:
+            results = Path(directory)
+            self.create_summary(
+                results,
+                {
+                    "add": {
+                        "accuracy": {
+                            "status": "Passed",
+                            "passed": 1,
+                            "failed": 0,
+                            "skipped": 0,
+                        },
+                        "performance": {"status": "Passed", "data": {}},
+                    }
+                },
+            )
+            operator_dir = results / "add"
+            operator_dir.mkdir()
+            log_markers = {
+                "accuracy_stdout.log": "accuracy stdout marker",
+                "accuracy_stderr.log": "accuracy stderr marker",
+                "performance_stdout.log": "performance stdout marker",
+                "performance_stderr.log": "performance stderr marker",
+            }
+            for filename, marker in log_markers.items():
+                (operator_dir / filename).write_text(marker, encoding="utf-8")
+            result_markers = {
+                "accuracy_result.json": "accuracy result marker",
+                "performance_result.json": "performance result marker",
+            }
+            for filename, marker in result_markers.items():
+                (operator_dir / filename).write_text(marker, encoding="utf-8")
+
+            default_output = results / "default.html"
+            default_result = self.run_report(
+                "psum_html", results, results, "-o", default_output
+            )
+            self.assertEqual(default_result.returncode, 0, default_result.stderr)
+            default_html = default_output.read_text(encoding="utf-8")
+            for marker in (*log_markers.values(), *result_markers.values()):
+                self.assertNotIn(marker, default_html)
+            self.assertNotIn('<pre class="log-content">', default_html)
+
+            logs_output = results / "with-logs.html"
+            logs_result = self.run_report(
+                "psum_html",
+                results,
+                results,
+                "--include-logs",
+                "-o",
+                logs_output,
+            )
+            self.assertEqual(logs_result.returncode, 0, logs_result.stderr)
+            logs_html = logs_output.read_text(encoding="utf-8")
+            for filename, marker in log_markers.items():
+                self.assertIn(filename, logs_html)
+                self.assertIn(marker, logs_html)
+            for filename, marker in result_markers.items():
+                self.assertNotIn(filename, logs_html)
+                self.assertNotIn(marker, logs_html)
 
 
 if __name__ == "__main__":

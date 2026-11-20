@@ -397,8 +397,10 @@ single-operator Markdown report, and `--compare` for a `before/` versus
 #### `flagos-psum-html`
 
 This command creates a self-contained HTML report with environment details,
-operator results, filtering, and preserved per-operator logs when available.
-The optional result directory defaults to the current directory.
+operator results, and filtering. The report contains summary data only by
+default. Pass `--include-logs` to also embed each operator's stdout and stderr
+logs. Result JSON files are never embedded. The optional result directory
+defaults to the current directory.
 
 ```bash
 # Current directory contains summary.json.
@@ -408,6 +410,10 @@ flagos-psum-html -o result.html
 # Pass the result directory explicitly.
 flagos-psum-html /tmp/optest-results \
   -o /tmp/optest-results/result.html
+
+# Opt in to embedding accuracy/performance stdout and stderr logs.
+flagos-psum-html /tmp/optest-results --include-logs \
+  -o /tmp/optest-results/result-with-logs.html
 ```
 
 #### `flagos-psum-web`

@@ -366,8 +366,9 @@ flagos-psum-text /tmp/optest-results \
 
 #### `flagos-psum-html`
 
-此命令会创建独立的 HTML 报告，其中包含环境详情、算子结果、筛选功能，
-以及可用时保留的每算子日志。可选的结果目录默认为当前目录。
+此命令会创建独立的 HTML 报告，其中包含环境详情、算子结果和筛选功能。默认报告
+只包含汇总数据。传入 `--include-logs` 后，还会内嵌每个算子的 stdout 和 stderr
+日志；结果 JSON 文件始终不会被内嵌。可选的结果目录默认为当前目录。
 
 ```bash
 # Current directory contains summary.json.
@@ -377,6 +378,10 @@ flagos-psum-html -o result.html
 # Pass the result directory explicitly.
 flagos-psum-html /tmp/optest-results \
   -o /tmp/optest-results/result.html
+
+# 显式选择内嵌精度和性能测试的 stdout/stderr 日志。
+flagos-psum-html /tmp/optest-results --include-logs \
+  -o /tmp/optest-results/result-with-logs.html
 ```
 
 #### `flagos-psum-web`

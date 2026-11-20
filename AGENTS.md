@@ -274,17 +274,33 @@ Behavior worth preserving when changing this flow:
   records that.
 - An incremental run that finds nothing stale collects nothing and runs no
   operator subprocess. The classify step grades that as a pass (it tells it
-  apart from a crash by the recorded plan), and the scheduler carries
-  `_environment` and `_scaling_factors` over from the baseline, flagged with
-  `environment_from_baseline`.
+  apart from a crash by the recorded plan).
+- `_environment` and `_scaling_factors` describe the machine a run measured on,
+  so only a collecting child produces them. When no child reports them -- an
+  incremental run with nothing stale, or one whose every queued operator died
+  before flushing its own metadata -- `carry_over_metadata` takes them from the
+  previous baseline and names the keys in `status.json`'s
+  `incremental.carried_over_metadata`; a value a child did report always wins.
+  Without that, a run that still republishes operators (retained or restored)
+  would publish them with no provenance at all. The single-card collector is
+  not affected: it writes both keys in the parent before collecting.
+- Every write of the baseline goes through `publishable()`, which puts
+  `_environment` and `_scaling_factors` at the top of the file in that order
+  (identically in both modes) and keeps run-time bookkeeping out of the
+  published data. Add a new provenance key to `PUBLISHED_FIRST` and a new
+  run-time key to `DROPPED_FROM_PUBLISHED`, rather than ordering at a call
+  site.
 - The `data/` update step refuses to commit an incremental result that holds
   fewer operators than the file it replaces. Full mode stays exempt, since
   there a failed operator is intentionally absent and the commit is marked
   forced.
-- Each published baseline records the plan under `_incremental` (mode, label,
-  collected, retained, per-operator decisions), so a file states which of its
-  operators the run measured. Keep new bookkeeping keys `_`-prefixed; consumers
-  identify operators by the absence of that prefix.
+- The refresh plan (mode, label, collected, retained, per-operator decisions,
+  `local_version_ignored`, `carried_over_metadata`) is recorded in the sidecar
+  `${OUTPUT}.work/status.json` under `incremental`, which the workflow grades
+  and summarizes from and uploads as an artifact. It is deliberately NOT in the
+  published baseline, which carries measurements and provenance only. Keep any
+  new bookkeeping key `_`-prefixed; consumers identify operators by the absence
+  of that prefix.
 
 `tests/test_baseline_refresh.py` covers the planner, the scheduler path with a
 stubbed collector subprocess, and the workflow's classify/update steps. The

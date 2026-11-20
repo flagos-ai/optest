@@ -442,12 +442,14 @@ def _dumps(obj, indent=2, level=0):
 
 
 def _flush_results(results, output_path):
+    """Write the baseline atomically: provenance keys first, run-time
+    bookkeeping (the refresh plan) left out — that belongs in status.json."""
     if output_path is None:
         return
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = output_path.with_suffix(output_path.suffix + ".tmp")
-    tmp.write_text(_dumps(results) + "\n")
+    tmp.write_text(_dumps(baseline_refresh.publishable(results)) + "\n")
     os.replace(tmp, output_path)
 
 
@@ -934,7 +936,6 @@ def collect_baseline(
     for line in plan.summary_lines():
         print(line)
     results.update(plan.retained)
-    results["_incremental"] = plan.metadata()
     collect_names = plan.collect_set
     ops_modules = [(n, m) for n, m in ops_modules if n in collect_names]
 
@@ -978,7 +979,6 @@ def collect_baseline(
             f"⚠ {len(restored)} operator(s) kept their previous baseline entry "
             f"(re-collection produced nothing): {', '.join(restored)}"
         )
-    results["_incremental"] = plan.metadata()
 
     _flush_results(results, output_path)
     n_ops = sum(1 for k in results if not k.startswith("_"))

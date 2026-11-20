@@ -184,10 +184,10 @@ class RefreshPlan:
     # re-collection can fall back to the published entry (see restore_missing).
     previous: dict = field(default_factory=dict)
     restored: list = field(default_factory=list)
-    # True when the run measured nothing, so `_environment` and
-    # `_scaling_factors` were carried over from the baseline rather than
-    # produced by a collecting child.
-    environment_from_baseline: bool = False
+    # Bookkeeping keys (`_environment`, `_scaling_factors`) taken from the
+    # previous baseline because no collecting child reported one. Non-empty
+    # means the published provenance describes the earlier run, not this one.
+    carried_over: list = field(default_factory=list)
     # Operators retained only because IGNORE_LOCAL_VERSION dropped a framework's
     # local version segment, mapped to the two versions involved. Non-empty
     # means the baseline may predate the installed framework build.
@@ -246,7 +246,9 @@ class RefreshPlan:
             "collected": sorted(self.collect),
             "retained": sorted(self.retained),
             "restored_after_failure": sorted(self.restored),
-            "environment_from_baseline": self.environment_from_baseline,
+            # Which bookkeeping keys describe the previous run rather than this
+            # one, because no collecting child reported them.
+            "carried_over_metadata": list(self.carried_over),
             # Which operators were kept despite a differing local version, and
             # against which build. Empty once the install is pinned.
             "local_version_ignored": {
@@ -330,6 +332,54 @@ def plan_refresh(
             plan.retained[name] = entry
             plan.reasons[name] = REASON_NOT_CANDIDATE
     return plan
+
+
+BOOKKEEPING_FROM_CHILD = ("_environment", "_scaling_factors")
+# Key order of a published baseline: the provenance of the run comes first, then
+# the operators. Same in both modes, so a reader (and a diff) always finds the
+# environment at the top of the file instead of somewhere among the operators.
+PUBLISHED_FIRST = ("_environment", "_scaling_factors")
+# Bookkeeping that stays out of the published baseline: the refresh plan is
+# run-time state and lives in the sidecar status.json.
+DROPPED_FROM_PUBLISHED = ("_incremental",)
+
+
+def publishable(results):
+    """The results dict as it should be written to the baseline file.
+
+    Puts PUBLISHED_FIRST at the top in that order, then everything else in its
+    existing order, and drops run-time bookkeeping: the refresh plan belongs in
+    the sidecar status.json, not in the published data. Python dicts keep
+    insertion order and json.dumps follows it, so rebuilding the dict is all
+    the ordering takes.
+    """
+    ordered = {key: results[key] for key in PUBLISHED_FIRST if key in results}
+    for key, value in results.items():
+        if key in ordered or key in DROPPED_FROM_PUBLISHED:
+            continue
+        ordered[key] = value
+    return ordered
+
+
+def carry_over_metadata(plan, results, baseline, keys=BOOKKEEPING_FROM_CHILD):
+    """Fill the bookkeeping keys no collecting child reported from `baseline`,
+    and return the keys that needed it.
+
+    `_environment` and `_scaling_factors` describe the machine a run measured
+    on, so only a collecting child produces them. Two cases leave them absent:
+    an incremental run with nothing stale (no child at all), and a run whose
+    every queued operator died before flushing its own metadata. Both would
+    otherwise republish a file that still holds operators -- restored or
+    retained -- but has lost all provenance. A value a child did report always
+    wins; this only fills gaps.
+    """
+    carried = []
+    for key in keys:
+        if key not in results and key in baseline:
+            results[key] = baseline[key]
+            carried.append(key)
+    plan.carried_over = carried
+    return carried
 
 
 def restore_missing(plan, results):

@@ -43,6 +43,11 @@ def atomic_json(path, value):
     temporary.replace(path)
 
 
+def publish(path, results):
+    """Write the baseline: provenance keys first, run-time bookkeeping out."""
+    atomic_json(path, baseline_refresh.publishable(results))
+
+
 def parse_devices(value):
     devices = [v.strip() for v in value.split(",")]
     if not all(devices) or len(devices) != len(set(devices)):
@@ -258,19 +263,11 @@ def _collect(args, *, execute=run_process):
     # is the merged baseline rather than this run's operators alone.
     results = dict(plan.retained)
     if not names:
-        # Nothing stale: no child runs, so no child reports an _environment or
-        # scaling factors. Carry the baseline's own forward (flagged) instead of
-        # publishing a file without provenance.
-        for key in ("_environment", "_scaling_factors"):
-            if key in base:
-                results[key] = base[key]
-        plan.environment_from_baseline = True
         print(
             "[refresh] no operators need re-collection; "
             "publishing the baseline unchanged",
             flush=True,
         )
-    results["_incremental"] = plan.metadata()
     tasks = {}
     status_path = work / "status.json"
     origins = {}
@@ -278,7 +275,7 @@ def _collect(args, *, execute=run_process):
     for name in names:
         pending.put(name)
     work.mkdir(parents=True, exist_ok=True)
-    atomic_json(output, results)
+    publish(output, results)
     atomic_json(status_path, {"tasks": tasks, "incremental": plan.metadata()})
     stop = threading.Event()
     events = queue.Queue()
@@ -398,7 +395,7 @@ def _collect(args, *, execute=run_process):
                     except queue.Empty:
                         continue
                     merge_event(results, origins, tasks, name, record, data)
-                    atomic_json(output, results)
+                    publish(output, results)
                     atomic_json(
                         status_path,
                         {"tasks": tasks, "incremental": plan.metadata()},
@@ -428,7 +425,19 @@ def _collect(args, *, execute=run_process):
             f"{', '.join(restored)}",
             flush=True,
         )
-    results["_incremental"] = plan.metadata()
+    # `_environment` and `_scaling_factors` only ever come from a collecting
+    # child. A run that collects nothing -- because nothing was stale, or
+    # because every queued operator died before flushing its own metadata
+    # (broken image, CUDA unavailable, immediate OOM) -- would otherwise
+    # republish a baseline with operators but no provenance at all. Fall back to
+    # the previous file's, and record which keys that applied to.
+    carried = baseline_refresh.carry_over_metadata(plan, results, base)
+    if carried:
+        print(
+            f"[refresh] no collecting child reported {', '.join(carried)}; "
+            f"carried over from {baseline_path or 'the previous baseline'}",
+            flush=True,
+        )
     # The exit status and the final task state live only in the sidecar
     # status.json; the published baseline carries no run-time bookkeeping.
     exit_status = int(
@@ -443,7 +452,7 @@ def _collect(args, *, execute=run_process):
             "incremental": plan.metadata(),
         },
     )
-    atomic_json(output, results)
+    publish(output, results)
     return exit_status
 
 

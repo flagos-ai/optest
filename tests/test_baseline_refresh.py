@@ -237,6 +237,64 @@ def test_restore_missing_keeps_the_published_entry_on_failure():
     assert plan.metadata()["restored_after_failure"] == ["b"]
 
 
+def test_publishable_puts_provenance_first_and_drops_bookkeeping():
+    # Deliberately the wrong order, with the plan mixed in.
+    results = {
+        "zeta": entry(VLLM_32),
+        "_incremental": {"mode": "incremental"},
+        "alpha": entry(VLLM_32),
+        "_scaling_factors": {"chips": {}},
+        "_environment": {"reference_chip": "H800"},
+    }
+    out = refresh.publishable(results)
+    assert list(out) == ["_environment", "_scaling_factors", "zeta", "alpha"]
+    assert "_incremental" not in out
+    # The input is left alone; only the written copy is reordered.
+    assert list(results)[0] == "zeta"
+
+
+def test_publishable_tolerates_missing_provenance():
+    out = refresh.publishable({"a": entry(VLLM_32)})
+    assert list(out) == ["a"]
+    assert refresh.publishable({}) == {}
+    # Only _scaling_factors present: it still leads.
+    out = refresh.publishable({"a": entry(VLLM_32), "_scaling_factors": {}})
+    assert list(out) == ["_scaling_factors", "a"]
+
+
+def test_carry_over_metadata_fills_only_the_gaps():
+    baseline = {
+        "_environment": {"reference_chip": "H800"},
+        "_scaling_factors": {"chips": {"H800": 1.0}},
+        "a": entry(VLLM_32),
+    }
+    plan = refresh.plan_refresh(["a"], baseline, VLLM_32)
+    # Nothing reported: both keys come from the baseline.
+    results = {}
+    assert refresh.carry_over_metadata(plan, results, baseline) == [
+        "_environment",
+        "_scaling_factors",
+    ]
+    assert results["_environment"] == {"reference_chip": "H800"}
+    assert plan.metadata()["carried_over_metadata"] == [
+        "_environment",
+        "_scaling_factors",
+    ]
+    # A child reported one of them: only the missing one is filled.
+    results = {"_environment": {"reference_chip": "H100"}}
+    assert refresh.carry_over_metadata(plan, results, baseline) == ["_scaling_factors"]
+    assert results["_environment"] == {"reference_chip": "H100"}
+
+
+def test_carry_over_metadata_with_nothing_to_carry():
+    plan = refresh.plan_refresh(["a"], {}, VLLM_32)
+    results = {}
+    # An empty baseline (first ever run) has nothing to carry over.
+    assert refresh.carry_over_metadata(plan, results, {}) == []
+    assert results == {}
+    assert plan.metadata()["carried_over_metadata"] == []
+
+
 def test_restore_missing_is_a_noop_in_full_mode():
     baseline = {"a": entry(VLLM_24)}
     plan = refresh.plan_refresh(["a"], baseline, VLLM_32, mode=refresh.MODE_FULL)
@@ -353,6 +411,11 @@ class TestSchedulerIntegration:
         )
 
     @staticmethod
+    def _status(args):
+        """The sidecar status.json, which carries the refresh plan."""
+        return json.loads((Path(f"{args.output}.work") / "status.json").read_text())
+
+    @staticmethod
     def _ops_dir(tmp_path, names):
         ops = tmp_path / "baseline"
         ops.mkdir()
@@ -411,11 +474,10 @@ class TestSchedulerIntegration:
         # were.
         assert sorted(collected) == ["fresh", "stale"]
         published = json.loads(Path(args.output).read_text())
-        assert set(published) - {
-            "_environment",
-            "_scaling_factors",
-            "_incremental",
-        } == {
+        # Provenance first, then the operators, and no run-time bookkeeping.
+        assert list(published)[:2] == ["_environment", "_scaling_factors"]
+        assert "_incremental" not in published
+        assert set(published) - {"_environment", "_scaling_factors"} == {
             "fresh",
             "stale",
             "unchanged",
@@ -423,7 +485,8 @@ class TestSchedulerIntegration:
         }
         assert published["stale"]["label"] == VLLM_32
         assert published["unchanged"] == entry(VLLM_32)
-        meta = published["_incremental"]
+        # The plan lives in the sidecar status.json.
+        meta = self._status(args)["incremental"]
         assert meta["mode"] == refresh.MODE_INCREMENTAL
         assert meta["collected"] == ["fresh", "stale"]
         assert set(meta["retained"]) == {"unchanged", "retired"}
@@ -440,7 +503,8 @@ class TestSchedulerIntegration:
         # The operator keeps its old entry and old label, so it stays in the
         # baseline and the next run retries it.
         assert published["stale"] == entry(VLLM_24)
-        assert published["_incremental"]["restored_after_failure"] == ["stale"]
+        assert "_incremental" not in published
+        assert self._status(args)["incremental"]["restored_after_failure"] == ["stale"]
 
     def test_nothing_stale_publishes_the_baseline_with_its_provenance(self, tmp_path):
         scheduler = self._scheduler()
@@ -466,10 +530,70 @@ class TestSchedulerIntegration:
         # baseline and are flagged as such.
         assert published["_environment"] == {"reference_chip": "H800"}
         assert published["_scaling_factors"] == {"chips": {"H800": 1.0}}
-        assert published["_incremental"]["environment_from_baseline"] is True
-        status = json.loads((Path(f"{args.output}.work") / "status.json").read_text())
+        status = self._status(args)
+        assert status["incremental"]["carried_over_metadata"] == [
+            "_environment",
+            "_scaling_factors",
+        ]
         assert status["tasks"] == {}
         assert status["incremental"]["collected"] == []
+
+    def test_every_child_dying_still_keeps_the_provenance(self, tmp_path):
+        """A run whose every queued operator dies before flushing its own
+        metadata must not republish a baseline stripped of _environment and
+        _scaling_factors: the operators survive by restore_missing, and the
+        provenance is carried over from the previous file."""
+        scheduler = self._scheduler()
+        ops_dir = self._ops_dir(tmp_path, ["lamb", "packbits"])
+        baseline = tmp_path / "data.json"
+        baseline.write_text(
+            json.dumps(
+                {
+                    "_environment": {"reference_chip": "H800"},
+                    "_scaling_factors": {"chips": {"H800": 1.0}},
+                    "lamb": entry(VLLM_24),
+                    "packbits": entry(VLLM_24),
+                }
+            )
+        )
+        args = self._args(tmp_path, ops_dir, baseline=baseline)
+        # Children die without writing any result.json at all.
+        code = scheduler.collect(
+            args, execute=self._executor([], fail=("lamb", "packbits"))
+        )
+        assert code == 1
+        published = json.loads(Path(args.output).read_text())
+        assert sorted(k for k in published if not k.startswith("_")) == [
+            "lamb",
+            "packbits",
+        ]
+        assert published["_environment"] == {"reference_chip": "H800"}
+        assert published["_scaling_factors"] == {"chips": {"H800": 1.0}}
+        assert list(published)[:2] == ["_environment", "_scaling_factors"]
+        inc = self._status(args)["incremental"]
+        assert inc["restored_after_failure"] == ["lamb", "packbits"]
+        assert inc["carried_over_metadata"] == ["_environment", "_scaling_factors"]
+
+    def test_a_reporting_child_wins_over_the_baseline(self, tmp_path):
+        """When a child does report provenance, that is this run's own and must
+        not be overwritten by the previous file's."""
+        scheduler = self._scheduler()
+        ops_dir = self._ops_dir(tmp_path, ["stale"])
+        baseline = tmp_path / "data.json"
+        baseline.write_text(
+            json.dumps(
+                {
+                    "_environment": {"reference_chip": "OLD"},
+                    "_scaling_factors": {"chips": {"OLD": 1.0}},
+                    "stale": entry(VLLM_24),
+                }
+            )
+        )
+        args = self._args(tmp_path, ops_dir, baseline=baseline)
+        assert scheduler.collect(args, execute=self._executor([])) == 0
+        published = json.loads(Path(args.output).read_text())
+        assert published["_environment"] == {"reference_chip": "H800"}
+        assert self._status(args)["incremental"]["carried_over_metadata"] == []
 
     def test_full_mode_recollects_everything(self, tmp_path):
         scheduler = self._scheduler()
@@ -482,7 +606,9 @@ class TestSchedulerIntegration:
         assert code == 0
         assert sorted(collected) == ["a", "b"]
         published = json.loads(Path(args.output).read_text())
-        assert published["_incremental"]["retained"] == []
+        assert "_incremental" not in published
+        assert list(published)[:2] == ["_environment", "_scaling_factors"]
+        assert self._status(args)["incremental"]["retained"] == []
 
     def test_corrupt_baseline_is_a_usage_error(self, tmp_path):
         scheduler = self._scheduler()

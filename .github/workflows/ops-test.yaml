@@ -1257,8 +1257,18 @@ jobs:
         run: |
           ARCHIVE="${{ matrix.output_base_dir }}/${REPOSITORY_NAME}/${REPOSITORY_NAME}-${{ matrix.name }}-${DATE}${TIME_SUFFIX}.tar.gz"
           mkdir -p "${OUTPUT_DIR}" "$(dirname "${ARCHIVE}")"
-          tar -czf "${ARCHIVE}" -C "$(dirname "${OUTPUT_DIR}")" "$(basename "${OUTPUT_DIR}")"
+          OUTPUT_PARENT="$(dirname "${OUTPUT_DIR}")"
+          OUTPUT_NAME="$(basename "${OUTPUT_DIR}")"
+          if [[ "${OUTPUT_NAME}" != logs_results_* \
+            || "$(basename "${OUTPUT_PARENT}")" != "${DATE}${TIME_SUFFIX}" \
+            || "$(dirname "${OUTPUT_PARENT}")" != "$(dirname "${ARCHIVE}")" ]]; then
+            echo "[Package results] ERROR: Refusing to remove unexpected result path: ${OUTPUT_PARENT}"
+            exit 1
+          fi
+          tar -czf "${ARCHIVE}" -C "${OUTPUT_PARENT}" "${OUTPUT_NAME}"
           echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+          rm -rf -- "${OUTPUT_PARENT}"
+          echo "[Package results] Removed unpacked result directory: ${OUTPUT_PARENT}"
 
       # - name: Upload artifact
       #   uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1

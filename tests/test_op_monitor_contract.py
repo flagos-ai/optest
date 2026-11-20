@@ -36,7 +36,9 @@ not part of this contract. Op-monitor does not read them.
 import json
 import os
 import shlex
+import subprocess
 import sys
+import tarfile
 import types
 from pathlib import Path
 from unittest import mock
@@ -202,6 +204,21 @@ def _find_summary(archive_root):
     return candidates[0]
 
 
+def _package_script():
+    workflow_path = _REPOSITORY_ROOT / ".github/workflows/ops-test.yaml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["test-container"]["steps"]
+    script = next(
+        step["run"] for step in steps if step.get("name") == "Package results"
+    )
+    archive_assignment = (
+        'ARCHIVE="${{ matrix.output_base_dir }}/${REPOSITORY_NAME}/'
+        '${REPOSITORY_NAME}-${{ matrix.name }}-${DATE}${TIME_SUFFIX}.tar.gz"'
+    )
+    assert archive_assignment in script
+    return script.replace(archive_assignment, 'ARCHIVE="${TEST_ARCHIVE}"')
+
+
 def test_weekly_workflow_preserves_op_monitor_archive_inputs():
     workflow_path = _REPOSITORY_ROOT / ".github/workflows/ops-test.yaml"
     workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
@@ -225,11 +242,107 @@ def test_weekly_workflow_preserves_op_monitor_archive_inputs():
     )
     package_script = steps[package_index]["run"]
     assert 'tar -czf "${ARCHIVE}"' in package_script
-    assert (
-        '-C "$(dirname "${OUTPUT_DIR}")" "$(basename "${OUTPUT_DIR}")"'
-        in package_script
+    assert '-C "${OUTPUT_PARENT}" "${OUTPUT_NAME}"' in package_script
+    assert '[[ "${OUTPUT_NAME}" != logs_results_*' in package_script
+    assert package_script.index('tar -czf "${ARCHIVE}"') < package_script.index(
+        'rm -rf -- "${OUTPUT_PARENT}"'
     )
     assert package_index < publish_index
+
+
+def test_package_results_removes_unpacked_directory_after_success(tmp_path):
+    output_parent = tmp_path / "2026-11-20_120000"
+    output_dir = output_parent / "logs_results_contract"
+    output_dir.mkdir(parents=True)
+    (output_dir / "summary.json").write_text("{}\n", encoding="utf-8")
+    (output_parent / "runner.tmp").write_text("temporary\n", encoding="utf-8")
+    archive = tmp_path / "results.tar.gz"
+    github_env = tmp_path / "github-env"
+
+    completed = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", _package_script()],
+        check=False,
+        capture_output=True,
+        env={
+            **os.environ,
+            "DATE": "2026-11-20",
+            "GITHUB_ENV": str(github_env),
+            "OUTPUT_DIR": str(output_dir),
+            "TEST_ARCHIVE": str(archive),
+            "TIME_SUFFIX": "_120000",
+        },
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert not output_parent.exists()
+    assert github_env.read_text(encoding="utf-8") == f"ARCHIVE={archive}\n"
+    with tarfile.open(archive, "r:gz") as packaged:
+        assert {
+            "logs_results_contract",
+            "logs_results_contract/summary.json",
+        } <= set(packaged.getnames())
+
+
+def test_package_results_preserves_directory_when_compression_fails(tmp_path):
+    output_parent = tmp_path / "2026-11-20_120000"
+    output_dir = output_parent / "logs_results_contract"
+    output_dir.mkdir(parents=True)
+    summary = output_dir / "summary.json"
+    summary.write_text("{}\n", encoding="utf-8")
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_tar = fake_bin / "tar"
+    fake_tar.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    fake_tar.chmod(0o755)
+
+    completed = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", _package_script()],
+        check=False,
+        capture_output=True,
+        env={
+            **os.environ,
+            "DATE": "2026-11-20",
+            "GITHUB_ENV": str(tmp_path / "github-env"),
+            "OUTPUT_DIR": str(output_dir),
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            "TEST_ARCHIVE": str(tmp_path / "results.tar.gz"),
+            "TIME_SUFFIX": "_120000",
+        },
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert summary.read_text(encoding="utf-8") == "{}\n"
+
+
+def test_package_results_refuses_unexpected_parent_directory(tmp_path):
+    output_parent = tmp_path / "unexpected"
+    output_dir = output_parent / "logs_results_contract"
+    output_dir.mkdir(parents=True)
+    summary = output_dir / "summary.json"
+    summary.write_text("{}\n", encoding="utf-8")
+    archive = tmp_path / "results.tar.gz"
+
+    completed = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", _package_script()],
+        check=False,
+        capture_output=True,
+        env={
+            **os.environ,
+            "DATE": "2026-11-20",
+            "GITHUB_ENV": str(tmp_path / "github-env"),
+            "OUTPUT_DIR": str(output_dir),
+            "TEST_ARCHIVE": str(archive),
+            "TIME_SUFFIX": "_120000",
+        },
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "Refusing to remove unexpected result path" in completed.stdout
+    assert summary.read_text(encoding="utf-8") == "{}\n"
+    assert not archive.exists()
 
 
 def test_generated_archive_satisfies_op_monitor_contract(tmp_path, monkeypatch):

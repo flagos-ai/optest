@@ -196,9 +196,12 @@ logs_results_YYYYMMDD_HHMM/
     └── performance_stderr.log    # with --dump-output
 ```
 
-运行期间，每个 worker 会写入一个 `summary<N>.json` 检查点。只有当所有预期的
-worker 汇总都存在且有效，并且最终 `summary.json` 已经原子发布并通过校验后，
-才会删除这些检查点。未完成或失败的运行会保留所有已存在的检查点，以便恢复。
+运行期间，每个 worker 会把紧凑的 `start`、`operator` 和 `complete` 记录追加到
+`summary<N>.jsonl` 检查点。每个算子记录只写一次，并立即 flush 和 fsync，避免每完成
+一个算子就重写此前全部结果所导致的二次方写放大。只有当所有预期 worker 检查点都
+完整、无重复且精确覆盖本次选择的算子，并且最终 `summary.json` 已经原子发布并通过
+校验后，才会删除这些检查点。未完成或失败的运行会保留所有现有检查点，以便恢复。
+worker 启动时会原子替换自己的检查点，因此复用输出目录也不会混入旧运行的记录。
 
 `summary.json` 包含运行时间戳和持续时间、`total_ops`（成功聚合到 `result`
 中的算子数量）、算子级别的 `accuracy_counts` 和 `performance_counts`、

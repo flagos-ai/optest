@@ -208,11 +208,16 @@ logs_results_YYYYMMDD_HHMM/
     └── performance_stderr.log    # with --dump-output
 ```
 
-During an active run, each worker writes a `summary<N>.json` checkpoint. These
-checkpoints are removed only after every expected worker summary is available
-and valid and the final `summary.json` has been atomically published and
-verified. Incomplete or failed runs retain all existing checkpoints for
-recovery.
+During an active run, each worker appends compact `start`, `operator`, and
+`complete` records to a `summary<N>.jsonl` checkpoint. Every operator record is
+flushed and synced once, avoiding the quadratic write amplification caused by
+rewriting all earlier results after each operator. The checkpoints are removed
+only after every expected worker checkpoint is complete, duplicate-free, and
+exactly covers the selected operators, and the final `summary.json` has been
+atomically published and verified. Incomplete or failed runs retain all
+existing checkpoints for recovery. Worker startup atomically replaces its own
+checkpoint, so reusing an output directory cannot mix records from an older
+run.
 
 `summary.json` contains the run timestamp and duration, `total_ops` (the number
 of operators successfully aggregated into `result`), operator-level

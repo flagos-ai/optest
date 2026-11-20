@@ -28,8 +28,9 @@ Consumed archive data:
 * ``<operator>/performance_result.json`` as the preferred shape-detail source;
 * accuracy/performance stdout and stderr logs for downstream log features.
 
-``summary<N>.json``, ``result.html``, and ``result.csv`` are deliberately not
-part of this contract. Op-monitor does not read them.
+Worker checkpoints (the current ``summary<N>.jsonl`` format and legacy
+``summary<N>.json`` files), ``result.html``, and ``result.csv`` are deliberately
+not part of this contract. Op-monitor does not read them.
 """
 
 import json
@@ -274,4 +275,4 @@ def test_generated_archive_satisfies_op_monitor_contract(tmp_path, monkeypatch):
 
     # These files are intentionally outside the downstream contract. Their
     # removal or size changes must not affect op-monitor ingestion.
-    assert not list(summary_path.parent.glob("summary[0-9]*.json"))
+    assert not list(summary_path.parent.glob("summary[0-9]*.jsonl"))

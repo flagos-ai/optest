@@ -52,8 +52,9 @@ All test results are written to the directory specified by --output-dir
         ├── performance_stdout.log
         └── performance_stderr.log
 
-During a run, each worker writes a summary<N>.json checkpoint. Complete worker
-checkpoints are removed only after summary.json is atomically published and
+During a run, each worker appends records to a summary<N>.jsonl checkpoint.
+Complete worker checkpoints are removed only after their protocol and operator
+coverage have been validated and summary.json is atomically published and
 verified; incomplete or failed runs retain them for recovery.
 
 CLI Arguments
@@ -1185,6 +1186,57 @@ def detect_tle_ops(ops):
     return tle_ops
 
 
+def _worker_checkpoint_path(gpu_id):
+    return CFG.output_dir / f"summary{gpu_id}.jsonl"
+
+
+def _append_checkpoint_record(checkpoint, record):
+    """Durably append one compact JSON record to an open worker checkpoint."""
+    checkpoint.write(json.dumps(record, separators=(",", ":")) + "\n")
+    checkpoint.flush()
+    os.fsync(checkpoint.fileno())
+
+
+def _initialize_worker_checkpoint(gpu_id):
+    """Atomically replace any stale checkpoint with this run's start record."""
+    checkpoint_path = _worker_checkpoint_path(gpu_id)
+    tmp_path = checkpoint_path.with_suffix(".jsonl.tmp")
+    try:
+        with tmp_path.open("w", encoding="utf-8") as checkpoint:
+            _append_checkpoint_record(checkpoint, {"type": "start", "gpu_id": gpu_id})
+        os.replace(tmp_path, checkpoint_path)
+    except Exception:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+        raise
+    return checkpoint_path
+
+
+def _error_operator_result():
+    return {
+        "customized": False,
+        "accuracy": {
+            "status": "Error",
+            "exit_code": None,
+            "total": 0,
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 1,
+            "duration": 0,
+        },
+        "performance": {
+            "status": "Error",
+            "exit_code": None,
+            "duration": 0,
+            "data": {},
+        },
+        "labels": [],
+    }
+
+
 def worker_proc(gpu_id, work_queue, display_queue):
     # Redirect stdout/stderr to /dev/null to avoid file handle issues in subprocesses.
     # Open file handles in forked processes can cause deadlocks.
@@ -1202,102 +1254,106 @@ def worker_proc(gpu_id, work_queue, display_queue):
         "duration": 0,
     }
 
-    worker_result: dict[str, Any] = {}
     # try/finally ensures the exit signal is always sent, even if the worker
     # crashes midway. Without this, display_loop would wait forever for a signal
     # that never arrives, causing the entire test run to hang indefinitely.
     try:
-        while True:
-            try:
-                op = work_queue.get_nowait()
-            except queue_module.Empty:
-                break
-            op = op.strip()
-            if not op:
-                continue
-
-            op_dir = CFG.output_dir.joinpath(op)
-            ensure_dir(op_dir)
-
-            # Wrap per-op execution in try/except to prevent one bad op from
-            # crashing the entire worker and orphaning remaining ops in the queue.
-            # This allows the worker to continue processing other ops even if one fails.
-            try:
-                if op in CFG.accuracy_marks:
-                    display_queue.put(("start", gpu_id, "accuracy", op))
-                    acc = run_accuracy_q(gpu_id, op)
-                    display_queue.put(
-                        (
-                            "done",
-                            gpu_id,
-                            "accuracy",
-                            op,
-                            acc.get("status", "Error"),
-                            acc.get("duration", 0),
-                        )
-                    )
-                else:
-                    acc = notfound_result
-                    display_queue.put(("done", gpu_id, "accuracy", op, "NotFound", 0))
-
-                if op in CFG.benchmark_marks:
-                    display_queue.put(("start", gpu_id, "benchmark", op))
-                    perf = run_benchmark_q(gpu_id, op)
-                    display_queue.put(
-                        (
-                            "done",
-                            gpu_id,
-                            "benchmark",
-                            op,
-                            perf.get("status", "Error"),
-                            perf.get("duration", 0),
-                        )
-                    )
-                else:
-                    perf = {
-                        "status": "NotFound",
-                        "exit_code": 0,
-                        "duration": 0,
-                        "data": {},
-                    }
-                    display_queue.put(("done", gpu_id, "benchmark", op, "NotFound", 0))
-
-                # Customized op list from the canonical FlagOS library. Not all
-                # libraries expose runtime.backend.get_customized_ops(); fall
-                # back to an empty list so a missing API never fails the op.
-                customized_ops = []
+        checkpoint_path = _initialize_worker_checkpoint(gpu_id)
+        with checkpoint_path.open("a", encoding="utf-8") as checkpoint:
+            while True:
                 try:
-                    if GEMS_MODULE is None:
-                        raise RuntimeError("FlagOS library is not initialized")
-                    customized_ops = [
-                        o[0] for o in GEMS_MODULE.runtime.backend.get_customized_ops()
-                    ]
+                    op = work_queue.get_nowait()
+                except queue_module.Empty:
+                    break
+                op = op.strip()
+                if not op:
+                    continue
+
+                # Keep one operator failure from orphaning the remaining queue,
+                # but always checkpoint a structured Error result for recovery.
+                try:
+                    op_dir = CFG.output_dir.joinpath(op)
+                    ensure_dir(op_dir)
+
+                    if op in CFG.accuracy_marks:
+                        display_queue.put(("start", gpu_id, "accuracy", op))
+                        acc = run_accuracy_q(gpu_id, op)
+                        display_queue.put(
+                            (
+                                "done",
+                                gpu_id,
+                                "accuracy",
+                                op,
+                                acc.get("status", "Error"),
+                                acc.get("duration", 0),
+                            )
+                        )
+                    else:
+                        acc = notfound_result
+                        display_queue.put(
+                            ("done", gpu_id, "accuracy", op, "NotFound", 0)
+                        )
+
+                    if op in CFG.benchmark_marks:
+                        display_queue.put(("start", gpu_id, "benchmark", op))
+                        perf = run_benchmark_q(gpu_id, op)
+                        display_queue.put(
+                            (
+                                "done",
+                                gpu_id,
+                                "benchmark",
+                                op,
+                                perf.get("status", "Error"),
+                                perf.get("duration", 0),
+                            )
+                        )
+                    else:
+                        perf = {
+                            "status": "NotFound",
+                            "exit_code": 0,
+                            "duration": 0,
+                            "data": {},
+                        }
+                        display_queue.put(
+                            ("done", gpu_id, "benchmark", op, "NotFound", 0)
+                        )
+
+                    # Customized op list from the canonical FlagOS library. Not all
+                    # libraries expose runtime.backend.get_customized_ops(); fall
+                    # back to an empty list so a missing API never fails the op.
+                    customized_ops = []
+                    try:
+                        if GEMS_MODULE is None:
+                            raise RuntimeError("FlagOS library is not initialized")
+                        customized_ops = [
+                            item[0]
+                            for item in GEMS_MODULE.runtime.backend.get_customized_ops()
+                        ]
+                    except Exception:
+                        pass
+                    # Static labels are precomputed once in main() and inherited
+                    # by forked workers.
+                    labels = (
+                        ["tle"] if op in getattr(CFG, "tle_ops", frozenset()) else []
+                    )
+                    result = {
+                        "customized": op in customized_ops,
+                        "accuracy": acc,
+                        "performance": perf,
+                        "labels": labels,
+                    }
                 except Exception:
-                    pass
-                # Static labels for this operator (e.g. "tle" when its
-                # implementation depends on Triton experimental language
-                # extensions). Precomputed once in main() and inherited by the
-                # forked worker via CFG; default empty so a missing attribute
-                # never breaks the op.
-                labels = ["tle"] if op in getattr(CFG, "tle_ops", frozenset()) else []
-                result = {
-                    "customized": op in customized_ops,
-                    "accuracy": acc,
-                    "performance": perf,
-                    "labels": labels,
-                }
-                worker_result.setdefault(op, result)
+                    display_queue.put(("done", gpu_id, "accuracy", op, "Error", 0))
+                    display_queue.put(("done", gpu_id, "benchmark", op, "Error", 0))
+                    result = _error_operator_result()
 
-                json_path = CFG.output_dir.joinpath(f"summary{gpu_id}.json")
-                tmp_path = json_path.with_suffix(".tmp")
-                with open(tmp_path, "w") as f:
-                    json.dump(worker_result, f, indent=2)
-                os.replace(tmp_path, json_path)
+                _append_checkpoint_record(
+                    checkpoint, {"type": "operator", "op": op, "result": result}
+                )
 
-            except Exception:
-                # Mark op as Error and continue with next op
-                display_queue.put(("done", gpu_id, "accuracy", op, "Error", 0))
-                display_queue.put(("done", gpu_id, "benchmark", op, "Error", 0))
+            _append_checkpoint_record(
+                checkpoint, {"type": "complete", "gpu_id": gpu_id}
+            )
 
     finally:
         # Always send exit signal, even if worker crashes midway.
@@ -1435,7 +1491,137 @@ def cleanup_intermediate_files():
                 pass
 
 
-def _write_final_summary(final_data, worker_summary_paths, *, cleanup_workers):
+def _read_worker_checkpoint(gpu_id, checkpoint_path):
+    """Read recoverable operator records and validate one worker protocol."""
+    operator_results: dict[str, Any] = {}
+    seen_ops = set()
+    valid = True
+    start_valid = False
+    complete_line = None
+    last_line = 0
+
+    if not checkpoint_path.exists():
+        perror(f"GPU {gpu_id} failed to produce a checkpoint, recovery needed.")
+        return operator_results, False
+
+    try:
+        checkpoint = checkpoint_path.open("r", encoding="utf-8")
+    except OSError as error:
+        perror(f"GPU {gpu_id} checkpoint cannot be read: {error}")
+        return operator_results, False
+
+    with checkpoint:
+        for line_number, line in enumerate(checkpoint, start=1):
+            last_line = line_number
+            try:
+                record = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                perror(f"GPU {gpu_id} checkpoint line {line_number} is invalid JSON.")
+                valid = False
+                continue
+
+            if not isinstance(record, dict):
+                perror(f"GPU {gpu_id} checkpoint line {line_number} is not an object.")
+                valid = False
+                continue
+
+            record_type = record.get("type")
+            if line_number == 1:
+                if record_type != "start":
+                    perror(f"GPU {gpu_id} checkpoint does not start with start.")
+                    valid = False
+                elif record.get("gpu_id") != gpu_id:
+                    perror(f"GPU {gpu_id} checkpoint start has a mismatched GPU ID.")
+                    valid = False
+                else:
+                    start_valid = True
+                continue
+
+            if record_type == "operator":
+                if complete_line is not None:
+                    perror(f"GPU {gpu_id} checkpoint has a record after complete.")
+                    valid = False
+                    continue
+                op = record.get("op")
+                result = record.get("result")
+                if not isinstance(op, str) or not op or not isinstance(result, dict):
+                    perror(
+                        f"GPU {gpu_id} checkpoint line {line_number} has an "
+                        "invalid operator record."
+                    )
+                    valid = False
+                    continue
+                if op in seen_ops:
+                    perror(f"GPU {gpu_id} checkpoint repeats operator {op}.")
+                    valid = False
+                    continue
+                seen_ops.add(op)
+                if start_valid:
+                    operator_results[op] = result
+            elif record_type == "complete":
+                if record.get("gpu_id") != gpu_id:
+                    perror(f"GPU {gpu_id} checkpoint complete has a mismatched GPU ID.")
+                    valid = False
+                if complete_line is not None:
+                    perror(f"GPU {gpu_id} checkpoint repeats complete.")
+                    valid = False
+                else:
+                    complete_line = line_number
+            else:
+                perror(
+                    f"GPU {gpu_id} checkpoint line {line_number} has unknown "
+                    f"record type {record_type!r}."
+                )
+                valid = False
+
+    if not start_valid:
+        valid = False
+    if complete_line is None:
+        perror(f"GPU {gpu_id} checkpoint is incomplete (missing complete).")
+        valid = False
+    elif complete_line != last_line:
+        perror(f"GPU {gpu_id} checkpoint complete is not the final record.")
+        valid = False
+
+    return operator_results, valid
+
+
+def _aggregate_worker_checkpoints(gpu_ids, expected_ops):
+    """Aggregate JSONL checkpoints and require exact, duplicate-free coverage."""
+    op_data = {}
+    owner_by_op: dict[str, Any] = {}
+    checkpoints_valid = True
+    worker_checkpoint_paths = [_worker_checkpoint_path(gpu_id) for gpu_id in gpu_ids]
+
+    for gpu_id, checkpoint_path in zip(gpu_ids, worker_checkpoint_paths, strict=True):
+        worker_results, worker_valid = _read_worker_checkpoint(gpu_id, checkpoint_path)
+        checkpoints_valid = checkpoints_valid and worker_valid
+        for op, result in worker_results.items():
+            if op in owner_by_op:
+                perror(
+                    f"Operator {op} appears in GPU {owner_by_op[op]} and GPU "
+                    f"{gpu_id} checkpoints."
+                )
+                checkpoints_valid = False
+                continue
+            owner_by_op[op] = gpu_id
+            op_data[op] = result
+
+    expected = set(expected_ops)
+    actual = set(op_data)
+    missing = sorted(expected - actual)
+    extra = sorted(actual - expected)
+    if missing:
+        perror(f"Worker checkpoints are missing operators: {', '.join(missing)}")
+        checkpoints_valid = False
+    if extra:
+        perror(f"Worker checkpoints contain unexpected operators: {', '.join(extra)}")
+        checkpoints_valid = False
+
+    return op_data, worker_checkpoint_paths, checkpoints_valid
+
+
+def _write_final_summary(final_data, worker_checkpoint_paths, *, cleanup_workers):
     """Atomically publish and verify the final summary before removing checkpoints."""
     json_path = CFG.output_dir / "summary.json"
     tmp_path = CFG.output_dir / "summary.json.tmp"
@@ -1466,11 +1652,13 @@ def _write_final_summary(final_data, worker_summary_paths, *, cleanup_workers):
         raise ValueError(f"Published final summary failed validation: {json_path}")
 
     if cleanup_workers:
-        for worker_summary in worker_summary_paths:
+        for worker_checkpoint in worker_checkpoint_paths:
             try:
-                worker_summary.unlink()
+                worker_checkpoint.unlink()
             except OSError as error:
-                pwarn(f"Failed to remove worker summary {worker_summary}: {error}")
+                pwarn(
+                    f"Failed to remove worker checkpoint {worker_checkpoint}: {error}"
+                )
 
 
 def terminate_workers():
@@ -2020,24 +2208,9 @@ def main():
     total_duration = round((test_end_time - test_start_time).total_seconds(), 2)
     total_duration_str = str(datetime.timedelta(seconds=int(total_duration)))
 
-    op_data = {}
-    worker_summary_paths = [
-        CFG.output_dir.joinpath(f"summary{gpu_id}.json") for gpu_id in gpu_ids
-    ]
-    worker_summaries_complete = True
-    for gpu_id, gpu_file in zip(gpu_ids, worker_summary_paths, strict=True):
-        if not gpu_file.exists():
-            perror(f"GPU {gpu_id} failed to produce a summary, recovery needed.")
-            worker_summaries_complete = False
-            continue
-        with gpu_file.open("r", encoding="utf-8") as f:
-            try:
-                result = json.load(f)
-            except (json.JSONDecodeError, ValueError):
-                perror(f"GPU {gpu_id} summary is invalid JSON, skipping.")
-                worker_summaries_complete = False
-                continue
-            op_data.update(result)
+    op_data, worker_checkpoint_paths, worker_checkpoints_complete = (
+        _aggregate_worker_checkpoints(gpu_ids, ops)
+    )
 
     final_data = {
         "timestamp": test_end_time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -2051,8 +2224,8 @@ def main():
 
     _write_final_summary(
         final_data,
-        worker_summary_paths,
-        cleanup_workers=worker_summaries_complete,
+        worker_checkpoint_paths,
+        cleanup_workers=worker_checkpoints_complete,
     )
 
     cleanup_intermediate_files()

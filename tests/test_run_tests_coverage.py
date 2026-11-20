@@ -479,6 +479,23 @@ def _queue_config(tmp_path):
     )
 
 
+def _checkpoint_records(path):
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def _write_checkpoint(path, gpu_id, operator_results, *, complete=True):
+    records = [{"type": "start", "gpu_id": gpu_id}]
+    records.extend(
+        {"type": "operator", "op": op, "result": result}
+        for op, result in operator_results.items()
+    )
+    if complete:
+        records.append({"type": "complete", "gpu_id": gpu_id})
+    path.write_text(
+        "".join(json.dumps(record) + "\n" for record in records), encoding="utf-8"
+    )
+
+
 def test_operator_queues_all_outcomes(tmp_path, monkeypatch):
     config = _queue_config(tmp_path)
     config.output_dir.mkdir()
@@ -572,8 +589,14 @@ def test_worker_success_skips_customized_and_error(tmp_path, monkeypatch):
         mock.patch.object(sys, "stderr", io.StringIO()),
     ):
         run_tests.worker_proc(0, work, display)
-    data = json.loads((config.output_dir / "summary0.json").read_text(encoding="utf-8"))
-    assert data["add"]["customized"] is True
+    checkpoint = config.output_dir / "summary0.jsonl"
+    records = _checkpoint_records(checkpoint)
+    assert [record["type"] for record in records] == [
+        "start",
+        "operator",
+        "complete",
+    ]
+    assert records[1]["result"]["customized"] is True
     assert display.sent[-1] == ("exit", 0)
 
     config.accuracy_marks = set()
@@ -602,6 +625,199 @@ def test_worker_success_skips_customized_and_error(tmp_path, monkeypatch):
     ):
         run_tests.worker_proc(2, work, display)
     assert sum(message[0] == "done" for message in display.sent) == 2
+    records = _checkpoint_records(config.output_dir / "summary2.jsonl")
+    assert records[1]["op"] == "bad"
+    assert records[1]["result"]["accuracy"]["status"] == "Error"
+    assert records[1]["result"]["performance"]["status"] == "Error"
+    assert records[-1] == {"type": "complete", "gpu_id": 2}
+
+
+def test_worker_checkpoint_replaces_stale_file_and_fsyncs(tmp_path, monkeypatch):
+    output = tmp_path / "results"
+    output.mkdir()
+    stale = output / "summary0.jsonl"
+    stale.write_text('{"type":"complete","gpu_id":0}\n', encoding="utf-8")
+    monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=output))
+    fsync = mock.Mock()
+    monkeypatch.setattr(run_tests.os, "fsync", fsync)
+
+    checkpoint = run_tests._initialize_worker_checkpoint(0)
+
+    assert _checkpoint_records(checkpoint) == [{"type": "start", "gpu_id": 0}]
+    fsync.assert_called_once()
+
+
+def test_worker_checkpoint_initialization_failure_preserves_stale_file(
+    tmp_path, monkeypatch
+):
+    stale = tmp_path / "summary0.jsonl"
+    stale.write_text("stale\n", encoding="utf-8")
+    monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
+    monkeypatch.setattr(
+        run_tests.os, "replace", mock.Mock(side_effect=OSError("replace failed"))
+    )
+
+    with pytest.raises(OSError, match="replace failed"):
+        run_tests._initialize_worker_checkpoint(0)
+
+    assert stale.read_text(encoding="utf-8") == "stale\n"
+    assert not (tmp_path / "summary0.jsonl.tmp").exists()
+
+
+def test_worker_checkpoint_preserves_original_initialization_error(
+    tmp_path, monkeypatch
+):
+    tmp_checkpoint = tmp_path / "summary0.jsonl.tmp"
+    original_unlink = Path.unlink
+
+    def fail_temp_unlink(path, *args, **kwargs):
+        if path == tmp_checkpoint:
+            raise OSError("cleanup failed")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
+    monkeypatch.setattr(
+        run_tests.os, "replace", mock.Mock(side_effect=OSError("replace failed"))
+    )
+    monkeypatch.setattr(Path, "unlink", fail_temp_unlink)
+
+    with pytest.raises(OSError, match="replace failed"):
+        run_tests._initialize_worker_checkpoint(0)
+
+    assert tmp_checkpoint.exists()
+
+
+def test_aggregate_worker_checkpoints_accepts_complete_exact_coverage(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
+    add_result = {"accuracy": {"status": "Passed"}}
+    mul_result = {"accuracy": {"status": "Failed"}}
+    _write_checkpoint(tmp_path / "summary0.jsonl", 0, {"add": add_result})
+    _write_checkpoint(tmp_path / "summary1.jsonl", 1, {"mul": mul_result})
+
+    data, paths, valid = run_tests._aggregate_worker_checkpoints([0, 1], ["add", "mul"])
+
+    assert data == {"add": add_result, "mul": mul_result}
+    assert paths == [tmp_path / "summary0.jsonl", tmp_path / "summary1.jsonl"]
+    assert valid is True
+
+
+def test_aggregate_worker_checkpoints_recovers_incomplete_records(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
+    result = {"accuracy": {"status": "Passed"}}
+    _write_checkpoint(tmp_path / "summary0.jsonl", 0, {"add": result}, complete=False)
+
+    data, _, valid = run_tests._aggregate_worker_checkpoints([0], ["add"])
+
+    assert data == {"add": result}
+    assert valid is False
+    assert "missing complete" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        ("", "missing complete"),
+        ('{"type":"operator","op":"add","result":{}}\n', "does not start"),
+        (
+            '{"type":"start","gpu_id":1}\n'
+            '{"type":"operator","op":"add","result":{}}\n'
+            '{"type":"complete","gpu_id":0}\n',
+            "mismatched GPU ID",
+        ),
+        ('{"type":"start","gpu_id":0}\nnot-json\n', "invalid JSON"),
+        ('{"type":"start","gpu_id":0}\n[]\n', "not an object"),
+        (
+            '{"type":"start","gpu_id":0}\n'
+            '{"type":"future"}\n'
+            '{"type":"complete","gpu_id":0}\n',
+            "unknown record type",
+        ),
+        (
+            '{"type":"start","gpu_id":0}\n'
+            '{"type":"operator","op":"","result":{}}\n'
+            '{"type":"complete","gpu_id":0}\n',
+            "invalid operator record",
+        ),
+        (
+            '{"type":"start","gpu_id":0}\n{"type":"complete","gpu_id":1}\n',
+            "complete has a mismatched GPU ID",
+        ),
+        (
+            '{"type":"start","gpu_id":0}\n'
+            '{"type":"complete","gpu_id":0}\n'
+            '{"type":"complete","gpu_id":0}\n',
+            "repeats complete",
+        ),
+        (
+            '{"type":"start","gpu_id":0}\n'
+            '{"type":"complete","gpu_id":0}\n'
+            '{"type":"operator","op":"add","result":{}}\n',
+            "record after complete",
+        ),
+    ],
+)
+def test_read_worker_checkpoint_rejects_invalid_protocol(
+    tmp_path, capsys, content, message
+):
+    checkpoint = tmp_path / "summary0.jsonl"
+    checkpoint.write_text(content, encoding="utf-8")
+
+    _, valid = run_tests._read_worker_checkpoint(0, checkpoint)
+
+    assert valid is False
+    assert message in capsys.readouterr().out
+
+
+def test_read_worker_checkpoint_rejects_duplicate_operator(tmp_path, capsys):
+    checkpoint = tmp_path / "summary0.jsonl"
+    checkpoint.write_text(
+        '{"type":"start","gpu_id":0}\n'
+        '{"type":"operator","op":"add","result":{"first":true}}\n'
+        '{"type":"operator","op":"add","result":{"first":false}}\n'
+        '{"type":"complete","gpu_id":0}\n',
+        encoding="utf-8",
+    )
+
+    data, valid = run_tests._read_worker_checkpoint(0, checkpoint)
+
+    assert data == {"add": {"first": True}}
+    assert valid is False
+    assert "repeats operator add" in capsys.readouterr().out
+
+
+def test_aggregate_worker_checkpoints_rejects_duplicates_and_wrong_coverage(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
+    _write_checkpoint(tmp_path / "summary0.jsonl", 0, {"add": {"gpu": 0}})
+    _write_checkpoint(
+        tmp_path / "summary1.jsonl",
+        1,
+        {"add": {"gpu": 1}, "unexpected": {}},
+    )
+
+    data, _, valid = run_tests._aggregate_worker_checkpoints([0, 1], ["add", "missing"])
+
+    assert data == {"add": {"gpu": 0}, "unexpected": {}}
+    assert valid is False
+    errors = capsys.readouterr().out
+    assert "appears in GPU 0 and GPU 1" in errors
+    assert "missing operators: missing" in errors
+    assert "unexpected operators: unexpected" in errors
+
+
+def test_read_worker_checkpoint_handles_missing_and_unreadable_files(tmp_path, capsys):
+    missing = tmp_path / "missing.jsonl"
+    assert run_tests._read_worker_checkpoint(0, missing) == ({}, False)
+    missing.mkdir()
+    assert run_tests._read_worker_checkpoint(0, missing) == ({}, False)
+    errors = capsys.readouterr().out
+    assert "failed to produce a checkpoint" in errors
+    assert "checkpoint cannot be read" in errors
 
 
 def test_count_op_statuses_includes_known_and_unexpected_statuses():
@@ -626,7 +842,7 @@ def test_write_final_summary_preserves_existing_summary_on_write_failure(
     old_data = {"total_ops": 1, "result": {"old": {}}}
     summary_path = tmp_path / "summary.json"
     summary_path.write_text(json.dumps(old_data), encoding="utf-8")
-    worker_summary = tmp_path / "summary0.json"
+    worker_summary = tmp_path / "summary0.jsonl"
     worker_summary.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
 
@@ -648,7 +864,7 @@ def test_write_final_summary_preserves_existing_summary_on_replace_failure(
     old_data = {"total_ops": 1, "result": {"old": {}}}
     summary_path = tmp_path / "summary.json"
     summary_path.write_text(json.dumps(old_data), encoding="utf-8")
-    worker_summary = tmp_path / "summary0.json"
+    worker_summary = tmp_path / "summary0.jsonl"
     worker_summary.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
     monkeypatch.setattr(
@@ -707,7 +923,7 @@ def test_write_final_summary_preserves_original_error_when_temp_cleanup_fails(
 def test_write_final_summary_retains_workers_when_validation_fails(
     tmp_path, monkeypatch, published_data
 ):
-    worker_summary = tmp_path / "summary0.json"
+    worker_summary = tmp_path / "summary0.jsonl"
     worker_summary.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
     monkeypatch.setattr(run_tests.json, "load", lambda _input: published_data)
@@ -738,6 +954,25 @@ def test_write_final_summary_warns_when_worker_cleanup_fails(tmp_path, monkeypat
     )
     warning.assert_called_once()
     assert "cleanup failed" in warning.call_args.args[0]
+
+
+def test_write_final_summary_removes_only_explicit_worker_checkpoints(
+    tmp_path, monkeypatch
+):
+    expected_checkpoint = tmp_path / "summary0.jsonl"
+    unrelated_checkpoint = tmp_path / "summary9.jsonl"
+    expected_checkpoint.write_text("checkpoint", encoding="utf-8")
+    unrelated_checkpoint.write_text("unrelated", encoding="utf-8")
+    monkeypatch.setattr(run_tests, "CFG", types.SimpleNamespace(output_dir=tmp_path))
+
+    run_tests._write_final_summary(
+        {"total_ops": 0, "result": {}},
+        [expected_checkpoint],
+        cleanup_workers=True,
+    )
+
+    assert not expected_checkpoint.exists()
+    assert unrelated_checkpoint.read_text(encoding="utf-8") == "unrelated"
 
 
 class _Worker:
@@ -1098,7 +1333,7 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys)
 
     output = tmp_path / "result"
     output.mkdir()
-    (output / "summary0.json").write_text("{", encoding="utf-8")
+    (output / "summary0.jsonl").write_text("{", encoding="utf-8")
     with (
         mock.patch.object(run_tests.signal, "signal"),
         mock.patch.object(run_tests, "probe_env"),
@@ -1129,7 +1364,7 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys)
         (output / "summary.json").read_text(encoding="utf-8")
     )
     assert incomplete_summary["total_ops"] == 0
-    assert (output / "summary0.json").read_text(encoding="utf-8") == "{"
+    assert (output / "summary0.jsonl").read_text(encoding="utf-8") == "{"
 
     default_output = tmp_path / "logs_results_20260101_0000"
 
@@ -1145,16 +1380,15 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys)
         def start(self):
             default_output.mkdir(exist_ok=True)
             op_name = "add" if self._gpu_id == 0 else "mul"
-            (default_output / f"summary{self._gpu_id}.json").write_text(
-                json.dumps(
-                    {
-                        op_name: {
-                            "accuracy": {"status": "Passed"},
-                            "performance": {"status": "NotFound"},
-                        }
+            _write_checkpoint(
+                default_output / f"summary{self._gpu_id}.jsonl",
+                self._gpu_id,
+                {
+                    op_name: {
+                        "accuracy": {"status": "Passed"},
+                        "performance": {"status": "NotFound"},
                     }
-                ),
-                encoding="utf-8",
+                },
             )
 
     monkeypatch.setattr(run_tests.datetime, "datetime", FixedDateTime)
@@ -1178,7 +1412,7 @@ def test_main_device_selection_and_summary_errors(tmp_path, monkeypatch, capsys)
     assert summary["accuracy_counts"]["passed"] == 2
     assert summary["performance_counts"]["not_found"] == 2
     assert set(summary["result"]) == {"add", "mul"}
-    assert not list(default_output.glob("summary[0-9]*.json"))
+    assert not list(default_output.glob("summary[0-9]*.jsonl"))
     output_text = capsys.readouterr().out
     assert "[INFO] Total operators ... 2" in output_text
     assert "[INFO] Accuracy operators ... passed=2" in output_text
@@ -1360,5 +1594,5 @@ def test_worker_attaches_tle_label(tmp_path, monkeypatch):
         mock.patch.object(sys, "stderr", io.StringIO()),
     ):
         run_tests.worker_proc(0, work, display)
-    data = json.loads((config.output_dir / "summary0.json").read_text(encoding="utf-8"))
-    assert data["add"]["labels"] == ["tle"]
+    records = _checkpoint_records(config.output_dir / "summary0.jsonl")
+    assert records[1]["result"]["labels"] == ["tle"]

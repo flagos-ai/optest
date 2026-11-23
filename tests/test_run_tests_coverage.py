@@ -820,6 +820,96 @@ def test_read_worker_checkpoint_handles_missing_and_unreadable_files(tmp_path, c
     assert "checkpoint cannot be read" in errors
 
 
+def test_invalid_latency_cases_flags_only_unmeasurable_readings():
+    # None means "never measured" (e.g. --skip-native has no base), which is a
+    # latency-only record, not a bad reading.
+    assert run_tests.invalid_latency_cases({}) == []
+    assert run_tests.invalid_latency_cases({"fp32": {}}) == []
+    assert (
+        run_tests.invalid_latency_cases(
+            {"fp32": {"details": {"[1,2]": {"base": None, "gems": None}}}}
+        )
+        == []
+    )
+    assert (
+        run_tests.invalid_latency_cases(
+            {"fp32": {"details": {"[1,2]": {"base": 2.0, "gems": 1e-9}}}}
+        )
+        == []
+    )
+
+    # 0.0 on both sides is the Ascend do_bench_npu case that yields a fake
+    # speedup of 1.0; a single 0.0 inflates the ratio instead.
+    assert run_tests.invalid_latency_cases(
+        {"fp32": {"details": {"[1,2]": {"base": 0.0, "gems": 0.0}}}}
+    ) == ["fp32 [1,2] base=0 (latency=0)", "fp32 [1,2] gems=0 (latency=0)"]
+    assert run_tests.invalid_latency_cases(
+        {"fp16": {"details": {"[4]": {"base": 2.0, "gems": 0.0}}}}
+    ) == ["fp16 [4] gems=0 (latency=0)"]
+    assert run_tests.invalid_latency_cases(
+        {"fp32": {"details": {"[8]": {"base": -1.0, "gems": 1.0}}}}
+    ) == ["fp32 [8] base=-1.0 (latency<0)"]
+    assert run_tests.invalid_latency_cases(
+        {"fp32": {"details": {"[8]": {"base": 1.0, "gems": float("inf")}}}}
+    ) == ["fp32 [8] gems=inf (latency not finite)"]
+    assert run_tests.invalid_latency_cases(
+        {"fp32": {"details": {"[8]": {"base": 1.0, "gems": "n/a"}}}}
+    ) == ["fp32 [8] gems=n/a (latency not finite)"]
+
+
+def test_run_benchmark_q_errors_on_invalid_latency(tmp_path, monkeypatch):
+    config = _queue_config(tmp_path)
+    config.output_dir.mkdir()
+    (tmp_path / "benchmark").mkdir()
+    monkeypatch.setattr(run_tests, "ROOT", tmp_path)
+    monkeypatch.setattr(run_tests, "CFG", config)
+    monkeypatch.setattr(run_tests, "get_env", lambda _gpu: {})
+    source = tmp_path / "benchmark" / "benchmark_add.json"
+    payload = {
+        "add": {
+            "result": "passed",
+            "details": [
+                {
+                    "dtype": "torch.float32",
+                    "result": [
+                        {
+                            "shape_detail": [1, 2],
+                            "latency_base": 0.0,
+                            "latency": 0.0,
+                            "speedup": 1.0,
+                        }
+                    ],
+                }
+            ],
+        }
+    }
+
+    def write_result(*_args, **_kwargs):
+        source.write_text(json.dumps(payload), encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(run_tests, "run_cmd", write_result)
+    record = run_tests.run_benchmark_q(0, "add")
+
+    # A fake speedup of 1.0 must not be reported as a passing measurement.
+    assert record["status"] == "Error"
+    assert "latency=0 in 2 case(s)" in record["reason"]
+    assert "fp32 [1,2] base=0 (latency=0)" in record["reason"]
+    assert (
+        run_tests.count_op_statuses({"add": {"performance": record}}, "performance")[
+            "error"
+        ]
+        == 1
+    )
+
+    # Mixed case: one latency=0 and one non-finite → reason says "invalid latency in N (M latency=0)"
+    payload["add"]["details"][0]["result"][0]["latency_base"] = float("inf")
+    record2 = run_tests.run_benchmark_q(0, "add")
+    assert record2["status"] == "Error"
+    assert "invalid latency in 2 case(s)" in record2["reason"]
+    assert "1 latency=0" in record2["reason"]
+
+
 def test_count_op_statuses_includes_known_and_unexpected_statuses():
     op_data = {
         status.lower(): {"accuracy": {"status": status}}

@@ -128,6 +128,7 @@ import datetime
 import importlib
 import inspect
 import json
+import math
 import os
 import platform
 import queue as queue_module
@@ -291,6 +292,43 @@ def count_op_statuses(op_data, result_type):
         status_key = OP_RESULT_STATUS_KEYS.get(status, status.lower())
         counts[status_key] = counts.get(status_key, 0) + 1
     return counts
+
+
+def invalid_latency_cases(data):
+    """Report measured latencies that cannot be real, as "dtype shape" labels.
+
+    A profiler-based timer returns 0.0 when it cannot attribute any device time
+    to the call: Ascend ``do_bench_npu`` does this for operators that launch no
+    real kernel (view/metadata ops such as squeeze, expand, moveaxis). The
+    benchmark's ``speedup = (latency_base + EPS) / (latency + EPS)`` then turns
+    that into a fake 1.0 when both sides are 0, or an astronomical ratio when
+    only the candidate is 0 -- numbers that look plausible in a report and
+    silently corrupt any comparison built on them.
+
+    ``None`` is not reported: it means the value was never measured (for
+    example a ``--skip-native`` run has no ``latency_base``), which the report
+    already represents as a latency-only record.
+
+    Returns a list of human-readable labels of the form
+    ``"dtype shape field=value (reason)"``, where reason is one of:
+    ``latency=0``, ``latency<0``, or ``latency not finite``.
+    """
+    invalid = []
+    for dtype, dtype_result in sorted(data.items()):
+        for shape, record in sorted(dtype_result.get("details", {}).items()):
+            for field in ("base", "gems"):
+                value = record.get(field)
+                if value is None:
+                    continue
+                if not isinstance(value, int | float) or not math.isfinite(value):
+                    invalid.append(
+                        f"{dtype} {shape} {field}={value} (latency not finite)"
+                    )
+                elif value == 0:
+                    invalid.append(f"{dtype} {shape} {field}=0 (latency=0)")
+                elif value < 0:
+                    invalid.append(f"{dtype} {shape} {field}={value} (latency<0)")
+    return invalid
 
 
 def format_status_counts(counts):
@@ -1011,6 +1049,19 @@ def run_benchmark_q(gpu_id, op):
     }
     speedup_source = getattr(CFG, "speedup_source", "origin")
     record.update(parse_perf_data(op, result_file, speedup_source=speedup_source))
+    invalid = invalid_latency_cases(record.get("data", {}))
+    if invalid:
+        record["status"] = "Error"
+        zeros = sum(1 for s in invalid if "(latency=0)" in s)
+        record["reason"] = (
+            (
+                f"latency=0 in {zeros} case(s)"
+                if zeros == len(invalid)
+                else f"invalid latency in {len(invalid)} case(s) ({zeros} latency=0)"
+            )
+            + ": "
+            + "; ".join(invalid[:5])
+        )
     return compact_performance_result(record, speedup_source=speedup_source)
 
 

@@ -400,13 +400,23 @@ def test_gpu_metadata_remaining_defensive_paths(tmp_path, monkeypatch):
 
     def run(command, env=None):
         if command[0].endswith("clang"):
-            return 0, "clang (3.4.5.20260101 build)", ""
+            return (
+                0,
+                "clang version 22.1.0git "
+                "(5.0.1 dfce698b054f757b9ae6c509e42974dfe542da89)",
+                "",
+            )
         return 1, "", ""
 
     monkeypatch.setitem(
         gpu_metadata.RUNTIMES, "iluvatar", ("corex", (), (str(tmp_path),))
     )
-    assert gpu_metadata._runtime_version("iluvatar", {}, run, "") == "3.4.5"
+    assert gpu_metadata._runtime_version("iluvatar", {}, run, "") == "5.0.1"
+
+    def dated_corex_run(command, env=None):
+        return 0, "clang version 22.1.0git (4.5.0.20000101 build)", ""
+
+    assert gpu_metadata._runtime_version("iluvatar", {}, dated_corex_run, "") == "4.5.0"
 
     def dpkg_run(command, env=None):
         if command[0] == "dpkg-query":

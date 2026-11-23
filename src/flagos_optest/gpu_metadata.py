@@ -286,9 +286,12 @@ def _runtime_version(key, env, run, smi_text):
         elif key == "iluvatar":
             rc, out, err = run([str(Path(root) / "bin/clang"), "--version"], env=env)
             if rc == 0:
-                # CoreX embeds its release and build date in Clang's vendor
-                # build string; Clang's own version is a different product.
-                match = re.search(r"\((\d+\.\d+\.\d+)\.\d{8}\b", out + err)
+                # CoreX embeds its release in Clang's vendor build string;
+                # older releases append a build date before the source hash.
+                # Clang's own version is a different product.
+                match = re.search(
+                    r"\((\d+\.\d+\.\d+)(?:\.\d{8})?\s+[^)\r\n]+\)", out + err
+                )
                 if match:
                     return match.group(1)
     # CUDA's SMI header reports driver capability, NOT the installed toolkit.

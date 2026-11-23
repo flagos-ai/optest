@@ -90,23 +90,16 @@ repos:
     op_cmd_timeout: 1800
     # Full operator suite; 910B alone runs ~15h, so allow a long step timeout.
     ops_test_timeout_minutes: 1440
-    # FlagGems uses current runtime images for 910B, T-Head PPU, and AMD. The
-    # 910B image uses CANN 9.2.1 while the shared FlagTree daily package is built
-    # for CANN 9.0.0, so retain that image's compatible FlagTree. PPU and AMD
-    # continue to use their shared FlagTree upgrade configuration.
+    # FlagGems uses current runtime images for T-Head PPU and AMD. Both continue
+    # to use their shared FlagTree upgrade configuration.
     container_images:
-      910B: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.2.1:2.3.0
       PPU-ZW810E: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-thead-ppu2.1.0:2.3.0
       W7900D: harbor.baai.ac.cn/flagos-runtime/flagos-runtime-amd-rocm7.2.4:2.3.0
-    # Disable inherited packages only where this repository needs a different
-    # source/runtime. The checkout itself is installed editable later, and the
-    # 910B image must retain its CANN 9.2.1-compatible FlagTree.
+    # The checkout itself is installed editable later, so disable the inherited
+    # FlagGems wheel for this repository.
     deps:
       default:
         flag-gems:
-          enabled: false
-      910B:
-        flagtree-ascend-cann9.0.0:
           enabled: false
     # Backends this repo runs. enabled:false skips the backend entirely.
     backends:

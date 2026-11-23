@@ -815,28 +815,14 @@ directory, as an installation check.
 Backends with no FlagTree entry under `deps` retain the image-provided
 tree; this currently applies only to Cambricon.
 
-A target repository disables an inherited package in its most-specific
-dependency layer:
-
-```yaml
-repos:
-  FlagGems:
-    deps:
-      910B:
-        flagtree-ascend-cann9.0.0:
-          enabled: false
-```
-
-The current `FlagGems` 910B exception uses the CANN 9.2.1 runtime image and
-retains its image-provided FlagTree because the shared 910B daily wheel targets
-CANN 9.0.0. Other FlagGems backends and the 910B backend in other repositories
-continue to use their normal FlagTree upgrade configuration. `FlagGems` also
-uses its current T-Head PPU 2.1.0 and AMD ROCm 7.2.4 runtime images through
-repository-specific overrides; both still receive their configured FlagTree
-daily wheels. Its Cambricon backend similarly uses the current Neuware 4.7.2
-shared backend image, but retains the image-provided FlagTree because no
-Cambricon daily distribution is configured. Only FlagGems currently enables
-this backend, so it does not need a repository-specific image override.
+`FlagGems` inherits the shared 910B CANN 9.0.0 image and therefore receives the
+configured `flagtree-ascend-cann9.0.0` daily wheel. It uses its current T-Head
+PPU 2.1.0 and AMD ROCm 7.2.4 runtime images through repository-specific
+overrides; both also receive their configured FlagTree daily wheels. Its
+Cambricon backend similarly uses the current Neuware 4.7.2 shared backend image,
+but retains the image-provided FlagTree because no Cambricon daily distribution
+is configured. Only FlagGems currently enables this backend, so it does not
+need a repository-specific image override.
 
 ### FlagGems upgrade
 

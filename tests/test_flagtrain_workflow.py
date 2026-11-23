@@ -134,7 +134,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         )
         self.assertIn("          - FlagTrain\n", workflow_text)
 
-    def test_flaggems_runtime_images_and_910b_flagtree_exception(self):
+    def test_flaggems_runtime_images_and_shared_910b_flagtree(self):
         config = self.repos["repos"]["FlagGems"]
         self.assertEqual(
             self.repos["defaults"]["deps"]["flag-gems"],
@@ -151,13 +151,13 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         self.assertEqual(
             config["container_images"],
             {
-                "910B": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.2.1:2.3.0",
                 "PPU-ZW810E": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-thead-ppu2.1.0:2.3.0",
                 "W7900D": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-amd-rocm7.2.4:2.3.0",
             },
         )
         self.assertFalse(config["deps"]["default"]["flag-gems"]["enabled"])
-        self.assertFalse(config["deps"]["910B"]["flagtree-ascend-cann9.0.0"]["enabled"])
+        self.assertNotIn("910B", config["container_images"])
+        self.assertNotIn("910B", config["deps"])
         self.assertEqual(
             [
                 repo_name
@@ -173,7 +173,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         )
         flaggems_by_name = {backend["name"]: backend for backend in flaggems["include"]}
         expected_images = {
-            "910B": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-ascend-cann9.2.1:2.3.0",
+            "910B": "harbor.baai.ac.cn/flagos-app/vllm0.24.0-ascend-cann9.0.0:2.2.0-0.3.0",
             "PPU-ZW810E": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-thead-ppu2.1.0:2.3.0",
             "MLU590-M9DE": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-cambricon-neuware4.7.2:2.3.0",
             "W7900D": "harbor.baai.ac.cn/flagos-runtime/flagos-runtime-amd-rocm7.2.4:2.3.0",
@@ -183,7 +183,13 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 self.assertEqual(
                     flaggems_by_name[backend_name]["container_image"], image
                 )
-        self.assertEqual(self.upgrade_deps(flaggems_by_name["910B"]), [])
+        self.assertEqual(
+            [
+                dependency["package_name"]
+                for dependency in self.upgrade_deps(flaggems_by_name["910B"])
+            ],
+            ["flagtree-ascend-cann9.0.0"],
+        )
         self.assertEqual(self.upgrade_deps(flaggems_by_name["MLU590-M9DE"]), [])
         self.assertEqual(
             [

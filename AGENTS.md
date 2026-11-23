@@ -285,11 +285,9 @@ that backend's exact `version` and confirm it exists at `index_url`.
 FlagGems is the global default package with `priority: 200`, so FlagTree is
 installed first. The `FlagGems` repository disables its inherited `flag-gems`
 package under `deps.default` because its checkout is installed editable later.
-Its 910B scope disables `flagtree-ascend-cann9.0.0` because that repository's
-CANN 9.2.1 image is incompatible with the shared CANN 9.0.0 wheel. Other
-repositories and FlagGems backends keep their inherited package behavior.
-Cambricon retains image-provided FlagTree because its backend has no configured
-FlagTree package.
+FlagGems inherits the shared 910B CANN 9.0.0 image and its configured
+`flagtree-ascend-cann9.0.0` daily wheel. Cambricon retains image-provided
+FlagTree because its backend has no configured FlagTree package.
 
 When changing this flow, keep the resolution rules synchronized in
 `.github/configs/repos.yaml`, both READMEs, and this guide. Tests must cover all

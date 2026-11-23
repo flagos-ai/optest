@@ -731,24 +731,12 @@ release 元数据，并在替换后通过 target 目录输出后端 distribution
 target 目录的裸 `pip show` 误当成安装检查。没有在 `deps` 中配置 FlagTree 的后端会保留镜像自带目录；目前只有
 Cambricon 使用此行为。
 
-目标仓库可在最具体的依赖层禁用继承的软件包：
-
-```yaml
-repos:
-  FlagGems:
-    deps:
-      910B:
-        flagtree-ascend-cann9.0.0:
-          enabled: false
-```
-
-当前 `FlagGems` 的 910B 例外使用 CANN 9.2.1 runtime 镜像，并保留镜像自带的
-FlagTree，因为共享 910B daily wheel 面向 CANN 9.0.0。FlagGems 的其他后端以及其他
-仓库的 910B 后端仍按各自的正常配置升级 FlagTree。`FlagGems` 还通过仓库专用覆盖使用
-当前的 T-Head PPU 2.1.0 和 AMD ROCm 7.2.4 runtime 镜像，这两个后端仍会安装各自
-配置的 FlagTree daily wheel。其 Cambricon 后端同样使用当前的 Neuware 4.7.2
-共享后端镜像，但由于未配置 Cambricon daily distribution，会保留镜像自带的 FlagTree。
-目前只有 FlagGems 启用该后端，因此无需仓库专用镜像覆盖。
+`FlagGems` 继承共享的 910B CANN 9.0.0 镜像，因此会安装配置的
+`flagtree-ascend-cann9.0.0` daily wheel。它仍通过仓库专用覆盖使用当前的 T-Head
+PPU 2.1.0 和 AMD ROCm 7.2.4 runtime 镜像，这两个后端也会安装各自配置的 FlagTree
+daily wheel。其 Cambricon 后端同样使用当前的 Neuware 4.7.2 共享后端镜像，但由于未
+配置 Cambricon daily distribution，会保留镜像自带的 FlagTree。目前只有 FlagGems
+启用该后端，因此无需仓库专用镜像覆盖。
 
 ### FlagGems 升级
 

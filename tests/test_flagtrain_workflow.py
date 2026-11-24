@@ -275,9 +275,9 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             ),
             "C550": ("flagtree-metax", "0.7.1.dev20261123", daily_index),
             "BW1000": (
-                "flagtree-hcu",
-                "0.7.1.dev20261104",
-                daily_index,
+                "flagtree",
+                "0.7.1a1+hcu3.6",
+                "https://resource.flagos.net/repository/flagos-pypi-hosted/simple",
             ),
             "MTT-S5000": (
                 "flagtree-mthreads",
@@ -352,8 +352,8 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             "0.7.2a1+ascend3.5",
         )
         self.assertEqual(
-            self.upgrade_dep(selected_by_name["BW1000"], "flagtree-hcu")["version"],
-            "0.7.1.dev20261104",
+            self.upgrade_dep(selected_by_name["BW1000"], "flagtree")["version"],
+            "0.7.1a1+hcu3.6",
         )
 
         prepare_steps = self.workflow["jobs"]["prepare"]["steps"]
@@ -651,7 +651,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             upgrade["run"],
         )
 
-    def test_flagtree_upgrade_stages_and_activates_exact_hcu_daily(self):
+    def test_flagtree_upgrade_stages_and_activates_exact_hcu_release(self):
         steps = self.workflow["jobs"]["test-container"]["steps"]
         script = next(
             step["run"]
@@ -677,14 +677,14 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 '  if [ "$1" = "--target" ]; then shift; target="$1"; fi\n'
                 "  shift\n"
                 "done\n"
-                'version="${FAKE_FLAGTREE_VERSION:-0.7.1.dev20261104}"\n'
+                'version="${FAKE_FLAGTREE_VERSION:-0.7.1a1+hcu3.6}"\n'
                 'case " $args " in\n'
                 '  *" pip install "*) mkdir -p "$target"; '
-                'printf "hcu daily" > "$target/marker"; '
-                'mkdir -p "$target/flagtree_hcu-0.7.1.dev20261104.dist-info"; '
-                "printf 'Metadata-Version: 2.1\\nName: flagtree-hcu\\n"
+                'printf "hcu release" > "$target/marker"; '
+                'mkdir -p "$target/flagtree-0.7.1a1+hcu3.6.dist-info"; '
+                "printf 'Metadata-Version: 2.1\\nName: flagtree\\n"
                 'Version: %s\\n\' "$version" > '
-                '"$target/flagtree_hcu-0.7.1.dev20261104.dist-info/METADATA" ;;\n'
+                '"$target/flagtree-0.7.1a1+hcu3.6.dist-info/METADATA" ;;\n'
                 "esac\n",
                 encoding="utf-8",
             )
@@ -706,18 +706,18 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                     "UPGRADE_DEPS_JSON": json.dumps(
                         [
                             {
-                                "package_name": "flagtree-hcu",
+                                "package_name": "flagtree",
                                 "display_name": "FlagTree",
                                 "priority": 100,
-                                "version": "0.7.1.dev20261104",
-                                "requirement": "flagtree-hcu==0.7.1.dev20261104",
+                                "version": "0.7.1a1+hcu3.6",
+                                "requirement": "flagtree==0.7.1a1+hcu3.6",
                                 "target": str(source),
                                 "uv_options": [
                                     "--no-deps",
                                     "--target",
                                     str(source),
                                     "--index-url",
-                                    "https://resource.flagos.net/repository/flagos-pypi-daily/simple",
+                                    "https://resource.flagos.net/repository/flagos-pypi-hosted/simple",
                                 ],
                             }
                         ]
@@ -729,7 +729,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertEqual(
                 (source / "marker").read_text(encoding="utf-8"),
-                "hcu daily",
+                "hcu release",
             )
             self.assertFalse(staging.exists())
             commands = uv_log.read_text(encoding="utf-8")
@@ -739,8 +739,8 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             )
             self.assertIn(
                 f"--no-deps --target {staging} --index-url "
-                "https://resource.flagos.net/repository/flagos-pypi-daily/simple "
-                "flagtree-hcu==0.7.1.dev20261104",
+                "https://resource.flagos.net/repository/flagos-pypi-hosted/simple "
+                "flagtree==0.7.1a1+hcu3.6",
                 commands,
             )
             install_log = next(
@@ -754,12 +754,12 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             pre_upgrade_show = next(
                 line for line in commands.splitlines() if "pip show --python" in line
             )
-            self.assertTrue(pre_upgrade_show.endswith(" flagtree-hcu"))
+            self.assertTrue(pre_upgrade_show.endswith(" flagtree"))
             self.assertNotIn(f"pip show --target {staging}", commands)
             target_show_commands = [
                 line
                 for line in commands.splitlines()
-                if f"pip show --target {source} flagtree-hcu" in line
+                if f"pip show --target {source} flagtree" in line
             ]
             self.assertEqual(len(target_show_commands), 1)
             self.assertEqual(
@@ -772,7 +772,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 completed.stdout,
             )
             self.assertIn(
-                "[flagtree-hcu] Active Python sees flagtree-hcu==0.7.1.dev20261104",
+                "[flagtree] Active Python sees flagtree==0.7.1a1+hcu3.6",
                 completed.stdout,
             )
 

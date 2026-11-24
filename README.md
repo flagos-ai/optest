@@ -789,9 +789,9 @@ distributions use `0.7.1.devYYYYMMDD`. The 910B backend currently uses the hoste
 `flagtree==0.7.2a1+ascend3.5` release instead of the daily wheel; its previous
 CANN 9.0.0 daily configuration remains commented in the backend YAML.
 
-BW1000 uses `flagtree-hcu==0.7.1.dev20261104` from the FlagOS daily index. Its
-backend YAML retains the previous compatible `flagtree==0.7.1a1+hcu3.6`
-release mapping as a commented fallback.
+BW1000 currently uses `flagtree==0.7.1a1+hcu3.6` from the FlagOS hosted index.
+Its previous `flagtree-hcu==0.7.1.dev20261104` daily mapping remains commented
+in the backend YAML as a temporary fallback.
 
 The backend YAML is the sole source of the FlagTree version. Updating a wheel
 therefore requires changing that backend's exact `version` and confirming that
@@ -1231,7 +1231,7 @@ backend YAML file.
 | `H800` | Nvidia | `h800-flaggems-weekly` | `flagtree-nvidia` | detected | `/data/github-outputs` |
 | `910B` | Ascend | `910b-flaggems-weekly` | `flagtree` | detected | `/data/github-outputs` |
 | `C550` | Metax | `c550-flaggems-weekly` | `flagtree-metax` | detected | `/data/github-outputs` |
-| `BW1000` | Hygon | `bw1000-flaggems-weekly` | `flagtree-hcu` | detected | `/data/github-outputs` |
+| `BW1000` | Hygon | `bw1000-flaggems-weekly` | `flagtree` | detected | `/data/github-outputs` |
 | `MTT-S5000` | MThreads | `s5000-flaggems-weekly` | `flagtree-mthreads` | detected | `/data/github-outputs` |
 | `BI-V150` | Iluvatar | `v150-flaggems-weekly` | `flagtree-iluvatar` | detected | `/data/github-outputs` |
 | `PPU-ZW810E` | THead | `810e-flaggems-weekly` | `flagtree-ppu` | detected | `/home/github-outputs` |

@@ -712,9 +712,9 @@ deps:
 使用 `0.7.1.devYYYYMMDD`。910B 当前改用 hosted 仓库中的
 `flagtree==0.7.2a1+ascend3.5` release；此前的 CANN 9.0.0 daily 配置仍保留在 backend YAML 注释中。
 
-BW1000 使用 FlagOS daily index 中的 `flagtree-hcu==0.7.1.dev20261104`。
-其 backend YAML 将之前兼容的 `flagtree==0.7.1a1+hcu3.6` release 配置保留为
-注释状态，以便必要时回退。
+BW1000 当前使用 FlagOS hosted index 中的 `flagtree==0.7.1a1+hcu3.6`。
+此前的 `flagtree-hcu==0.7.1.dev20261104` daily 配置暂时以注释形式保留在
+backend YAML 中，以便必要时回退。
 
 backend YAML 是 FlagTree 版本的唯一来源。升级 wheel 时需要修改对应 backend 的精确
 `version`，并确认制品存在于配置的 `index_url`。workflow-dispatch 页面不提供运行时
@@ -1094,7 +1094,7 @@ MLU590-M9DE/寒武纪、P800/昆仑芯、W7900D/AMD、TX8110/清微智能和 S60
 | `H800` | Nvidia | `h800-flaggems-weekly` | `flagtree-nvidia` | 自动检测 | `/data/github-outputs` |
 | `910B` | Ascend | `910b-flaggems-weekly` | `flagtree` | 自动检测 | `/data/github-outputs` |
 | `C550` | Metax | `c550-flaggems-weekly` | `flagtree-metax` | 自动检测 | `/data/github-outputs` |
-| `BW1000` | Hygon | `bw1000-flaggems-weekly` | `flagtree-hcu` | 自动检测 | `/data/github-outputs` |
+| `BW1000` | Hygon | `bw1000-flaggems-weekly` | `flagtree` | 自动检测 | `/data/github-outputs` |
 | `MTT-S5000` | MThreads | `s5000-flaggems-weekly` | `flagtree-mthreads` | 自动检测 | `/data/github-outputs` |
 | `BI-V150` | Iluvatar | `v150-flaggems-weekly` | `flagtree-iluvatar` | 自动检测 | `/data/github-outputs` |
 | `PPU-ZW810E` | THead | `810e-flaggems-weekly` | `flagtree-ppu` | 自动检测 | `/home/github-outputs` |

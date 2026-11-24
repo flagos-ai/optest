@@ -46,21 +46,21 @@ container_options: >-
   --device=/dev/dri
 
 deps:
-  flagtree-hcu:
+  flagtree:
     display_name: FlagTree
     priority: 100
-    version: 0.7.1.dev20261104
-    index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+    version: 0.7.1a1+hcu3.6
+    index_url: https://resource.flagos.net/repository/flagos-pypi-hosted/simple
     no_deps: true
     target: /opt/flagtree
 
-# Retain the compatible HCU release configuration for a possible fallback:
+# Temporarily retain the HCU daily configuration as a commented fallback:
 # deps:
-#   flagtree:
+#   flagtree-hcu:
 #     display_name: FlagTree
 #     priority: 100
-#     version: 0.7.1a1+hcu3.6
-#     index_url: https://resource.flagos.net/repository/flagos-pypi-hosted/simple
+#     version: 0.7.1.dev20261104
+#     index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
 #     no_deps: true
 #     target: /opt/flagtree
 

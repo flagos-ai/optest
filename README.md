@@ -777,15 +777,17 @@ deps:
   flagtree-nvidia:
     display_name: FlagTree
     priority: 100
-    version: 0.7.1.dev20261115
+    version: 0.7.1.dev20261123
     index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
     no_deps: true
     target: /opt/flagtree
 ```
 
 Most backends use a complete daily version. This matters for runtimes with a different version base; for example,
-the CANN 9.0.0 distribution uses `0.7.0.devYYYYMMDD`, while most other daily
-distributions use `0.7.1.devYYYYMMDD`.
+the CANN 9.0.0 daily distribution uses `0.7.0.devYYYYMMDD`, while most other daily
+distributions use `0.7.1.devYYYYMMDD`. The 910B backend currently uses the hosted
+`flagtree==0.7.2a1+ascend3.5` release instead of the daily wheel; its previous
+CANN 9.0.0 daily configuration remains commented in the backend YAML.
 
 BW1000 uses `flagtree-hcu==0.7.1.dev20261104` from the FlagOS daily index. Its
 backend YAML retains the previous compatible `flagtree==0.7.1a1+hcu3.6`
@@ -816,7 +818,7 @@ Backends with no FlagTree entry under `deps` retain the image-provided
 tree; this currently applies only to Cambricon.
 
 `FlagGems` inherits the shared 910B CANN 9.0.0 image and therefore receives the
-configured `flagtree-ascend-cann9.0.0` daily wheel. It uses its current T-Head
+configured hosted `flagtree==0.7.2a1+ascend3.5` release. It uses its current T-Head
 PPU 2.1.0 and AMD ROCm 7.2.4 runtime images through repository-specific
 overrides; both also receive their configured FlagTree daily wheels. Its
 Cambricon backend similarly uses the current Neuware 4.7.2 shared backend image,
@@ -838,13 +840,13 @@ defaults:
     flag-gems:
       display_name: FlagGems
       priority: 200
-      version: 5.5.0.dev20261118
+      version: 5.5.0.dev20261123
       index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
       no_deps: true
 ```
 
 The configured artifact is
-`packages/flag-gems/5.5.0.dev20261118/flag_gems-5.5.0.dev20261118-py3-none-any.whl`.
+`packages/flag-gems/5.5.0.dev20261123/flag_gems-5.5.0.dev20261123-py3-none-any.whl`.
 The generic upgrade step processes FlagTree first because its priority is 100,
 then FlagGems at priority 200. It uses `uv pip install --no-deps` with the
 configured index and verifies through the
@@ -1227,7 +1229,7 @@ backend YAML file.
 | Backend | Vendor | Runner label | FlagTree package | Default test devices | Output base |
 | --- | --- | --- | --- | --- | --- |
 | `H800` | Nvidia | `h800-flaggems-weekly` | `flagtree-nvidia` | detected | `/data/github-outputs` |
-| `910B` | Ascend | `910b-flaggems-weekly` | `flagtree-ascend-cann9.0.0` | detected | `/data/github-outputs` |
+| `910B` | Ascend | `910b-flaggems-weekly` | `flagtree` | detected | `/data/github-outputs` |
 | `C550` | Metax | `c550-flaggems-weekly` | `flagtree-metax` | detected | `/data/github-outputs` |
 | `BW1000` | Hygon | `bw1000-flaggems-weekly` | `flagtree-hcu` | detected | `/data/github-outputs` |
 | `MTT-S5000` | MThreads | `s5000-flaggems-weekly` | `flagtree-mthreads` | detected | `/data/github-outputs` |

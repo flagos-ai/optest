@@ -141,7 +141,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             {
                 "display_name": "FlagGems",
                 "priority": 200,
-                "version": "5.5.0.dev20261118",
+                "version": "5.5.0.dev20261123",
                 "index_url": (
                     "https://resource.flagos.net/repository/flagos-pypi-daily/simple"
                 ),
@@ -188,7 +188,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 dependency["package_name"]
                 for dependency in self.upgrade_deps(flaggems_by_name["910B"])
             ],
-            ["flagtree-ascend-cann9.0.0"],
+            ["flagtree"],
         )
         self.assertEqual(self.upgrade_deps(flaggems_by_name["MLU590-M9DE"]), [])
         self.assertEqual(
@@ -220,7 +220,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
                 dependency["package_name"]
                 for dependency in self.upgrade_deps(flaggems_vllm_by_name["910B"])
             ],
-            ["flagtree-ascend-cann9.0.0", "flag-gems"],
+            ["flagtree", "flag-gems"],
         )
         self.assertEqual(
             flaggems_vllm_by_name["PPU-ZW810E"]["container_image"],
@@ -267,13 +267,13 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         }
         daily_index = "https://resource.flagos.net/repository/flagos-pypi-daily/simple"
         expected = {
-            "H800": ("flagtree-nvidia", "0.7.1.dev20261115", daily_index),
+            "H800": ("flagtree-nvidia", "0.7.1.dev20261123", daily_index),
             "910B": (
-                "flagtree-ascend-cann9.0.0",
-                "0.7.0.dev20261115",
-                daily_index,
+                "flagtree",
+                "0.7.2a1+ascend3.5",
+                "https://resource.flagos.net/repository/flagos-pypi-hosted/simple",
             ),
-            "C550": ("flagtree-metax", "0.7.1.dev20261115", daily_index),
+            "C550": ("flagtree-metax", "0.7.1.dev20261123", daily_index),
             "BW1000": (
                 "flagtree-hcu",
                 "0.7.1.dev20261104",
@@ -281,23 +281,23 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             ),
             "MTT-S5000": (
                 "flagtree-mthreads",
-                "0.7.1.dev20261115",
+                "0.7.1.dev20261123",
                 daily_index,
             ),
             "BI-V150": (
                 "flagtree-iluvatar",
-                "0.7.1.dev20261115",
+                "0.7.1.dev20261123",
                 daily_index,
             ),
-            "P800": ("flagtree-kunlunxin", "0.7.1.dev20261112", daily_index),
+            "P800": ("flagtree-kunlunxin", "0.7.1.dev20261123", daily_index),
             "TX8110": (
                 "flagtree-tsingmicro",
-                "0.7.1.dev20261115",
+                "0.7.1.dev20261123",
                 daily_index,
             ),
-            "S60": ("flagtree-enflame", "0.7.1.dev20261115", daily_index),
-            "PPU-ZW810E": ("flagtree-ppu", "0.7.1.dev20261115", daily_index),
-            "W7900D": ("flagtree-amd", "0.7.1.dev20261115", daily_index),
+            "S60": ("flagtree-enflame", "0.7.1.dev20261123", daily_index),
+            "PPU-ZW810E": ("flagtree-ppu", "0.7.1.dev20261123", daily_index),
+            "W7900D": ("flagtree-amd", "0.7.1.dev20261123", daily_index),
         }
         for backend_name, (package_name, version, index_url) in expected.items():
             with self.subTest(backend=backend_name):
@@ -322,7 +322,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
     def test_vllm_backend_container_images(self):
         backend_dir = ROOT / ".github/configs/backends"
         expected = {
-            "H800": "harbor.baai.ac.cn/flagos-app/vllm0.32.0-generic-13.3:2.3.0-0.5.0.dev0_g814b6d3.d20261117",
+            "H800": "harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:v0.32.0-cuda-dev",
             "W7900D": "harbor.baai.ac.cn/flagos-app/vllm0.32.0-amd-rocm7.2.4:2.3.0-0.5.0.dev0_g814b6d3.d20261117",
             "PPU-ZW810E": "harbor.baai.ac.cn/flagos-app/vllm0.32.0-thead-ppu2.1.0:2.3.0-0.5.0.dev0_g814b6d3.d20261117",
             "BI-V150": "harbor.baai.ac.cn/flagos-app/vllm0.32.0-iluvatar-corex5.0.1:2.3.0-0.5.0.dev0_g814b6d3.d20261117",
@@ -343,13 +343,13 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         selected_by_name = {backend["name"]: backend for backend in selected["include"]}
         self.assertEqual(
             self.upgrade_dep(selected_by_name["H800"], "flagtree-nvidia")["version"],
-            "0.7.1.dev20261115",
+            "0.7.1.dev20261123",
         )
         self.assertEqual(
-            self.upgrade_dep(selected_by_name["910B"], "flagtree-ascend-cann9.0.0")[
+            self.upgrade_dep(selected_by_name["910B"], "flagtree")[
                 "version"
             ],
-            "0.7.0.dev20261115",
+            "0.7.2a1+ascend3.5",
         )
         self.assertEqual(
             self.upgrade_dep(selected_by_name["BW1000"], "flagtree-hcu")["version"],

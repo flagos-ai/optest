@@ -71,13 +71,13 @@ defaults:
   # control workflow behavior; every other key is converted from snake_case to
   # a `uv pip install --kebab-case` option. Enabled packages are installed by
   # ascending `priority` (default 1000), then package name.
-  # Artifact: packages/flag-gems/5.5.0.dev20261118/
-  #           flag_gems-5.5.0.dev20261118-py3-none-any.whl
+  # Artifact: packages/flag-gems/5.5.0.dev20261123/
+  #           flag_gems-5.5.0.dev20261123-py3-none-any.whl
   deps:
     flag-gems:
       display_name: FlagGems
       priority: 200
-      version: 5.5.0.dev20261118
+      version: 5.5.0.dev20261123
       index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
       no_deps: true
 

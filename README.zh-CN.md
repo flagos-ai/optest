@@ -701,15 +701,16 @@ deps:
   flagtree-nvidia:
     display_name: FlagTree
     priority: 100
-    version: 0.7.1.dev20261115
+    version: 0.7.1.dev20261123
     index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
     no_deps: true
     target: /opt/flagtree
 ```
 
 大多数后端使用完整的默认 daily 版本。不同运行时可能具有不同的
-版本基线：例如 CANN 9.0.0 使用 `0.7.0.devYYYYMMDD`，而大多数 daily distribution
-使用 `0.7.1.devYYYYMMDD`。
+版本基线：例如 CANN 9.0.0 daily distribution 使用 `0.7.0.devYYYYMMDD`，而大多数 daily distribution
+使用 `0.7.1.devYYYYMMDD`。910B 当前改用 hosted 仓库中的
+`flagtree==0.7.2a1+ascend3.5` release；此前的 CANN 9.0.0 daily 配置仍保留在 backend YAML 注释中。
 
 BW1000 使用 FlagOS daily index 中的 `flagtree-hcu==0.7.1.dev20261104`。
 其 backend YAML 将之前兼容的 `flagtree==0.7.1a1+hcu3.6` release 配置保留为
@@ -732,7 +733,7 @@ target 目录的裸 `pip show` 误当成安装检查。没有在 `deps` 中配�
 Cambricon 使用此行为。
 
 `FlagGems` 继承共享的 910B CANN 9.0.0 镜像，因此会安装配置的
-`flagtree-ascend-cann9.0.0` daily wheel。它仍通过仓库专用覆盖使用当前的 T-Head
+hosted `flagtree==0.7.2a1+ascend3.5` release。它仍通过仓库专用覆盖使用当前的 T-Head
 PPU 2.1.0 和 AMD ROCm 7.2.4 runtime 镜像，这两个后端也会安装各自配置的 FlagTree
 daily wheel。其 Cambricon 后端同样使用当前的 Neuware 4.7.2 共享后端镜像，但由于未
 配置 Cambricon daily distribution，会保留镜像自带的 FlagTree。目前只有 FlagGems
@@ -751,13 +752,13 @@ defaults:
     flag-gems:
       display_name: FlagGems
       priority: 200
-      version: 5.5.0.dev20261118
+      version: 5.5.0.dev20261123
       index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
       no_deps: true
 ```
 
 当前配置对应的制品为
-`packages/flag-gems/5.5.0.dev20261118/flag_gems-5.5.0.dev20261118-py3-none-any.whl`。
+`packages/flag-gems/5.5.0.dev20261123/flag_gems-5.5.0.dev20261123-py3-none-any.whl`。
 通用升级步骤按 priority 100 先处理 FlagTree，再按 priority 200 处理 FlagGems。它使用
 配置的 index 执行 `uv pip install --no-deps`，并通过活动 Python 解释器校验已安装
 distribution 与配置版本完全一致。
@@ -1091,7 +1092,7 @@ MLU590-M9DE/寒武纪、P800/昆仑芯、W7900D/AMD、TX8110/清微智能和 S60
 | 后端 | 厂商 | Runner 标签 | FlagTree 包 | 默认测试设备 | 输出基础目录 |
 | --- | --- | --- | --- | --- | --- |
 | `H800` | Nvidia | `h800-flaggems-weekly` | `flagtree-nvidia` | 自动检测 | `/data/github-outputs` |
-| `910B` | Ascend | `910b-flaggems-weekly` | `flagtree-ascend-cann9.0.0` | 自动检测 | `/data/github-outputs` |
+| `910B` | Ascend | `910b-flaggems-weekly` | `flagtree` | 自动检测 | `/data/github-outputs` |
 | `C550` | Metax | `c550-flaggems-weekly` | `flagtree-metax` | 自动检测 | `/data/github-outputs` |
 | `BW1000` | Hygon | `bw1000-flaggems-weekly` | `flagtree-hcu` | 自动检测 | `/data/github-outputs` |
 | `MTT-S5000` | MThreads | `s5000-flaggems-weekly` | `flagtree-mthreads` | 自动检测 | `/data/github-outputs` |

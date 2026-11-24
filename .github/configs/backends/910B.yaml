@@ -55,16 +55,24 @@ container_options: >-
   --device=/dev/hisi_hdc
   --workdir=/root
 
-# This image uses CANN 9.0.0, whose FlagTree daily distribution has a distinct
-# package name and 0.7.0 version base.
 deps:
-  flagtree-ascend-cann9.0.0:
+  flagtree:
     display_name: FlagTree
     priority: 100
-    version: 0.7.0.dev20261115
-    index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+    version: 0.7.2a1+ascend3.5
+    index_url: https://resource.flagos.net/repository/flagos-pypi-hosted/simple
     no_deps: true
     target: /opt/flagtree
+
+# Retain the CANN 9.0.0 daily configuration for a possible fallback:
+# deps:
+#   flagtree-ascend-cann9.0.0:
+#     display_name: FlagTree
+#     priority: 100
+#     version: 0.7.0.dev20261115
+#     index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
+#     no_deps: true
+#     target: /opt/flagtree
 
 # Extra environment variables injected only into the "Run ops tests" step
 test_env: {}

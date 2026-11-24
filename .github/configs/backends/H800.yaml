@@ -24,7 +24,7 @@ runner_labels: h800-flaggems-weekly
 # Container image for this backend (DEFAULT).
 # Priority: repos.yaml `images.<BACKEND>` for the selected repo OVERRIDES
 # this value; when that repo has no override here, this default is used.
-container_image: harbor.baai.ac.cn/flagos-app/vllm0.32.0-generic-13.3:2.3.0-0.5.0.dev0_g814b6d3.d20261117
+container_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:v0.32.0-cuda-dev
 
 # Container volumes to mount for this backends
 container_volumes:
@@ -50,7 +50,7 @@ deps:
   flagtree-nvidia:
     display_name: FlagTree
     priority: 100
-    version: 0.7.1.dev20261115
+    version: 0.7.1.dev20261123
     index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
     no_deps: true
     target: /opt/flagtree

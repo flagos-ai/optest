@@ -70,26 +70,24 @@ def test_same_label_is_retained_not_recollected():
     plan = refresh.plan_refresh(["a"], baseline, VLLM_32)
     assert plan.collect == []
     assert plan.retained == {"a": baseline["a"]}
-    assert plan.reasons["a"] == refresh.REASON_LABEL_MATCH
+    assert plan.reasons["a"] == refresh.REASON_PRESENT
 
 
-def test_changed_label_is_recollected_and_reason_shows_both_versions():
+def test_present_operator_is_retained_regardless_of_label():
     baseline = {"a": entry(VLLM_24)}
     plan = refresh.plan_refresh(["a"], baseline, VLLM_32)
-    assert plan.collect == ["a"]
-    assert plan.retained == {}
-    assert plan.reasons["a"].startswith(refresh.REASON_LABEL_CHANGED)
-    assert "vllm=0.24.0 -> vllm=0.32.0" in plan.reasons["a"]
-    # The stale entry is remembered as the fallback for a failed re-collection.
-    assert plan.previous == {"a": baseline["a"]}
+    assert plan.collect == []
+    assert plan.retained == {"a": baseline["a"]}
+    assert plan.reasons["a"] == refresh.REASON_PRESENT
 
 
-def test_unlabeled_entry_is_recollected():
+def test_unlabeled_entry_is_retained():
     baseline = {"a": entry(), "b": entry({}), "c": entry("0.24.0")}
     plan = refresh.plan_refresh(["a", "b", "c"], baseline, VLLM_32)
-    assert plan.collect == ["a", "b", "c"]
+    assert plan.collect == []
+    assert plan.retained == {"a": baseline["a"], "b": baseline["b"], "c": baseline["c"]}
     for name in ("a", "b", "c"):
-        assert plan.reasons[name] == refresh.REASON_LABEL_UNKNOWN
+        assert plan.reasons[name] == refresh.REASON_PRESENT
 
 
 def test_no_detected_framework_matches_on_presence_only():
@@ -98,7 +96,6 @@ def test_no_detected_framework_matches_on_presence_only():
     assert plan.collect == ["b"]
     assert plan.retained == {"a": baseline["a"]}
     assert plan.reasons["a"] == refresh.REASON_PRESENT
-    assert any("presence only" in line for line in plan.summary_lines())
 
 
 def test_baseline_operators_outside_the_run_are_retained():
@@ -136,105 +133,22 @@ def test_unknown_mode_is_rejected():
         refresh.plan_refresh(["a"], {}, VLLM_32, mode="delta")
 
 
-# --- IGNORE_LOCAL_VERSION: temporary workaround for DeepSpeed from git main ---
-
-DS_OLD = {"deepspeed": "0.20.1+4a9efc1"}
-DS_NEW = {"deepspeed": "0.20.1+b5e0ba6"}
-
-
-def test_deepspeed_local_version_change_does_not_trigger_recollection():
-    baseline = {"lamb": entry(DS_OLD), "packbits": entry(DS_OLD)}
-    plan = refresh.plan_refresh(["lamb", "packbits"], baseline, DS_NEW)
-    assert plan.collect == []
-    assert set(plan.retained) == {"lamb", "packbits"}
-    assert plan.reasons["lamb"].startswith(refresh.REASON_LABEL_MATCH_LOCAL_IGNORED)
-    assert (
-        "deepspeed=0.20.1+4a9efc1 vs deepspeed=0.20.1+b5e0ba6" in plan.reasons["lamb"]
-    )
-    # Recorded per operator, with both builds, so the published file shows it.
-    assert plan.metadata()["local_version_ignored"]["lamb"] == {
-        "baseline": "deepspeed=0.20.1+4a9efc1",
-        "installed": "deepspeed=0.20.1+b5e0ba6",
-    }
-
-
-def test_ignored_local_version_is_warned_about_in_the_log():
-    baseline = {"lamb": entry(DS_OLD)}
-    plan = refresh.plan_refresh(["lamb"], baseline, DS_NEW)
-    text = "\n".join(plan.summary_lines())
-    assert "WARNING" in text
-    assert "deepspeed=0.20.1+4a9efc1 vs deepspeed=0.20.1+b5e0ba6" in text
-    # The log must say how to undo the workaround.
-    assert "IGNORE_LOCAL_VERSION" in text
-    assert "Pin the install" in text
-
-
-def test_a_real_deepspeed_version_change_still_triggers_recollection():
-    baseline = {"lamb": entry(DS_OLD)}
-    plan = refresh.plan_refresh(["lamb"], baseline, {"deepspeed": "0.21.0+b5e0ba6"})
-    assert plan.collect == ["lamb"]
-    assert plan.local_version_ignored == {}
-    assert plan.reasons["lamb"].startswith(refresh.REASON_LABEL_CHANGED)
-
-
-def test_identical_deepspeed_labels_are_a_plain_match():
-    baseline = {"lamb": entry(DS_OLD)}
-    plan = refresh.plan_refresh(["lamb"], baseline, DS_OLD)
-    assert plan.reasons["lamb"] == refresh.REASON_LABEL_MATCH
-    assert plan.local_version_ignored == {}
-    assert plan.metadata()["local_version_ignored"] == {}
-    assert not any("WARNING" in line for line in plan.summary_lines())
-
-
-def test_the_workaround_is_scoped_to_the_listed_frameworks():
-    # vllm is not in IGNORE_LOCAL_VERSION, so a local-version change is a change.
-    baseline = {"a": entry({"vllm": "0.32.0+abc1234"})}
-    plan = refresh.plan_refresh(["a"], baseline, {"vllm": "0.32.0+def5678"})
-    assert plan.collect == ["a"]
-    assert refresh.IGNORE_LOCAL_VERSION == frozenset({"deepspeed"})
-
-
-def test_comparable_label_only_strips_the_listed_frameworks():
-    assert refresh.comparable_label(DS_NEW) == {"deepspeed": "0.20.1"}
-    assert refresh.comparable_label({"vllm": "0.32.0+x"}) == {"vllm": "0.32.0+x"}
-    assert refresh.comparable_label(None) == {}
-    assert refresh.comparable_label({**DS_NEW, "vllm": "0.32.0"}) == {
-        "deepspeed": "0.20.1",
-        "vllm": "0.32.0",
-    }
-
-
-def test_published_flagtrain_baseline_survives_a_main_bump():
-    """The real FlagTrain baseline against a different DeepSpeed main commit:
-    without the workaround all 32 operators would be re-collected."""
-    baseline = refresh.load_baseline(ROOT / "data/op_flagtrain_perf_baseline.json")
-    entries = refresh.operator_entries(baseline)
-    stored = refresh.stored_label(next(iter(entries.values())))
-    public = stored["deepspeed"].split("+")[0]
-    plan = refresh.plan_refresh(
-        list(entries), baseline, {"deepspeed": f"{public}+0000000"}
-    )
-    assert plan.collect == []
-    assert len(plan.local_version_ignored) == len(entries)
-
-
 def test_candidates_are_deduplicated_and_sorted():
     plan = refresh.plan_refresh(["b", "a", "b"], {}, VLLM_32)
     assert plan.collect == ["a", "b"]
     assert plan.collect_set == {"a", "b"}
 
 
-def test_restore_missing_keeps_the_published_entry_on_failure():
+def test_restore_missing_is_a_noop_when_nothing_was_queued():
+    # Incremental mode no longer tracks plan.previous, so restore is always empty.
     baseline = {"a": entry(VLLM_24), "b": entry(VLLM_24)}
     plan = refresh.plan_refresh(["a", "b"], baseline, VLLM_32)
     results = {"a": entry(VLLM_32, shapes={"[2]": {}})}
     restored = refresh.restore_missing(plan, results)
-    assert restored == ["b"]
-    # The freshly collected operator is untouched; the failed one falls back to
-    # its published entry, keeping its old label so the next run retries it.
+    assert restored == []
     assert results["a"]["shapes"] == {"[2]": {}}
-    assert results["b"] == baseline["b"]
-    assert plan.metadata()["restored_after_failure"] == ["b"]
+    assert "b" not in results
+    assert plan.metadata()["restored_after_failure"] == []
 
 
 def test_publishable_puts_provenance_first_and_drops_bookkeeping():
@@ -344,22 +258,22 @@ def test_format_label():
 
 
 def test_metadata_and_summary_describe_the_plan(tmp_path):
-    baseline = {"kept": entry(VLLM_32), "stale": entry(VLLM_24)}
+    baseline = {"kept": entry(VLLM_32), "already_present": entry(VLLM_24)}
     plan = refresh.plan_refresh(
-        ["kept", "stale", "fresh"],
+        ["kept", "already_present", "fresh"],
         baseline,
         VLLM_32,
         baseline_path=str(tmp_path / "data.json"),
     )
     meta = plan.metadata()
     assert meta["mode"] == refresh.MODE_INCREMENTAL
-    assert meta["collected"] == ["fresh", "stale"]
-    assert meta["retained"] == ["kept"]
+    assert meta["collected"] == ["fresh"]
+    assert set(meta["retained"]) == {"already_present", "kept"}
     assert meta["label"] == VLLM_32
     assert meta["baseline"].endswith("data.json")
     text = "\n".join(plan.summary_lines())
-    assert "collect 2, retain 1" in text
-    assert "fresh" in text and "stale" in text
+    assert "collect 1, retain 2" in text
+    assert "fresh" in text
 
 
 def test_real_published_baselines_are_fully_labeled():
@@ -451,16 +365,16 @@ class TestSchedulerIntegration:
 
         return execute
 
-    def test_incremental_run_collects_only_stale_operators(self, tmp_path):
+    def test_incremental_run_collects_only_absent_operators(self, tmp_path):
         scheduler = self._scheduler()
-        ops_dir = self._ops_dir(tmp_path, ["fresh", "stale", "unchanged"])
+        ops_dir = self._ops_dir(tmp_path, ["fresh", "already_present", "unchanged"])
         baseline = tmp_path / "data.json"
         baseline.write_text(
             json.dumps(
                 {
                     "_environment": {"reference_chip": "H800"},
                     "unchanged": entry(VLLM_32),
-                    "stale": entry(VLLM_24),
+                    "already_present": entry(VLLM_24),
                     "retired": entry(VLLM_32),
                 }
             )
@@ -469,44 +383,46 @@ class TestSchedulerIntegration:
         args = self._args(tmp_path, ops_dir, baseline=baseline)
         code = scheduler.collect(args, execute=self._executor(collected))
         assert code == 0
-        # "unchanged" matched the container label and "retired" is no longer an
-        # operator module, so neither was measured; the new and the stale one
-        # were.
-        assert sorted(collected) == ["fresh", "stale"]
+        # Only "fresh" is absent from the baseline, so only it is collected.
+        # "unchanged" and "already_present" are both present in baseline (retained).
+        # "retired" is no longer an operator module but is retained from baseline.
+        assert collected == ["fresh"]
         published = json.loads(Path(args.output).read_text())
         # Provenance first, then the operators, and no run-time bookkeeping.
         assert list(published)[:2] == ["_environment", "_scaling_factors"]
         assert "_incremental" not in published
         assert set(published) - {"_environment", "_scaling_factors"} == {
             "fresh",
-            "stale",
+            "already_present",
             "unchanged",
             "retired",
         }
-        assert published["stale"]["label"] == VLLM_32
+        assert published["fresh"]["label"] == VLLM_32
+        assert published["already_present"] == entry(VLLM_24)
         assert published["unchanged"] == entry(VLLM_32)
         # The plan lives in the sidecar status.json.
         meta = self._status(args)["incremental"]
         assert meta["mode"] == refresh.MODE_INCREMENTAL
-        assert meta["collected"] == ["fresh", "stale"]
-        assert set(meta["retained"]) == {"unchanged", "retired"}
+        assert meta["collected"] == ["fresh"]
+        assert set(meta["retained"]) == {"already_present", "unchanged", "retired"}
 
-    def test_failed_recollection_keeps_the_published_entry(self, tmp_path):
+    def test_failed_new_operator_is_absent_from_baseline(self, tmp_path):
         scheduler = self._scheduler()
-        ops_dir = self._ops_dir(tmp_path, ["stale"])
+        ops_dir = self._ops_dir(tmp_path, ["new_op"])
         baseline = tmp_path / "data.json"
-        baseline.write_text(json.dumps({"stale": entry(VLLM_24)}))
+        baseline.write_text(json.dumps({"existing": entry(VLLM_24)}))
         args = self._args(tmp_path, ops_dir, baseline=baseline)
-        code = scheduler.collect(args, execute=self._executor([], fail=("stale",)))
+        code = scheduler.collect(args, execute=self._executor([], fail=("new_op",)))
         assert code == 1
         published = json.loads(Path(args.output).read_text())
-        # The operator keeps its old entry and old label, so it stays in the
-        # baseline and the next run retries it.
-        assert published["stale"] == entry(VLLM_24)
+        # The new operator that failed is simply absent; the existing one is retained.
+        assert "new_op" not in published
+        assert published["existing"] == entry(VLLM_24)
         assert "_incremental" not in published
-        assert self._status(args)["incremental"]["restored_after_failure"] == ["stale"]
+        # No restoration happens in incremental mode (plan.previous is empty).
+        assert self._status(args)["incremental"]["restored_after_failure"] == []
 
-    def test_nothing_stale_publishes_the_baseline_with_its_provenance(self, tmp_path):
+    def test_nothing_to_collect_publishes_the_baseline_with_its_provenance(self, tmp_path):
         scheduler = self._scheduler()
         ops_dir = self._ops_dir(tmp_path, ["a"])
         baseline = tmp_path / "data.json"
@@ -541,51 +457,48 @@ class TestSchedulerIntegration:
     def test_every_child_dying_still_keeps_the_provenance(self, tmp_path):
         """A run whose every queued operator dies before flushing its own
         metadata must not republish a baseline stripped of _environment and
-        _scaling_factors: the operators survive by restore_missing, and the
+        _scaling_factors: the new operators are absent from output, but
         provenance is carried over from the previous file."""
         scheduler = self._scheduler()
-        ops_dir = self._ops_dir(tmp_path, ["lamb", "packbits"])
+        ops_dir = self._ops_dir(tmp_path, ["new_lamb", "new_packbits"])
         baseline = tmp_path / "data.json"
         baseline.write_text(
             json.dumps(
                 {
                     "_environment": {"reference_chip": "H800"},
                     "_scaling_factors": {"chips": {"H800": 1.0}},
-                    "lamb": entry(VLLM_24),
-                    "packbits": entry(VLLM_24),
+                    "existing": entry(VLLM_24),
                 }
             )
         )
         args = self._args(tmp_path, ops_dir, baseline=baseline)
         # Children die without writing any result.json at all.
         code = scheduler.collect(
-            args, execute=self._executor([], fail=("lamb", "packbits"))
+            args, execute=self._executor([], fail=("new_lamb", "new_packbits"))
         )
         assert code == 1
         published = json.loads(Path(args.output).read_text())
-        assert sorted(k for k in published if not k.startswith("_")) == [
-            "lamb",
-            "packbits",
-        ]
+        # Failed new operators are absent; existing operator is retained.
+        assert sorted(k for k in published if not k.startswith("_")) == ["existing"]
         assert published["_environment"] == {"reference_chip": "H800"}
         assert published["_scaling_factors"] == {"chips": {"H800": 1.0}}
         assert list(published)[:2] == ["_environment", "_scaling_factors"]
         inc = self._status(args)["incremental"]
-        assert inc["restored_after_failure"] == ["lamb", "packbits"]
+        assert inc["restored_after_failure"] == []
         assert inc["carried_over_metadata"] == ["_environment", "_scaling_factors"]
 
     def test_a_reporting_child_wins_over_the_baseline(self, tmp_path):
         """When a child does report provenance, that is this run's own and must
         not be overwritten by the previous file's."""
         scheduler = self._scheduler()
-        ops_dir = self._ops_dir(tmp_path, ["stale"])
+        ops_dir = self._ops_dir(tmp_path, ["new_op"])
         baseline = tmp_path / "data.json"
         baseline.write_text(
             json.dumps(
                 {
                     "_environment": {"reference_chip": "OLD"},
                     "_scaling_factors": {"chips": {"OLD": 1.0}},
-                    "stale": entry(VLLM_24),
+                    "existing": entry(VLLM_24),
                 }
             )
         )
@@ -687,52 +600,6 @@ class TestWorkflowWiring:
         assert 'incremental = status.get("incremental")' in run
         assert "re-collected now" in run
         assert "carried over from the committed baseline" in run
-
-    def test_summary_step_annotates_an_ignored_local_version(self):
-        """The IGNORE_LOCAL_VERSION workaround must raise a GitHub warning
-        annotation, not just a log line."""
-        script = self.step("Summarize collected operators")["run"]
-        import os
-        import tempfile
-        from contextlib import redirect_stdout
-        from io import StringIO
-        from unittest import mock
-
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "op_flagtrain_perf_baseline.json"
-            output.write_text(json.dumps({"lamb": entry(DS_OLD)}))
-            work = Path(f"{output}.work")
-            work.mkdir()
-            (work / "status.json").write_text(
-                json.dumps(
-                    {
-                        "tasks": {},
-                        "incremental": {
-                            "mode": refresh.MODE_INCREMENTAL,
-                            "label": DS_NEW,
-                            "collected": [],
-                            "retained": ["lamb"],
-                            "local_version_ignored": {
-                                "lamb": {
-                                    "baseline": "deepspeed=0.20.1+4a9efc1",
-                                    "installed": "deepspeed=0.20.1+b5e0ba6",
-                                }
-                            },
-                            "decisions": {},
-                        },
-                    }
-                )
-            )
-            buffer = StringIO()
-            with mock.patch.dict(os.environ, {"OUTPUT": str(output)}):
-                with redirect_stdout(buffer):
-                    exec(compile(script, "summary", "exec"), {"__name__": "summary"})
-        printed = buffer.getvalue()
-        assert "::warning::1 operator(s) kept despite a differing framework build" in (
-            printed
-        )
-        assert "deepspeed=0.20.1+4a9efc1 vs deepspeed=0.20.1+b5e0ba6" in printed
-        assert "IGNORE_LOCAL_VERSION" in printed
 
     # The data/ update step guards against publishing a baseline that lost
     # operators. Exercised as a real bash script (it is a heredoc inside an

@@ -57,10 +57,8 @@ repos:
     image: harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-sglang-nv-baseline-ncu-2025.2.0:0.5.21
     output: op_sglang_perf_baseline.json
 
-  # Placeholder image: replace with the real NV + ncu image once built,
-  # following the same naming as the entries above.
   FlagGems:
-    image: harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-nv-baseline-ncu:latest
+    image: harbor.baai.ac.cn/flaggems/nv_baseline/flaggems-vllm-nv-baseline-ncu-2026.3.1:0.24.0
     output: op_flaggems_perf_baseline.json
 
   # FlagTrain reuses the vllm baseline image, then the workflow uninstalls vllm

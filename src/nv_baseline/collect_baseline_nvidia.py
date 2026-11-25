@@ -248,6 +248,8 @@ def profile_with_ncu(op_name, profile_script, shape, dtype_str, report_dir=None)
             "--nvtx",
             "--nvtx-include",
             "kiro_target/",
+            "--profile-from-start",
+            "off",
             "--force-overwrite",
             "--export",
             str(report_base),

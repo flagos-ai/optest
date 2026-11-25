@@ -61,10 +61,10 @@ REASON_NOT_CANDIDATE = "not-collected-this-run"
 # Framework packages whose version is pinned per operator as a label. The
 # baseline is always collected inside the target framework's own container, so
 # whichever of these is installed identifies what the baseline tracks: vllm for
-# FlagGems-vllm, sglang for FlagGems-sglang, deepspeed for FlagTrain. torch and
-# triton are deliberately excluded as shared infrastructure, not the framework.
-# Add a package here to start labeling a new framework; detection is automatic.
-LABEL_FRAMEWORKS = ("vllm", "sglang", "deepspeed")
+# FlagGems-vllm, sglang for FlagGems-sglang, deepspeed for FlagTrain, torch for
+# FlagGems. Add a package here to start labeling a new framework; detection is
+# automatic.
+LABEL_FRAMEWORKS = ("vllm", "sglang", "deepspeed", "torch")
 
 # ---------------------------------------------------------------------------
 # WARNING - temporary workaround, remove when the install is pinned.

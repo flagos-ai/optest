@@ -252,6 +252,18 @@ jobs:
           echo "[vllm] After install:"
           python3 -c "import vllm; print('[vllm] vllm', vllm.__version__)"
 
+      # FlagGems only: the baseline image bundles vllm (reuses the vllm baseline
+      # image), but FlagGems baseline should be labeled with torch version, not
+      # vllm. Remove vllm so the label detection picks up torch instead.
+      - name: Remove vllm for FlagGems baseline
+        if: ${{ github.event.inputs.repo == 'FlagGems' }}
+        shell: bash --login -e -o pipefail {0}
+        run: |
+          echo "[FlagGems] Removing vllm to use torch for labeling"
+          python3 -m pip uninstall -y vllm || true
+          echo "[FlagGems] torch version:"
+          python3 -c "import torch; print('torch', torch.__version__)"
+
       # FlagTrain only: its baseline modules hard-depend on DeepSpeed and
       # Megatron-LM (native() raises if missing, no torch fallback), so install
       # them per baseline/README.md before collection. Other repos ship their
@@ -353,7 +365,8 @@ jobs:
           python3 -m pip install \
             deepspeed-kernels==0.0.1.dev1698255861 \
             nvidia-cutlass==3.8.0.0 \
-            nvidia-resiliency-ext==0.6.0
+            nvidia-resiliency-ext==0.6.0 \
+            transformer-engine[pytorch]
           # DeepSpeed from source (main).
           if [ ! -d "${WORK}/DeepSpeed" ]; then
             git clone --depth 1 https://github.com/deepspeedai/DeepSpeed.git "${WORK}/DeepSpeed"

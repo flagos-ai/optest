@@ -306,6 +306,10 @@ torch.cuda.nvtx.range_pop()'''
         )
         if not candidates:
             print(f"  ✗ NCU produced no report file: {report_base}.ncu-rep[z]")
+            # If this was the first attempt, retry with increased repetitions
+            if ncu_repeats == 1:
+                print(f"  → NCU produced no report, retrying with 100 repetitions")
+                return profile_with_ncu(op_name, profile_script, shape, dtype_str, report_dir, ncu_repeats=100)
             return _empty_result()
         report_path = str(candidates[0])
 
@@ -620,7 +624,11 @@ def _measure_latency(
 
     def restore():
         for tensor, initial in saved:
-            tensor.copy_(initial)
+            # Handle operators that change tensor shape (e.g., copy_from_and_resize_out)
+            if tensor.shape != initial.shape:
+                tensor.data = initial.clone()
+            else:
+                tensor.copy_(initial)
 
     try:
         for _ in range(warmup):

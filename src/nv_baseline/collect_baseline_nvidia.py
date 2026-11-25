@@ -222,14 +222,41 @@ def _build_per_kernel(agg, tensor_metric):
     return per_kernel
 
 
-def profile_with_ncu(op_name, profile_script, shape, dtype_str, report_dir=None):
+def profile_with_ncu(op_name, profile_script, shape, dtype_str, report_dir=None, ncu_repeats=1):
     tensor_metric = FLOP_TENSOR_CORE.get(dtype_str)
     metrics = list(FLOP_CUDA_CORE) + [MEMORY_BYTES, *UTIL.values(), DURATION]
     if tensor_metric:
         metrics.append(tensor_metric)
 
+    # Wrap the profile script with repeated execution if ncu_repeats > 1
+    # This helps NCU capture kernels from very fast operators
+    # Replace the single-execution NVTX section with a loop
+    if ncu_repeats > 1:
+        # Original script has this pattern:
+        #   torch.cuda.nvtx.range_push("kiro_target")
+        #   op(*args, **kwargs)
+        #   torch.cuda.nvtx.range_pop()
+        # Replace it with a loop
+        single_exec = '''torch.cuda.nvtx.range_push("kiro_target")
+op(*args, **kwargs)
+torch.cuda.nvtx.range_pop()'''
+
+        loop_exec = f'''torch.cuda.nvtx.range_push("kiro_target")
+for _ in range({ncu_repeats}):
+    op(*args, **kwargs)
+    torch.cuda.synchronize()
+torch.cuda.nvtx.range_pop()'''
+
+        if single_exec in profile_script:
+            wrapped_script = profile_script.replace(single_exec, loop_exec)
+        else:
+            # Fallback: script structure different than expected, don't modify
+            wrapped_script = profile_script
+    else:
+        wrapped_script = profile_script
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-        f.write(profile_script)
+        f.write(wrapped_script)
         script_path = f.name
 
     report_dir = Path(report_dir) if report_dir else Path(tempfile.gettempdir())
@@ -317,7 +344,7 @@ def profile_with_ncu(op_name, profile_script, shape, dtype_str, report_dir=None)
 
         per_kernel = _build_per_kernel(agg, tensor_metric)
 
-        return {
+        result = {
             "F_cuda": flops_cuda,
             "F_tensor": flops_tensor,
             "B_mem": mem_bytes,
@@ -329,6 +356,14 @@ def profile_with_ncu(op_name, profile_script, shape, dtype_str, report_dir=None)
             "num_kernels": len(per_kernel),
             "per_kernel": per_kernel,
         }
+
+        # If no kernels captured and this was the first attempt (ncu_repeats=1),
+        # retry with increased repetitions to help NCU capture fast kernels
+        if len(per_kernel) == 0 and ncu_repeats == 1:
+            print(f"  → NCU captured no kernels, retrying with 100 repetitions")
+            return profile_with_ncu(op_name, profile_script, shape, dtype_str, report_dir, ncu_repeats=100)
+
+        return result
     finally:
         try:
             Path(script_path).unlink()

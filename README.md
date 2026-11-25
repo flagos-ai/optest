@@ -789,9 +789,7 @@ distributions use `0.7.1.devYYYYMMDD`. The 910B backend currently uses the hoste
 `flagtree==0.7.2a1+ascend3.5` release instead of the daily wheel; its previous
 CANN 9.0.0 daily configuration remains commented in the backend YAML.
 
-BW1000 currently uses `flagtree==0.7.1a1+hcu3.6` from the FlagOS hosted index.
-Its previous `flagtree-hcu==0.7.1.dev20261104` daily mapping remains commented
-in the backend YAML as a temporary fallback.
+BW1000 uses `flagtree-hcu==0.7.1.dev20261124` from the FlagOS daily index.
 
 The backend YAML is the sole source of the FlagTree version. Updating a wheel
 therefore requires changing that backend's exact `version` and confirming that

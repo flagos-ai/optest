@@ -24,7 +24,7 @@ runner_labels: bw1000-flaggems-weekly
 # Container image for this backend (DEFAULT).
 # Priority: repos.yaml `images.<BACKEND>` for the selected repo OVERRIDES
 # this value; when that repo has no override here, this default is used.
-container_image: harbor.baai.ac.cn/flagos-app/vllm0.24.0-hygon-dtk26.04:2.2.0-0.3.0
+container_image: harbor.baai.ac.cn/flagos-app/vllm0.24.0-hygon-dtk26.04:2.3.0-0.3.0
 
 # Container volumes to mount for this backends
 container_volumes:
@@ -46,23 +46,13 @@ container_options: >-
   --device=/dev/dri
 
 deps:
-  flagtree:
+  flagtree-hcu:
     display_name: FlagTree
     priority: 100
-    version: 0.7.1a1+hcu3.6
-    index_url: https://resource.flagos.net/repository/flagos-pypi-hosted/simple
+    version: 0.7.1.dev20261124
+    index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
     no_deps: true
     target: /opt/flagtree
-
-# Temporarily retain the HCU daily configuration as a commented fallback:
-# deps:
-#   flagtree-hcu:
-#     display_name: FlagTree
-#     priority: 100
-#     version: 0.7.1.dev20261104
-#     index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
-#     no_deps: true
-#     target: /opt/flagtree
 
 # Extra environment variables injected only into the "Run ops tests" step
 test_env:

@@ -346,9 +346,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
             "0.7.1.dev20261123",
         )
         self.assertEqual(
-            self.upgrade_dep(selected_by_name["910B"], "flagtree")[
-                "version"
-            ],
+            self.upgrade_dep(selected_by_name["910B"], "flagtree")["version"],
             "0.7.2a1+ascend3.5",
         )
         self.assertEqual(

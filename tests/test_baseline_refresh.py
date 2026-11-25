@@ -422,7 +422,9 @@ class TestSchedulerIntegration:
         # No restoration happens in incremental mode (plan.previous is empty).
         assert self._status(args)["incremental"]["restored_after_failure"] == []
 
-    def test_nothing_to_collect_publishes_the_baseline_with_its_provenance(self, tmp_path):
+    def test_nothing_to_collect_publishes_the_baseline_with_its_provenance(
+        self, tmp_path
+    ):
         scheduler = self._scheduler()
         ops_dir = self._ops_dir(tmp_path, ["a"])
         baseline = tmp_path / "data.json"

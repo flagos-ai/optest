@@ -222,7 +222,9 @@ def _build_per_kernel(agg, tensor_metric):
     return per_kernel
 
 
-def profile_with_ncu(op_name, profile_script, shape, dtype_str, report_dir=None, ncu_repeats=1):
+def profile_with_ncu(
+    op_name, profile_script, shape, dtype_str, report_dir=None, ncu_repeats=1
+):
     tensor_metric = FLOP_TENSOR_CORE.get(dtype_str)
     metrics = list(FLOP_CUDA_CORE) + [MEMORY_BYTES, *UTIL.values(), DURATION]
     if tensor_metric:
@@ -237,15 +239,15 @@ def profile_with_ncu(op_name, profile_script, shape, dtype_str, report_dir=None,
         #   op(*args, **kwargs)
         #   torch.cuda.nvtx.range_pop()
         # Replace it with a loop
-        single_exec = '''torch.cuda.nvtx.range_push("kiro_target")
+        single_exec = """torch.cuda.nvtx.range_push("kiro_target")
 op(*args, **kwargs)
-torch.cuda.nvtx.range_pop()'''
+torch.cuda.nvtx.range_pop()"""
 
-        loop_exec = f'''torch.cuda.nvtx.range_push("kiro_target")
+        loop_exec = f"""torch.cuda.nvtx.range_push("kiro_target")
 for _ in range({ncu_repeats}):
     op(*args, **kwargs)
     torch.cuda.synchronize()
-torch.cuda.nvtx.range_pop()'''
+torch.cuda.nvtx.range_pop()"""
 
         if single_exec in profile_script:
             wrapped_script = profile_script.replace(single_exec, loop_exec)
@@ -308,8 +310,15 @@ torch.cuda.nvtx.range_pop()'''
             print(f"  ✗ NCU produced no report file: {report_base}.ncu-rep[z]")
             # If this was the first attempt, retry with increased repetitions
             if ncu_repeats == 1:
-                print(f"  → NCU produced no report, retrying with 100 repetitions")
-                return profile_with_ncu(op_name, profile_script, shape, dtype_str, report_dir, ncu_repeats=100)
+                print("  → NCU produced no report, retrying with 100 repetitions")
+                return profile_with_ncu(
+                    op_name,
+                    profile_script,
+                    shape,
+                    dtype_str,
+                    report_dir,
+                    ncu_repeats=100,
+                )
             return _empty_result()
         report_path = str(candidates[0])
 
@@ -364,8 +373,10 @@ torch.cuda.nvtx.range_pop()'''
         # If no kernels captured and this was the first attempt (ncu_repeats=1),
         # retry with increased repetitions to help NCU capture fast kernels
         if len(per_kernel) == 0 and ncu_repeats == 1:
-            print(f"  → NCU captured no kernels, retrying with 100 repetitions")
-            return profile_with_ncu(op_name, profile_script, shape, dtype_str, report_dir, ncu_repeats=100)
+            print("  → NCU captured no kernels, retrying with 100 repetitions")
+            return profile_with_ncu(
+                op_name, profile_script, shape, dtype_str, report_dir, ncu_repeats=100
+            )
 
         return result
     finally:

@@ -566,7 +566,22 @@ def _measure_latency(
         tensors = [
             args[key] if isinstance(key, int) else kwargs[key] for key in locations
         ]
-    saved = [(tensor, tensor.clone()) for tensor in tensors]
+
+    # Flatten lists of tensors (for foreach_* operators) and clone each tensor
+    def flatten_and_clone(item):
+        if isinstance(item, torch.Tensor):
+            return [(item, item.clone())]
+        elif isinstance(item, list):
+            result = []
+            for elem in item:
+                result.extend(flatten_and_clone(elem))
+            return result
+        else:
+            return []
+
+    saved = []
+    for tensor in tensors:
+        saved.extend(flatten_and_clone(tensor))
 
     def restore():
         for tensor, initial in saved:

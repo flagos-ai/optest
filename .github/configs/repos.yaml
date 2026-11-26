@@ -86,6 +86,14 @@ repos:
   FlagGems:
     # Branch used when the `branch` workflow input is empty.
     default_branch: master
+    # Optional ops-baseline JSON the nv-baseline workflow commits under optest's
+    # data/ dir; ops-test passes it via --base-data for vs-baseline comparison.
+    base_data: data/op_flaggems_perf_baseline.json
+    # Prefer vs-baseline speedup in summary.json (nv_baseline) over on-machine
+    # speedup (origin). FlagGems is a drop-in torch replacement, so its core
+    # metric is performance vs NVIDIA native kernels, not vs torch on the same
+    # vendor hardware.
+    speedup_source: nv_baseline
     # The full operator suite needs the longer per-command timeout.
     op_cmd_timeout: 1800
     # Full operator suite; 910B alone runs ~15h, so allow a long step timeout.

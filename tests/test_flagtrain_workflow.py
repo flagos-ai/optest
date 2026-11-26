@@ -267,37 +267,37 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         }
         daily_index = "https://resource.flagos.net/repository/flagos-pypi-daily/simple"
         expected = {
-            "H800": ("flagtree-nvidia", "0.7.1.dev20261123", daily_index),
+            "H800": ("flagtree-nvidia", "0.7.1.dev20261125", daily_index),
             "910B": (
                 "flagtree",
                 "0.7.2a1+ascend3.5",
                 "https://resource.flagos.net/repository/flagos-pypi-hosted/simple",
             ),
-            "C550": ("flagtree-metax", "0.7.1.dev20261123", daily_index),
+            "C550": ("flagtree-metax", "0.7.1.dev20261125", daily_index),
             "BW1000": (
                 "flagtree-hcu",
-                "0.7.1.dev20261124",
+                "0.7.1.dev20261125",
                 daily_index,
             ),
             "MTT-S5000": (
                 "flagtree-mthreads",
-                "0.7.1.dev20261123",
+                "0.7.1.dev20261125",
                 daily_index,
             ),
             "BI-V150": (
                 "flagtree-iluvatar",
-                "0.7.1.dev20261123",
+                "0.7.1.dev20261125",
                 daily_index,
             ),
-            "P800": ("flagtree-kunlunxin", "0.7.1.dev20261123", daily_index),
+            "P800": ("flagtree-kunlunxin", "0.7.1.dev20261125", daily_index),
             "TX8110": (
                 "flagtree-tsingmicro",
-                "0.7.1.dev20261123",
+                "0.7.1.dev20261125",
                 daily_index,
             ),
-            "S60": ("flagtree-enflame", "0.7.1.dev20261123", daily_index),
-            "PPU-ZW810E": ("flagtree-ppu", "0.7.1.dev20261123", daily_index),
-            "W7900D": ("flagtree-amd", "0.7.1.dev20261123", daily_index),
+            "S60": ("flagtree-enflame", "0.7.1.dev20261125", daily_index),
+            "PPU-ZW810E": ("flagtree-ppu", "0.7.1.dev20261125", daily_index),
+            "W7900D": ("flagtree-amd", "0.7.1.dev20261125", daily_index),
         }
         for backend_name, (package_name, version, index_url) in expected.items():
             with self.subTest(backend=backend_name):
@@ -344,7 +344,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         selected_by_name = {backend["name"]: backend for backend in selected["include"]}
         self.assertEqual(
             self.upgrade_dep(selected_by_name["H800"], "flagtree-nvidia")["version"],
-            "0.7.1.dev20261123",
+            "0.7.1.dev20261125",
         )
         self.assertEqual(
             self.upgrade_dep(selected_by_name["910B"], "flagtree")["version"],
@@ -352,7 +352,7 @@ class FlagTrainWorkflowTest(unittest.TestCase):
         )
         self.assertEqual(
             self.upgrade_dep(selected_by_name["BW1000"], "flagtree-hcu")["version"],
-            "0.7.1.dev20261124",
+            "0.7.1.dev20261125",
         )
 
         prepare_steps = self.workflow["jobs"]["prepare"]["steps"]

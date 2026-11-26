@@ -701,7 +701,7 @@ deps:
   flagtree-nvidia:
     display_name: FlagTree
     priority: 100
-    version: 0.7.1.dev20261123
+    version: 0.7.1.dev20261125
     index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
     no_deps: true
     target: /opt/flagtree
@@ -713,7 +713,7 @@ deps:
 `flagtree==0.7.2a1+ascend3.5` release；此前的 CANN 9.0.0 daily 配置仍保留在 backend YAML 注释中。
 
 BW1000 当前使用 FlagOS daily index 中的
-`flagtree-hcu==0.7.1.dev20261124`。
+`flagtree-hcu==0.7.1.dev20261125`。
 
 backend YAML 是 FlagTree 版本的唯一来源。升级 wheel 时需要修改对应 backend 的精确
 `version`，并确认制品存在于配置的 `index_url`。workflow-dispatch 页面不提供运行时

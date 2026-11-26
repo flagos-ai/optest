@@ -777,7 +777,7 @@ deps:
   flagtree-nvidia:
     display_name: FlagTree
     priority: 100
-    version: 0.7.1.dev20261123
+    version: 0.7.1.dev20261125
     index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
     no_deps: true
     target: /opt/flagtree
@@ -789,7 +789,7 @@ distributions use `0.7.1.devYYYYMMDD`. The 910B backend currently uses the hoste
 `flagtree==0.7.2a1+ascend3.5` release instead of the daily wheel; its previous
 CANN 9.0.0 daily configuration remains commented in the backend YAML.
 
-BW1000 uses `flagtree-hcu==0.7.1.dev20261124` from the FlagOS daily index.
+BW1000 uses `flagtree-hcu==0.7.1.dev20261125` from the FlagOS daily index.
 
 The backend YAML is the sole source of the FlagTree version. Updating a wheel
 therefore requires changing that backend's exact `version` and confirming that

@@ -50,7 +50,7 @@ deps:
   flagtree-nvidia:
     display_name: FlagTree
     priority: 100
-    version: 0.7.1.dev20261123
+    version: 0.7.1.dev20261125
     index_url: https://resource.flagos.net/repository/flagos-pypi-daily/simple
     no_deps: true
     target: /opt/flagtree

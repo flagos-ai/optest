@@ -46,6 +46,7 @@ on:
           - FlagGems-sglang
           - FlagTrain
           - FlagAttention
+          - FlagAudio
       ref:
         description: 'Target repository ref. Empty = configured default branch.'
         required: false

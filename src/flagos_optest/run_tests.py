@@ -181,6 +181,7 @@ _KNOWN_LIBS = [
     ("flag_attn", "FlagAttention"),
     ("flag_train", "FlagTrain"),
     ("flag_gems", "FlagGems"),
+    ("flag_audio","FlagAudio")
 ]
 
 # Extra frameworks probed for version reporting only (shown if importable).

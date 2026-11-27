@@ -1,0 +1,8 @@
+{
+  "description": "Pre-confirmed passing FlagAttention ops for vllm/ascend-cann9.0.0 (910B). Update by running a known-good image and recording every op with result=passed.",
+  "ops": [
+    "flash_attn_varlen_func",
+    "flash_attn_func",
+    "flash_attn_with_kvcache"
+  ]
+}

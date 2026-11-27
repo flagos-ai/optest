@@ -1,0 +1,8 @@
+{
+  "description": "Pre-confirmed passing FlagAttention ops for vllm/nvidia-cuda13.0 (H800). Update by running a known-good image and recording every op with result=passed.",
+  "ops": [
+    "flash_attn_varlen_func",
+    "flash_attn_func",
+    "flash_attn_with_kvcache"
+  ]
+}

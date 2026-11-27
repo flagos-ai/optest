@@ -344,20 +344,41 @@ jobs:
           HDR
           fi
 
+          # transformer-engine[pytorch] requires nccl.h and cudnn.h at compile
+          # time. These ship with the nvidia-nccl-cu13 and nvidia-cudnn-cu13
+          # wheels (already present in the image alongside torch); find them
+          # under the installed nvidia/ namespace and add their directories to
+          # CPATH so the C++ compiler can locate them without a system install.
+          NCCL_HDR="$(find "${SITE_PKGS}/nvidia" -name nccl.h -print -quit 2>/dev/null || true)"
+          if [ -n "${NCCL_HDR}" ]; then
+            NCCL_INC="$(dirname "${NCCL_HDR}")"
+            echo "[Deps] Found nccl.h in ${NCCL_INC}"
+            CPATH="${NCCL_INC}:${CPATH:-}"
+          else
+            echo "[Deps] WARNING: nccl.h not found under ${SITE_PKGS}/nvidia; transformer-engine may fail to compile"
+          fi
+          CUDNN_HDR="$(find "${SITE_PKGS}/nvidia" -name cudnn.h -print -quit 2>/dev/null || true)"
+          if [ -n "${CUDNN_HDR}" ]; then
+            CUDNN_INC="$(dirname "${CUDNN_HDR}")"
+            echo "[Deps] Found cudnn.h in ${CUDNN_INC}"
+            CPATH="${CUDNN_INC}:${CPATH:-}"
+          else
+            echo "[Deps] WARNING: cudnn.h not found under ${SITE_PKGS}/nvidia; transformer-engine may fail to compile"
+          fi
+
           {
             echo "CUDA_HOME=${CU13_ROOT}"
             echo "CUDA_PATH=${CU13_ROOT}"
             echo "PATH=${CU13_ROOT}/bin:${PATH}"
             echo "LD_LIBRARY_PATH=${CU13_LIB}:${LD_LIBRARY_PATH:-}"
             echo "LIBRARY_PATH=${CU13_LIB}:${LIBRARY_PATH:-}"
-            echo "CPATH=${CU13_INC}:${CPATH:-}"
+            echo "CPATH=${CPATH:-}"
           } >> "$GITHUB_ENV"
           # Apply to this step too (GITHUB_ENV only affects subsequent steps).
           export CUDA_HOME="${CU13_ROOT}" CUDA_PATH="${CU13_ROOT}"
           export PATH="${CU13_ROOT}/bin:${PATH}"
           export LD_LIBRARY_PATH="${CU13_LIB}:${LD_LIBRARY_PATH:-}"
           export LIBRARY_PATH="${CU13_LIB}:${LIBRARY_PATH:-}"
-          export CPATH="${CU13_INC}:${CPATH:-}"
 
           # Prebuilt wheels: DeepSpeed kernels, CUTLASS ops, NVIDIA resiliency ext.
           # deepspeed-kernels has no plain 0.0.1 on PyPI (only 0.0.1.devNNNN

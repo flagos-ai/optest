@@ -57,6 +57,8 @@ deps:
 
 # Extra environment variables injected only into the "Run ops tests" step
 test_env:
+  GEMS_VENDOR: mthreads
+  TORCH_DEVICE_BACKEND_AUTOLOAD: "1"
   FLAGTREE_BACKEND: mthreads
 
 # Output base directory; ops-test appends the GitHub repository name

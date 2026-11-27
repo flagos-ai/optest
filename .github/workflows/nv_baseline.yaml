@@ -349,21 +349,25 @@ jobs:
           # wheels (already present in the image alongside torch); find them
           # under the installed nvidia/ namespace and add their directories to
           # CPATH so the C++ compiler can locate them without a system install.
-          NCCL_HDR="$(find "${SITE_PKGS}/nvidia" -name nccl.h -print -quit 2>/dev/null || true)"
+          echo "[Deps] Searching for nccl.h and cudnn.h under ${SITE_PKGS}:"
+          find "${SITE_PKGS}" -name "nccl.h" -o -name "cudnn.h" 2>/dev/null | sort || true
+          echo "[Deps] Also checking system paths:"
+          find /usr /opt -name "nccl.h" -o -name "cudnn.h" 2>/dev/null | sort || true
+          NCCL_HDR="$(find "${SITE_PKGS}" -name nccl.h -print -quit 2>/dev/null || true)"
           if [ -n "${NCCL_HDR}" ]; then
             NCCL_INC="$(dirname "${NCCL_HDR}")"
             echo "[Deps] Found nccl.h in ${NCCL_INC}"
             CPATH="${NCCL_INC}:${CPATH:-}"
           else
-            echo "[Deps] WARNING: nccl.h not found under ${SITE_PKGS}/nvidia; transformer-engine may fail to compile"
+            echo "[Deps] WARNING: nccl.h not found under ${SITE_PKGS}; transformer-engine may fail to compile"
           fi
-          CUDNN_HDR="$(find "${SITE_PKGS}/nvidia" -name cudnn.h -print -quit 2>/dev/null || true)"
+          CUDNN_HDR="$(find "${SITE_PKGS}" -name cudnn.h -print -quit 2>/dev/null || true)"
           if [ -n "${CUDNN_HDR}" ]; then
             CUDNN_INC="$(dirname "${CUDNN_HDR}")"
             echo "[Deps] Found cudnn.h in ${CUDNN_INC}"
             CPATH="${CUDNN_INC}:${CPATH:-}"
           else
-            echo "[Deps] WARNING: cudnn.h not found under ${SITE_PKGS}/nvidia; transformer-engine may fail to compile"
+            echo "[Deps] WARNING: cudnn.h not found under ${SITE_PKGS}; transformer-engine may fail to compile"
           fi
 
           {

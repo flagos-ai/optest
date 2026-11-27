@@ -328,20 +328,20 @@ jobs:
           elif [ ! -e "${CU13_INC}/cuda_profiler_api.h" ]; then
             echo "[Deps] cuda_profiler_api.h not found; writing a minimal stub to ${CU13_INC}"
             mkdir -p "${CU13_INC}"
-            cat > "${CU13_INC}/cuda_profiler_api.h" <<'HDR'
-          #ifndef CUDA_PROFILER_API_H
-          #define CUDA_PROFILER_API_H
-          #include <cuda_runtime_api.h>
-          #ifdef __cplusplus
-          extern "C" {
-          #endif
-          extern cudaError_t cudaProfilerStart(void);
-          extern cudaError_t cudaProfilerStop(void);
-          #ifdef __cplusplus
-          }
-          #endif
-          #endif /* CUDA_PROFILER_API_H */
-          HDR
+            printf '%s\n' \
+              '#ifndef CUDA_PROFILER_API_H' \
+              '#define CUDA_PROFILER_API_H' \
+              '#include <cuda_runtime_api.h>' \
+              '#ifdef __cplusplus' \
+              'extern "C" {' \
+              '#endif' \
+              'extern cudaError_t cudaProfilerStart(void);' \
+              'extern cudaError_t cudaProfilerStop(void);' \
+              '#ifdef __cplusplus' \
+              '}' \
+              '#endif' \
+              '#endif /* CUDA_PROFILER_API_H */' \
+              > "${CU13_INC}/cuda_profiler_api.h"
           fi
 
           # transformer-engine[pytorch] requires nccl.h and cudnn.h at compile

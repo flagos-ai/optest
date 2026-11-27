@@ -303,11 +303,12 @@ jobs:
               # Strip everything from the first ".so" onward -> libFOO.so
               unversioned="${base%%.so.*}.so"
               if [ ! -e "${CU13_LIB}/${unversioned}" ]; then
-                ln -sf "${versioned}" "${CU13_LIB}/${unversioned}"
+                ln -sf "${versioned}" "${CU13_LIB}/${unversioned}" || echo "[Deps] WARNING: failed to link ${unversioned} -> ${base}, continuing"
                 echo "[Deps] Linked ${unversioned} -> ${base}"
               fi
             done
           fi
+          echo "[Deps] symlink loop done"
 
           # Apex's Megatron fused-softmax extensions
           # (scaled_[upper_triang_]masked_softmax_cuda.cu) #include
@@ -415,18 +416,18 @@ jobs:
           # built with. This image's nvcc is 13.2 but torch is +cu130 (13.0), a
           # minor mismatch Apex's own comment calls safe but still rejects. No
           # bypass flag exists, so comment out the check before building.
-          WORK="${WORK}" python3 - <<'PATCH'
-          import os
-          from pathlib import Path
-          p = Path(os.environ["WORK"]) / "apex" / "setup.py"
-          src = p.read_text()
-          line = "check_cuda_torch_binary_vs_bare_metal(CUDA_HOME)"
-          if line in src and src.count(line) == 1:
-              p.write_text(src.replace(line, "# " + line + "  # patched: nvcc 13.2 vs torch cu130"))
-              print("[Deps] Patched apex setup.py: disabled CUDA version check")
-          else:
-              print("[Deps] apex setup.py check already patched or line not found; leaving as-is")
-          PATCH
+          WORK="${WORK}" python3 -c "
+import os
+from pathlib import Path
+p = Path(os.environ['WORK']) / 'apex' / 'setup.py'
+src = p.read_text()
+line = 'check_cuda_torch_binary_vs_bare_metal(CUDA_HOME)'
+if line in src and src.count(line) == 1:
+    p.write_text(src.replace(line, '# ' + line + '  # patched: nvcc 13.2 vs torch cu130'))
+    print('[Deps] Patched apex setup.py: disabled CUDA version check')
+else:
+    print('[Deps] apex setup.py check already patched or line not found; leaving as-is')
+"
           python3 -m pip install -v --no-build-isolation \
             --config-settings "--build-option=--cpp_ext" \
             --config-settings "--build-option=--cuda_ext" \

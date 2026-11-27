@@ -24,7 +24,7 @@ runner_labels: p800-flaggems-weekly
 # Container image for this backend (DEFAULT).
 # Priority: repos.yaml `images.<BACKEND>` for the selected repo OVERRIDES
 # this value; when that repo has no override here, this default is used.
-container_image: harbor.baai.ac.cn/flaggems/flaggems-test-kunlunxin-p800:20261014
+container_image: harbor.baai.ac.cn/flaggems/flaggems-test-kunlunxin-p800:20261127
 
 # Container volumes to mount for this backends
 container_volumes:

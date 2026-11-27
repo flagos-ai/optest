@@ -1,0 +1,233 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Build, verify, and publish optest-managed application container images.
+#
+# Flow per matrix entry:
+#   1. set-matrix  — reads container/configs.yaml, emits one entry per app/stack.
+#   2. build       — Dockerfile build on the vendor's self-hosted runner with
+#                    BuildKit cache (stored under output_base_dir/docker-build-cache).
+#                    skip_build stacks pull the existing build-infra image instead.
+#   3. verify      — calls container/verify/verify-<app>-backend.sh (serve test +
+#                    dependency matrix check) where the script exists, then runs
+#                    the op gate (FlagAttention + FlagGems per-operator check via
+#                    verify_image.py against container/verify/<repo>/<stack>.json).
+#   4. push        — docker push only when the verify gate passes and the
+#                    'push' input is true.
+#
+# image_version is auto-computed as YYYYMMDD-<sha8> from the optest checkout;
+# it is not a manual workflow input so every build is distinct and traceable.
+#
+# Proxy: http_proxy / https_proxy / no_proxy are relayed to docker build and
+# docker run via --build-arg / --env WITHOUT echoing their values in logs.
+
+name: Build App Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'App to build'
+        required: true
+        default: 'vllm'
+        type: choice
+        options: [vllm, megatron, sglang, all]
+      stack:
+        description: 'Stack key(s), comma-separated. Empty = all stacks for app.'
+        default: ''
+      push:
+        description: 'Push to Harbor after verify gate passes'
+        type: boolean
+        default: false
+
+env:
+  HARBOR_HOST: harbor.baai.ac.cn
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: generate the matrix from container/configs.yaml
+  # ---------------------------------------------------------------------------
+  set-matrix:
+    name: Set matrix
+    runs-on: [self-hosted, h20]
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - name: Checkout optest
+        uses: actions/checkout@v4
+
+      - name: Generate matrix
+        id: gen
+        run: |
+          # Compute image version from build date + short commit id.
+          IMAGE_VERSION="$(date +%Y%m%d)-$(git rev-parse --short=8 HEAD)"
+          echo "image_version=${IMAGE_VERSION}"
+          python container/scripts/gen_matrix.py \
+            --app "${{ inputs.app }}" \
+            --stack "${{ inputs.stack }}" \
+            --image-version "${IMAGE_VERSION}" \
+            --images-yaml container/configs.yaml \
+            --backends-dir .github/configs/backends \
+            | tee /tmp/matrix.json
+          echo "matrix=$(cat /tmp/matrix.json)" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Job 2: build (and optionally skip-build) + verify + push per matrix entry
+  # ---------------------------------------------------------------------------
+  build:
+    name: ${{ matrix.app }} / ${{ matrix.stack }}
+    needs: set-matrix
+    runs-on: ${{ fromJson(toJson(matrix.runner_labels)) }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
+
+    steps:
+      - name: Checkout optest
+        uses: actions/checkout@v4
+
+      # -- Harbor login (3 attempts) -------------------------------------------
+      - name: Login to Harbor
+        run: |
+          set +x
+          for attempt in 1 2 3; do
+            if echo "${{ secrets.HARBOR_PASSWORD }}" | \
+                docker login "${{ env.HARBOR_HOST }}" \
+                  --username "${{ secrets.HARBOR_USERNAME }}" \
+                  --password-stdin 2>&1; then
+              echo "Harbor login succeeded on attempt ${attempt}."
+              break
+            fi
+            if [ "${attempt}" -eq 3 ]; then
+              echo "Harbor login failed after 3 attempts." >&2
+              exit 1
+            fi
+            sleep 5
+          done
+
+      # -- Create docker build cache dir on the runner -------------------------
+      - name: Prepare docker build cache dir
+        run: mkdir -p "${{ matrix.docker_cache_dir }}"
+
+      # -- Build (skip for skip_build stacks) ----------------------------------
+      - name: Build image
+        if: ${{ !matrix.skip_build }}
+        run: |
+          set +x  # keep proxy values out of the log
+
+          # Relay proxy from runner environment as --build-arg.
+          # Values never appear in the log because set +x is active.
+          proxy_args=()
+          [ -n "${http_proxy:-}" ]  && proxy_args+=(--build-arg "http_proxy=${http_proxy}")
+          [ -n "${https_proxy:-}" ] && proxy_args+=(--build-arg "https_proxy=${https_proxy}")
+          [ -n "${no_proxy:-}" ]    && proxy_args+=(--build-arg "no_proxy=${no_proxy}")
+
+          # Build per-app ARGs from matrix.build_args (key=value pairs).
+          app_build_args=()
+          while IFS='=' read -r key value; do
+            [ -n "${key}" ] && app_build_args+=(--build-arg "${key}=${value}")
+          done < <(echo '${{ toJson(matrix.build_args) }}' \
+            | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for k,v in d.items():
+    print(f'{k}={v}')
+")
+
+          DOCKER_BUILDKIT=1 docker build \
+            --file "container/${{ matrix.app }}/Dockerfile" \
+            --tag "${{ matrix.image_tag }}" \
+            --build-arg "BASE_IMAGE=${{ matrix.base_image }}" \
+            --build-arg "FLAGOS_PYPI=${{ matrix.flagos_pypi }}" \
+            --build-arg "FLAGTREE_VERSION=${{ matrix.flagtree_version }}" \
+            --build-arg "FLAGTREE_PACKAGE=${{ matrix.flagtree_package }}" \
+            --build-arg "FLAGGEMS_VERSION=${{ matrix.flaggems_version }}" \
+            --build-arg "APP_ENV=${{ matrix.app_env }}" \
+            "${app_build_args[@]}" \
+            "${proxy_args[@]}" \
+            --cache-from "type=local,src=${{ matrix.docker_cache_dir }}" \
+            --cache-to   "type=local,dest=${{ matrix.docker_cache_dir }},mode=max" \
+            container
+
+      # -- For skip_build stacks: pull the existing image as the test target --
+      - name: Pull existing image (skip_build)
+        if: ${{ matrix.skip_build }}
+        run: |
+          docker pull "${{ matrix.existing_image }}"
+          docker tag  "${{ matrix.existing_image }}" "${{ matrix.image_tag }}"
+
+      # -- Verify gate ---------------------------------------------------------
+      # Step A: serve test + dependency matrix check (vllm, sglang only).
+      # Megatron has no serve launcher, so its verify script does not exist.
+      - name: Verify image (serve + dep check)
+        id: verify_serve
+        run: |
+          set +x  # keep proxy values out of the log
+          script="container/verify/verify-${{ matrix.app }}-backend.sh"
+          if [ ! -f "${script}" ]; then
+            echo "No verify script for ${{ matrix.app }} — skipping serve/dep check."
+            exit 0
+          fi
+          bash "${script}" \
+            --app-image "${{ matrix.image_tag }}" \
+            --vendor    "${{ matrix.vendor }}" \
+            --backend   "${{ matrix.backend }}" \
+            --stack     "${{ matrix.stack }}"
+
+      # Step B: op gate — parse per-operator results from summary.json.
+      - name: Verify image (op gate)
+        id: verify
+        run: |
+          set +x  # keep proxy values out of the log
+          python container/scripts/verify_image.py \
+            --image    "${{ matrix.image_tag }}" \
+            --app      "${{ matrix.app }}" \
+            --stack    "${{ matrix.stack }}" \
+            --vendor   "${{ matrix.vendor }}" \
+            --optest-dir "${{ github.workspace }}" \
+            --work-dir   "${{ matrix.docker_cache_dir }}/verify-${{ github.run_id }}"
+
+      # -- Push (only when both verify steps passed and push input is true) ----
+      - name: Push image
+        if: ${{ inputs.push && steps.verify_serve.outcome != 'failure' && steps.verify.outcome == 'success' }}
+        run: |
+          docker push "${{ matrix.image_tag }}"
+          echo "Pushed: ${{ matrix.image_tag }}"
+
+      # -- Summary annotation --------------------------------------------------
+      - name: Annotate job summary
+        if: always()
+        run: |
+          image="${{ matrix.image_tag }}"
+          verify_result="${{ steps.verify.outcome }}"
+          push_input="${{ inputs.push }}"
+
+          {
+            echo "### ${{ matrix.app }} / ${{ matrix.stack }}"
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Image | \`${image}\` |"
+            echo "| Serve/dep verify | ${{ steps.verify_serve.outcome }} |"
+            echo "| Op gate | ${verify_result} |"
+            if [ "${push_input}" = "true" ] && [ "${verify_result}" = "success" ]; then
+              echo "| Pushed | ✅ yes |"
+            else
+              echo "| Pushed | ❌ no |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # -- Cleanup: remove docker login credentials ----------------------------
+      - name: Docker logout
+        if: always()
+        run: docker logout "${{ env.HARBOR_HOST }}" || true

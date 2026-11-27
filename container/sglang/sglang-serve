@@ -1,0 +1,19 @@
+#!/bin/bash
+# FlagOS sglang serve launcher.
+# Sources vendor profile.d for LD_LIBRARY_PATH etc., then execs sglang.
+
+set -e
+
+for f in /etc/profile.d/*.sh; do [ -r "$f" ] && . "$f"; done
+
+# Allow overriding watchdog / warmup timeouts via environment (e.g. for slow
+# backends). The ENV vars are set in the container or in a docker run -e flag.
+ARGS=()
+if [ -n "${SGLANG_WATCHDOG_TIMEOUT:-}" ]; then
+    ARGS+=(--watchdog-timeout "${SGLANG_WATCHDOG_TIMEOUT}")
+fi
+if [ -n "${SGLANG_WARMUP_TIMEOUT:-}" ]; then
+    export SGLANG_WARMUP_TIMEOUT
+fi
+
+exec python -m sglang.launch_server "${ARGS[@]}" "$@"

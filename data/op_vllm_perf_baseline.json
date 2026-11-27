@@ -108934,5 +108934,3822 @@
         }
       }
     }
+  },
+ "fused_norm_rope": {
+  "label": {
+   "vllm": "0.32.0"
+  },
+  "variants": {
+   "bf16": {
+    "native_api": "ops.fused_norm_rope",
+    "shapes": {
+     "[1, 1536, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           1,
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           1,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           1,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           1,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           1,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           1,
+           1536
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           1,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 1,
+         "q_lora": 1536,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "bfloat16"
+        }
+       },
+       "T_us": 7.74399982765317,
+       "latency_ms": 0.00774399982765317,
+       "F_cuda": 23168.0,
+       "F_tensor": 0.0,
+       "B_mem": 30464.0,
+       "U_cuda": 0.011724499999999999,
+       "U_tensor": 9.2e-05,
+       "U_mem": 0.10302099999999999,
+       "U_bottle_neck": 0.10302099999999999,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 2,
+       "per_kernel": [
+        {
+         "name": "void at::vectorized_elementwise_kernel<4, at::FillFunctor<float>, std::array<char *, 1>>(int, T2, T3)",
+         "F_cuda": 0.0,
+         "F_tensor": 0.0,
+         "B_mem": 4096.0,
+         "U_cuda": 0.001043,
+         "U_tensor": 0.0,
+         "U_mem": 0.053277,
+         "T_us": 2.4055829251858785
+        },
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 23168.0,
+         "F_tensor": 0.0,
+         "B_mem": 26368.0,
+         "U_cuda": 0.022406,
+         "U_tensor": 0.000184,
+         "U_mem": 0.152765,
+         "T_us": 5.3384169024672925
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[1, 2048, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           1,
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           1,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           1,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           1,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           1,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           1,
+           2048
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           1,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 1,
+         "q_lora": 2048,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "bfloat16"
+        }
+       },
+       "T_us": 7.7760000713169575,
+       "latency_ms": 0.0077760000713169575,
+       "F_cuda": 23168.0,
+       "F_tensor": 0.0,
+       "B_mem": 32512.0,
+       "U_cuda": 0.011935000000000001,
+       "U_tensor": 9.5e-05,
+       "U_mem": 0.11040699999999999,
+       "U_bottle_neck": 0.11040699999999999,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 2,
+       "per_kernel": [
+        {
+         "name": "void at::vectorized_elementwise_kernel<4, at::FillFunctor<float>, std::array<char *, 1>>(int, T2, T3)",
+         "F_cuda": 0.0,
+         "F_tensor": 0.0,
+         "B_mem": 4096.0,
+         "U_cuda": 0.001011,
+         "U_tensor": 0.0,
+         "U_mem": 0.051813,
+         "T_us": 2.5137931265033266
+        },
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 23168.0,
+         "F_tensor": 0.0,
+         "B_mem": 28416.0,
+         "U_cuda": 0.022859,
+         "U_tensor": 0.00019,
+         "U_mem": 0.169001,
+         "T_us": 5.262206944813632
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[17, 1536, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           17
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           17,
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           17,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           17,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           17,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           17,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           17
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           17,
+           1536
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           17,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 17,
+         "q_lora": 1536,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "bfloat16"
+        }
+       },
+       "T_us": 8.031999692320824,
+       "latency_ms": 0.008031999692320824,
+       "F_cuda": 393856.0,
+       "F_tensor": 0.0,
+       "B_mem": 110848.0,
+       "U_cuda": 0.1788395,
+       "U_tensor": 0.001468,
+       "U_mem": 0.31340250000000003,
+       "U_bottle_neck": 0.31340250000000003,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 2,
+       "per_kernel": [
+        {
+         "name": "void at::vectorized_elementwise_kernel<4, at::FillFunctor<float>, std::array<char *, 1>>(int, T2, T3)",
+         "F_cuda": 0.0,
+         "F_tensor": 0.0,
+         "B_mem": 4096.0,
+         "U_cuda": 0.000981,
+         "U_tensor": 0.0,
+         "U_mem": 0.050201,
+         "T_us": 2.4639999056123645
+        },
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 393856.0,
+         "F_tensor": 0.0,
+         "B_mem": 106752.0,
+         "U_cuda": 0.356698,
+         "U_tensor": 0.002936,
+         "U_mem": 0.576604,
+         "T_us": 5.567999786708459
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[17, 2048, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           17
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           17,
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           17,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           17,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           17,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           17,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           17
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           17,
+           2048
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           17,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 17,
+         "q_lora": 2048,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "bfloat16"
+        }
+       },
+       "T_us": 8.1599997356534,
+       "latency_ms": 0.0081599997356534,
+       "F_cuda": 393856.0,
+       "F_tensor": 0.0,
+       "B_mem": 129024.0,
+       "U_cuda": 0.1832915,
+       "U_tensor": 0.001523,
+       "U_mem": 0.37665950000000004,
+       "U_bottle_neck": 0.37665950000000004,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 2,
+       "per_kernel": [
+        {
+         "name": "void at::vectorized_elementwise_kernel<4, at::FillFunctor<float>, std::array<char *, 1>>(int, T2, T3)",
+         "F_cuda": 0.0,
+         "F_tensor": 0.0,
+         "B_mem": 4096.0,
+         "U_cuda": 0.001035,
+         "U_tensor": 0.0,
+         "U_mem": 0.053135,
+         "T_us": 2.471701164741486
+        },
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 393856.0,
+         "F_tensor": 0.0,
+         "B_mem": 124928.0,
+         "U_cuda": 0.365548,
+         "U_tensor": 0.003046,
+         "U_mem": 0.700184,
+         "T_us": 5.688298570911915
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[4, 1536, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           4
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           4,
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           4,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           4,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           4,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           4
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           4,
+           1536
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 4,
+         "q_lora": 1536,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "bfloat16"
+        }
+       },
+       "T_us": 7.903999648988247,
+       "latency_ms": 0.007903999648988247,
+       "F_cuda": 92672.0,
+       "F_tensor": 0.0,
+       "B_mem": 45824.0,
+       "U_cuda": 0.043367,
+       "U_tensor": 0.0003525,
+       "U_mem": 0.141268,
+       "U_bottle_neck": 0.141268,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 2,
+       "per_kernel": [
+        {
+         "name": "void at::vectorized_elementwise_kernel<4, at::FillFunctor<float>, std::array<char *, 1>>(int, T2, T3)",
+         "F_cuda": 0.0,
+         "F_tensor": 0.0,
+         "B_mem": 4096.0,
+         "U_cuda": 0.00103,
+         "U_tensor": 0.0,
+         "U_mem": 0.052466,
+         "T_us": 2.3971146476439764
+        },
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 92672.0,
+         "F_tensor": 0.0,
+         "B_mem": 41728.0,
+         "U_cuda": 0.085704,
+         "U_tensor": 0.000705,
+         "U_mem": 0.23007,
+         "T_us": 5.506885001344271
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[4, 2048, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           4
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           4,
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           4,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           4,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           4,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           4
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           4,
+           2048
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 4,
+         "q_lora": 2048,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "bfloat16"
+        }
+       },
+       "T_us": 7.807999849319458,
+       "latency_ms": 0.007807999849319458,
+       "F_cuda": 92672.0,
+       "F_tensor": 0.0,
+       "B_mem": 50944.0,
+       "U_cuda": 0.0451205,
+       "U_tensor": 0.0003715,
+       "U_mem": 0.1626155,
+       "U_bottle_neck": 0.1626155,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 2,
+       "per_kernel": [
+        {
+         "name": "void at::vectorized_elementwise_kernel<4, at::FillFunctor<float>, std::array<char *, 1>>(int, T2, T3)",
+         "F_cuda": 0.0,
+         "F_tensor": 0.0,
+         "B_mem": 4096.0,
+         "U_cuda": 0.001031,
+         "U_tensor": 0.0,
+         "U_mem": 0.05291,
+         "T_us": 2.4482711391933893
+        },
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 92672.0,
+         "F_tensor": 0.0,
+         "B_mem": 46848.0,
+         "U_cuda": 0.08921,
+         "U_tensor": 0.000743,
+         "U_mem": 0.272321,
+         "T_us": 5.359728710126069
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[4096, 1536, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           4096
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           4096,
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           4096,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           4096,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           4096,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4096,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           4096
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           4096,
+           1536
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4096,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 4096,
+         "q_lora": 1536,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "bfloat16"
+        }
+       },
+       "T_us": 35.360001027584076,
+       "latency_ms": 0.035360001027584076,
+       "F_cuda": 94896128.0,
+       "F_tensor": 0.0,
+       "B_mem": 49357568.0,
+       "U_cuda": 7.908228,
+       "U_tensor": 0.065084,
+       "U_mem": 24.393432500000003,
+       "U_bottle_neck": 24.393432500000003,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 2,
+       "per_kernel": [
+        {
+         "name": "void at::vectorized_elementwise_kernel<4, at::FillFunctor<float>, std::array<char *, 1>>(int, T2, T3)",
+         "F_cuda": 0.0,
+         "F_tensor": 0.0,
+         "B_mem": 4096.0,
+         "U_cuda": 0.001015,
+         "U_tensor": 0.0,
+         "U_mem": 0.052083,
+         "T_us": 2.6000000755576527
+        },
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 94896128.0,
+         "F_tensor": 0.0,
+         "B_mem": 49353472.0,
+         "U_cuda": 15.815441,
+         "U_tensor": 0.130168,
+         "U_mem": 48.734782,
+         "T_us": 32.760000952026424
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[4096, 2048, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           4096
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           4096,
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           4096,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           4096,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           4096,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4096,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           4096
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           4096,
+           2048
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4096,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 4096,
+         "q_lora": 2048,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "bfloat16"
+        }
+       },
+       "T_us": 37.91999816894531,
+       "latency_ms": 0.03791999816894531,
+       "F_cuda": 94896128.0,
+       "F_tensor": 0.0,
+       "B_mem": 57936128.0,
+       "U_cuda": 7.303346000000001,
+       "U_tensor": 0.060857,
+       "U_mem": 26.691094500000002,
+       "U_bottle_neck": 26.691094500000002,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 2,
+       "per_kernel": [
+        {
+         "name": "void at::vectorized_elementwise_kernel<4, at::FillFunctor<float>, std::array<char *, 1>>(int, T2, T3)",
+         "F_cuda": 0.0,
+         "F_tensor": 0.0,
+         "B_mem": 4096.0,
+         "U_cuda": 0.000985,
+         "U_tensor": 0.0,
+         "U_mem": 0.050505,
+         "T_us": 2.678752164228247
+        },
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 94896128.0,
+         "F_tensor": 0.0,
+         "B_mem": 57932032.0,
+         "U_cuda": 14.605707,
+         "U_tensor": 0.121714,
+         "U_mem": 53.331684,
+         "T_us": 35.24124600471707
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[512, 1536, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           512,
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           512,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           512,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           512,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           512,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           512,
+           1536
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           512,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 512,
+         "q_lora": 1536,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "bfloat16"
+        }
+       },
+       "T_us": 10.65600011497736,
+       "latency_ms": 0.01065600011497736,
+       "F_cuda": 11862016.0,
+       "F_tensor": 0.0,
+       "B_mem": 2589696.0,
+       "U_cuda": 4.416361,
+       "U_tensor": 0.0363445,
+       "U_mem": 5.7597445,
+       "U_bottle_neck": 5.7597445,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 2,
+       "per_kernel": [
+        {
+         "name": "void at::vectorized_elementwise_kernel<4, at::FillFunctor<float>, std::array<char *, 1>>(int, T2, T3)",
+         "F_cuda": 0.0,
+         "F_tensor": 0.0,
+         "B_mem": 4096.0,
+         "U_cuda": 0.00095,
+         "U_tensor": 0.0,
+         "U_mem": 0.048473,
+         "T_us": 2.8928660105952284
+        },
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 11862016.0,
+         "F_tensor": 0.0,
+         "B_mem": 2585600.0,
+         "U_cuda": 8.831772,
+         "U_tensor": 0.072689,
+         "U_mem": 11.471016,
+         "T_us": 7.763134104382132
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[512, 2048, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           512,
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           512,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           512,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           512,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           512,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           512,
+           2048
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.bfloat16",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           512,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 512,
+         "q_lora": 2048,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "bfloat16"
+        }
+       },
+       "T_us": 10.975999757647514,
+       "latency_ms": 0.010975999757647514,
+       "F_cuda": 11862016.0,
+       "F_tensor": 0.0,
+       "B_mem": 3115008.0,
+       "U_cuda": 4.1598985,
+       "U_tensor": 0.0346615,
+       "U_mem": 6.6045305,
+       "U_bottle_neck": 6.6045305,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 2,
+       "per_kernel": [
+        {
+         "name": "void at::vectorized_elementwise_kernel<4, at::FillFunctor<float>, std::array<char *, 1>>(int, T2, T3)",
+         "F_cuda": 0.0,
+         "F_tensor": 0.0,
+         "B_mem": 4096.0,
+         "U_cuda": 0.000985,
+         "U_tensor": 0.0,
+         "U_mem": 0.05071,
+         "T_us": 2.8265952553139084
+        },
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 11862016.0,
+         "F_tensor": 0.0,
+         "B_mem": 3110912.0,
+         "U_cuda": 8.318812,
+         "U_tensor": 0.069323,
+         "U_mem": 13.158351,
+         "T_us": 8.149404502333606
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     }
+    }
+   },
+   "fp8": {
+    "native_api": "ops.fused_norm_rope",
+    "shapes": {
+     "[1, 1536, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           1,
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           1,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           1,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           1,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           1,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_k_scale": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.float32"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           1,
+           1536
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           1,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 1,
+         "q_lora": 1536,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "fp8"
+        }
+       },
+       "T_us": 6.976000033318996,
+       "latency_ms": 0.006976000033318996,
+       "F_cuda": 24192.0,
+       "F_tensor": 0.0,
+       "B_mem": 27136.0,
+       "U_cuda": 0.023155,
+       "U_tensor": 0.000366,
+       "U_mem": 0.155663,
+       "U_bottle_neck": 0.155663,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 1,
+       "per_kernel": [
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 24192.0,
+         "F_tensor": 0.0,
+         "B_mem": 27136.0,
+         "U_cuda": 0.023155,
+         "U_tensor": 0.000366,
+         "U_mem": 0.155663,
+         "T_us": 6.976000033318996
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[1, 2048, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           1,
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           1,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           1,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           1,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           1,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_k_scale": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.float32"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           1,
+           2048
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           1,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 1,
+         "q_lora": 2048,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "fp8"
+        }
+       },
+       "T_us": 6.976000033318996,
+       "latency_ms": 0.006976000033318996,
+       "F_cuda": 24192.0,
+       "F_tensor": 0.0,
+       "B_mem": 28416.0,
+       "U_cuda": 0.022957,
+       "U_tensor": 0.000367,
+       "U_mem": 0.162929,
+       "U_bottle_neck": 0.162929,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 1,
+       "per_kernel": [
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 24192.0,
+         "F_tensor": 0.0,
+         "B_mem": 28416.0,
+         "U_cuda": 0.022957,
+         "U_tensor": 0.000367,
+         "U_mem": 0.162929,
+         "T_us": 6.976000033318996
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[17, 1536, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           17
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           17,
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           17,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           17,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           17,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           17,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           17
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_k_scale": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.float32"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           17,
+           1536
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           17,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 17,
+         "q_lora": 1536,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "fp8"
+        }
+       },
+       "T_us": 7.2639998979866505,
+       "latency_ms": 0.0072639998979866505,
+       "F_cuda": 411264.0,
+       "F_tensor": 0.0,
+       "B_mem": 107520.0,
+       "U_cuda": 0.371771,
+       "U_tensor": 0.005878,
+       "U_mem": 0.581524,
+       "U_bottle_neck": 0.581524,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 1,
+       "per_kernel": [
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 411264.0,
+         "F_tensor": 0.0,
+         "B_mem": 107520.0,
+         "U_cuda": 0.371771,
+         "U_tensor": 0.005878,
+         "U_mem": 0.581524,
+         "T_us": 7.2639998979866505
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[17, 2048, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           17
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           17,
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           17,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           17,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           17,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           17,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           17
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_k_scale": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.float32"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           17,
+           2048
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           17,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 17,
+         "q_lora": 2048,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "fp8"
+        }
+       },
+       "T_us": 7.040000054985285,
+       "latency_ms": 0.007040000054985285,
+       "F_cuda": 411264.0,
+       "F_tensor": 0.0,
+       "B_mem": 125440.0,
+       "U_cuda": 0.359701,
+       "U_tensor": 0.005755,
+       "U_mem": 0.665472,
+       "U_bottle_neck": 0.665472,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 1,
+       "per_kernel": [
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 411264.0,
+         "F_tensor": 0.0,
+         "B_mem": 125440.0,
+         "U_cuda": 0.359701,
+         "U_tensor": 0.005755,
+         "U_mem": 0.665472,
+         "T_us": 7.040000054985285
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[4, 1536, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           4
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           4,
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           4,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           4,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           4,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           4
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_k_scale": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.float32"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           4,
+           1536
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 4,
+         "q_lora": 1536,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "fp8"
+        }
+       },
+       "T_us": 7.135999854654074,
+       "latency_ms": 0.007135999854654074,
+       "F_cuda": 96768.0,
+       "F_tensor": 0.0,
+       "B_mem": 41984.0,
+       "U_cuda": 0.088914,
+       "U_tensor": 0.001406,
+       "U_mem": 0.23085599999999998,
+       "U_bottle_neck": 0.23085599999999998,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 1,
+       "per_kernel": [
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 96768.0,
+         "F_tensor": 0.0,
+         "B_mem": 41984.0,
+         "U_cuda": 0.088914,
+         "U_tensor": 0.001406,
+         "U_mem": 0.230856,
+         "T_us": 7.135999854654074
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[4, 2048, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           4
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           4,
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           4,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           4,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           4,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           4
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_k_scale": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.float32"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           4,
+           2048
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 4,
+         "q_lora": 2048,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "fp8"
+        }
+       },
+       "T_us": 6.976000033318996,
+       "latency_ms": 0.006976000033318996,
+       "F_cuda": 96768.0,
+       "F_tensor": 0.0,
+       "B_mem": 47104.0,
+       "U_cuda": 0.090009,
+       "U_tensor": 0.00144,
+       "U_mem": 0.265099,
+       "U_bottle_neck": 0.265099,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 1,
+       "per_kernel": [
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 96768.0,
+         "F_tensor": 0.0,
+         "B_mem": 47104.0,
+         "U_cuda": 0.090009,
+         "U_tensor": 0.00144,
+         "U_mem": 0.265099,
+         "T_us": 6.976000033318996
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[4096, 1536, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           4096
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           4096,
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           4096,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           4096,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           4096,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4096,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           4096
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_k_scale": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.float32"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           4096,
+           1536
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4096,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 4096,
+         "q_lora": 1536,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "fp8"
+        }
+       },
+       "T_us": 33.615998923778534,
+       "latency_ms": 0.033615998923778534,
+       "F_cuda": 99090432.0,
+       "F_tensor": 0.0,
+       "B_mem": 47019008.0,
+       "U_cuda": 16.676204,
+       "U_tensor": 0.263655,
+       "U_mem": 46.984488,
+       "U_bottle_neck": 46.984488,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 1,
+       "per_kernel": [
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 99090432.0,
+         "F_tensor": 0.0,
+         "B_mem": 47019008.0,
+         "U_cuda": 16.676204,
+         "U_tensor": 0.263655,
+         "U_mem": 46.984488,
+         "T_us": 33.615998923778534
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[4096, 2048, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           4096
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           4096,
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           4096,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           4096,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           4096,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4096,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           4096
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_k_scale": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.float32"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           4096,
+           2048
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           4096,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 4096,
+         "q_lora": 2048,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "fp8"
+        }
+       },
+       "T_us": 36.41600161790848,
+       "latency_ms": 0.03641600161790848,
+       "F_cuda": 99090432.0,
+       "F_tensor": 0.0,
+       "B_mem": 55611136.0,
+       "U_cuda": 15.259317,
+       "U_tensor": 0.244149,
+       "U_mem": 51.505833,
+       "U_bottle_neck": 51.505833,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 1,
+       "per_kernel": [
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 99090432.0,
+         "F_tensor": 0.0,
+         "B_mem": 55611136.0,
+         "U_cuda": 15.259317,
+         "U_tensor": 0.244149,
+         "U_mem": 51.505833,
+         "T_us": 36.41600161790848
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[512, 1536, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           512,
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           1536
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           512,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           512,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           512,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           512,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_k_scale": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.float32"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           512,
+           1536
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           512,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 512,
+         "q_lora": 1536,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "fp8"
+        }
+       },
+       "T_us": 9.600000455975533,
+       "latency_ms": 0.009600000455975533,
+       "F_cuda": 12386304.0,
+       "F_tensor": 0.0,
+       "B_mem": 2586368.0,
+       "U_cuda": 8.865758,
+       "U_tensor": 0.14017,
+       "U_mem": 11.039117,
+       "U_bottle_neck": 11.039117,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 1,
+       "per_kernel": [
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 12386304.0,
+         "F_tensor": 0.0,
+         "B_mem": 2586368.0,
+         "U_cuda": 8.865758,
+         "U_tensor": 0.14017,
+         "U_mem": 11.039117,
+         "T_us": 9.600000455975533
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     },
+     "[512, 2048, 512, 64, 128]": {
+      "torch.bfloat16": {
+       "config": {
+        "inputs": {
+         "positions": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.int64"
+         },
+         "q_c": {
+          "shape": [
+           512,
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "q_rms_norm_w": {
+          "shape": [
+           2048
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_c": {
+          "shape": [
+           512,
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "kv_rms_norm_w": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_pe": {
+          "shape": [
+           512,
+           64
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k": {
+          "shape": [
+           512,
+           128
+          ],
+          "dtype": "torch.bfloat16",
+          "fill": "randn"
+         },
+         "index_k_layer_norm_w": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_layer_norm_bias": {
+          "shape": [
+           128
+          ],
+          "dtype": "torch.float32"
+         },
+         "index_k_rope_cos_sin_cache": {
+          "shape": [
+           8192,
+           64
+          ],
+          "dtype": "torch.float32"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           512,
+           2048
+          ],
+          "dtype": "torch.int32"
+         },
+         "slot_mapping": {
+          "shape": [
+           512
+          ],
+          "dtype": "torch.int64"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8"
+         },
+         "mla_k_scale": {
+          "shape": [
+           1
+          ],
+          "dtype": "torch.float32"
+         }
+        },
+        "outputs": {
+         "q_c_out": {
+          "shape": [
+           512,
+           2048
+          ],
+          "dtype": "torch.bfloat16"
+         },
+         "mla_kv_cache": {
+          "shape": [
+           1,
+           8192,
+           576
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place concat(kv_c_normed, k_pe_roped) insert"
+         },
+         "indexer_k_cache": {
+          "shape": [
+           1,
+           8192,
+           132
+          ],
+          "dtype": "torch.uint8",
+          "note": "in-place fp8 values + per-token fp32 scale"
+         },
+         "topk_indices_buffer": {
+          "shape": [
+           512,
+           2048
+          ],
+          "dtype": "torch.int32",
+          "note": "cleared to -1"
+         }
+        },
+        "dims": {
+         "num_tokens": 512,
+         "q_lora": 2048,
+         "kv_lora": 512,
+         "rope_dim": 64,
+         "index_head_dim": 128,
+         "mla_kv_cache_dtype": "fp8"
+        }
+       },
+       "T_us": 9.8879998549819,
+       "latency_ms": 0.0098879998549819,
+       "F_cuda": 12386304.0,
+       "F_tensor": 0.0,
+       "B_mem": 3111168.0,
+       "U_cuda": 8.761194,
+       "U_tensor": 0.140179,
+       "U_mem": 13.272104,
+       "U_bottle_neck": 13.272104,
+       "bottle_neck_unit": "mem",
+       "num_kernels": 1,
+       "per_kernel": [
+        {
+         "name": "_fused_norm_rope_kernel",
+         "F_cuda": 12386304.0,
+         "F_tensor": 0.0,
+         "B_mem": 3111168.0,
+         "U_cuda": 8.761194,
+         "U_tensor": 0.140179,
+         "U_mem": 13.272104,
+         "T_us": 9.8879998549819
+        }
+       ],
+       "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median"
+      }
+     }
+    }
+   }
   }
+ }
 }

@@ -180,6 +180,7 @@ _KNOWN_LIBS = [
     ("flaggems_sglang", "FlagGems-sglang"),
     ("flag_attn", "FlagAttention"),
     ("flag_train", "FlagTrain"),
+    ("flagtensor", "FlagTensor"),
     ("flag_gems", "FlagGems"),
 ]
 
